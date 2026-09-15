@@ -6,7 +6,7 @@ use axum::{
 };
 use jsonwebtoken::{DecodingKey, Validation};
 
-use crate::routes::login::Claims;
+use crate::routes::authentication::login::Claims;
 
 pub async fn auth(mut request: Request, next: Next) -> Result<Response, StatusCode> {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET".to_string());

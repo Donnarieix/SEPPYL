@@ -6,7 +6,10 @@ use tokio::net::TcpListener;
 
 use crate::{
     middleware::auth,
-    routes::{health::health, login::login, me::me, register::register},
+    routes::{
+        authentication::{login::login, register::register},
+        miscellaneous::{health::health, me::me},
+    },
     state::AppState,
 };
 

@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 
 use crate::{
     middleware::auth,
-    routes::{health::health, login::login, me::me},
+    routes::{health::health, login::login, me::me, register::register},
     state::AppState,
 };
 
@@ -17,6 +17,8 @@ mod state;
 
 #[tokio::main]
 async fn main() {
+    let _ = dotenvy::dotenv();
+
     let state = AppState::default().await;
 
     let protected = Router::new()
@@ -26,6 +28,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/login", post(login))
+        .route("/register", post(register))
         .with_state(state)
         .merge(protected);
 

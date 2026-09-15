@@ -27,6 +27,8 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
+    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET".to_string());
+
     let user = entities::user::Entity::find()
         .filter(entities::user::COLUMN.username.eq(payload.username))
         .one(&state.db)
@@ -56,7 +58,7 @@ pub async fn login(
     let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(b"SECRET"),
+        &EncodingKey::from_secret(secret.as_bytes()),
     )
     .unwrap();
 

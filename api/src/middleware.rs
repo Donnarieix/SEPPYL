@@ -9,6 +9,8 @@ use jsonwebtoken::{DecodingKey, Validation};
 use crate::routes::login::Claims;
 
 pub async fn auth(mut request: Request, next: Next) -> Result<Response, StatusCode> {
+    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET".to_string());
+
     let token = request
         .headers()
         .get(AUTHORIZATION)
@@ -18,7 +20,7 @@ pub async fn auth(mut request: Request, next: Next) -> Result<Response, StatusCo
 
     let token_data = jsonwebtoken::decode::<Claims>(
         token,
-        &DecodingKey::from_secret(b"SECRET"),
+        &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;

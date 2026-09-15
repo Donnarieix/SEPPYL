@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 argon2 = "0.6.0"
 axum = "0.8.9"
+dotenvy = "0.15.7"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 sea-orm = { version = "2.0.3", features = ["macros", "sqlx-sqlite", "runtime-tokio", "entity-registry", "schema-sync"] }
 serde = { version = "1.0.229", features = ["derive"] }

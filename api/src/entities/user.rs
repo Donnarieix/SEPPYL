@@ -10,6 +10,9 @@ pub struct Model {
     #[sea_orm(unique)]
     pub username: String,
     pub password: String,
+
+    #[sea_orm(has_many)]
+    pub players: HasMany<super::player::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

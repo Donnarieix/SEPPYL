@@ -3,26 +3,37 @@ use axum::{Json, extract::State, http::StatusCode};
 use jsonwebtoken::{EncodingKey, Header};
 use sea_orm::{EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::{entities, state::AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct LoginResponse {
     pub token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,
+    pub sub: Uuid,
     pub exp: u64,
 }
 
+#[utoipa::path(
+    post,
+    path = "/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
@@ -51,7 +62,7 @@ pub async fn login(
     let now = jsonwebtoken::get_current_timestamp();
 
     let claims = Claims {
-        sub: user.username.clone(),
+        sub: user.id,
         exp: now + 3600,
     };
 

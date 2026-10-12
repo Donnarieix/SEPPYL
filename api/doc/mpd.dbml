@@ -1,0 +1,31 @@
+Table users {
+    id int [pk]
+    username varchar
+    password varchar
+}
+
+Table players {
+    id int [pk]
+    firstname varchar
+    lastname varchar
+    number u32
+}
+
+Table players_users {
+    id int [pk]
+    player_id int [ref: > players.id]
+    user_id int [ref: > users.id]
+}
+
+Table activities {
+    id int [pk]
+    name varchar
+    date datetime
+}
+
+Table activities_players {
+    id int [pk]
+    activity_id int [ref: > activities.id]
+    player_id int [ref: > players.id]
+    results varchar
+}

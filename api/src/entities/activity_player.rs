@@ -6,9 +6,9 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "activities_players")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub activity_id: i32,
+    pub activity_id: Uuid,
     #[sea_orm(primary_key)]
-    pub player_id: i32,
+    pub player_id: Uuid,
 
     #[sea_orm(belongs_to, from = "activity_id", to = "id")]
     pub activity: BelongsTo<super::activity::Entity>,

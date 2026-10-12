@@ -28,6 +28,7 @@ impl AppState {
 
         if user.is_none() {
             let user = entities::user::ActiveModel {
+                id: Set(uuid::Uuid::new_v4()),
                 username: Set("admin".into()),
                 password: Set("$argon2id$v=19$m=19456,t=2,p=1$ko1RJ3LS7gXHMPZ8wI31QA$bEB7xXacYbfJzHuchGcSLK62pxQ7QOvgy7ikRaLgvO4".into()),
                 ..Default::default()

@@ -11,3 +11,7 @@ jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust
 sea-orm = { version = "2.0.3", features = ["macros", "sqlx-sqlite", "runtime-tokio", "entity-registry", "schema-sync"] }
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["cors"] }
+utoipa = { version = "5.5.0", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+uuid = { version = "1.26.1", features = ["serde", "v4"] }

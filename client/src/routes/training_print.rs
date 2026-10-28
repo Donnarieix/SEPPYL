@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use std::collections::BTreeMap;
-use crate::api::trainings;
+use crate::api::{trainings, catalog};
 use super::Route;
 
 #[component]
@@ -50,7 +50,7 @@ pub fn TrainingPrint(id: String) -> Element {
                                     p { class: "preformatted", "{activity.description}" }
                                 }
                                 if let Some(url) = activity.image_url.as_ref() {
-                                    img { class: "print-picture", src: "{url}", alt: "Illustration de {activity.name}" }
+                                    img { class: "print-picture", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }
                                 }
                                 {
                                     let materials: Vec<_> = detail.materials.iter()

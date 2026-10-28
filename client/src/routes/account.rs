@@ -223,10 +223,11 @@ pub fn AccountPage() -> Element {
                                     class: "settings-panel-content",
                                     onsubmit: {
                                         let token = token.clone();
+                                        let current_username = account.username.clone();
                                         move |event| {
                                             event.prevent_default();
                                             if *identity_busy.read() { return; }
-                                            let next = username.read().clone().unwrap_or_else(|| account.username.clone());
+                                            let next = username.read().clone().unwrap_or_else(|| current_username.clone());
                                             let token = token.clone();
                                             identity_busy.set(true);
                                             identity_feedback.set(None);

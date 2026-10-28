@@ -28,9 +28,7 @@ fn App() -> Element {
     // use its own saved appearance, not the previous account's local settings.
     use_effect(move || {
         if let Some(Ok(saved)) = preferences.read().clone() {
-            if *appearance.read() != saved {
-                appearance.set(saved);
-            }
+            appearance.set(saved);
         }
     });
 

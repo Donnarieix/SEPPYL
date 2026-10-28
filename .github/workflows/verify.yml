@@ -15,9 +15,11 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - name: Resolve dependencies
+        run: cargo generate-lockfile
       - name: Check API
-        run: cargo check --locked -p api
+        run: cargo check -p api
       - name: Check Web Client
-        run: cargo check --locked -p client --target wasm32-unknown-unknown --no-default-features --features web
+        run: cargo check -p client --target wasm32-unknown-unknown --no-default-features --features web
       - name: Test API
-        run: cargo test --locked -p api
+        run: cargo test -p api

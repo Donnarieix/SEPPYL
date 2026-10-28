@@ -3,15 +3,13 @@ use dioxus::prelude::*;
 mod home;
 mod login;
 
-use home::{Home, Counter};
+use home::Home;
 use login::Login;
 
-#[derive(Routable, Clone)]
+#[derive(Routable, Clone, PartialEq)]
 pub enum Route {
     #[route("/")]
-    Home,
-    #[route("/counter")]
-    Counter,
+    Home {},
     #[route("/login")]
-    Login,
+    Login {},
 }

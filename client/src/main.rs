@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::api::auth::Api;
-
-mod routes;
 mod api;
+mod routes;
 
 fn main() {
     dioxus::launch(App);
@@ -11,11 +9,9 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    use_context_provider(|| {
-        Api::new("http://127.0.0.1".into())
-    });
-
+    use_context_provider(|| Signal::new(None::<String>));
     rsx! {
+        document::Stylesheet { href: asset!("/assets/main.css") }
         Router::<routes::Route> {}
     }
 }

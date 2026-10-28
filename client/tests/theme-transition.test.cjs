@@ -1,29 +1,25 @@
-// Lightweight browser-event tests, with no third-party JS dependencies.
-// Run with: node --test client/tests/theme-transition.test.cjs
+// Browser-event contract tests for the single-click theme change.
+// Run: node --test client/tests/theme-transition.test.cjs
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const test = require("node:test");
 
-const source = fs.readFileSync(
-  path.join(__dirname, "../assets/theme-transition.js"),
-  "utf8"
-);
+const source = fs.readFileSync(path.join(__dirname, "../assets/theme-transition.js"), "utf8");
 
-function harness({ supported = true, reduced = false } = {}) {
+function harness({ supported = true, reduced = false, oldTheme = "light" } = {}) {
   const listeners = new Map();
   const animations = [];
   const snapshots = [];
-  const root = { dataset: { theme: "light" } };
-  const documentElement = {
-    animate(keyframes, options) {
-      animations.push({ keyframes, options });
-      return { finished: Promise.resolve() };
-    },
-  };
+  const root = { dataset: { theme: oldTheme } };
   const document = {
-    documentElement,
+    documentElement: {
+      animate(keyframes, options) {
+        animations.push({ keyframes, options });
+        return { finished: Promise.resolve() };
+      },
+    },
     querySelector(selector) { return selector === ".site-root" ? root : null; },
     addEventListener(name, callback) { listeners.set(name, callback); },
     activeViewTransition: null,
@@ -31,7 +27,7 @@ function harness({ supported = true, reduced = false } = {}) {
   if (supported) {
     document.startViewTransition = callback => {
       const before = root.dataset.theme;
-      callback(); // Browser captures old snapshot before updating DOM.
+      callback();
       snapshots.push({ before, after: root.dataset.theme });
       return { ready: Promise.resolve(), skipTransition() {} };
     };
@@ -41,27 +37,50 @@ function harness({ supported = true, reduced = false } = {}) {
     innerWidth: 1000,
     innerHeight: 700,
   };
-  const context = {
-    document, window,
-    innerWidth: 1000, innerHeight: 700,
-    performance: { now() { return 1000; } },
-    console: { debug() { throw new Error("No browser object logging expected"); } },
-  };
+  const context = { document, window, innerWidth: 1000, innerHeight: 700 };
   vm.runInNewContext(source, context);
+
+  let rustOnClickCalls = 0;
+  let savedChoice = oldTheme;
+  let selectedChoice = oldTheme;
   const button = {
     disabled: false,
     getAttribute(name) { return name === "data-theme-option" ? "dark" : null; },
     getBoundingClientRect() { return { left: 20, top: 20, width: 100, height: 40 }; },
   };
   const target = { closest() { return button; } };
-  return { root, listeners, button, target, animations, snapshots };
+
+  // Native event propagation: document capture listener runs before the
+  // framework's button click handler. Starting a transition in pointerdown
+  // previously prevented the click from reaching the component.
+  function click({ keyboard = false } = {}) {
+    const event = {
+      target, detail: keyboard ? 0 : 1, clientX: 150, clientY: 100,
+      preventDefault() { throw new Error("Theme reveal must not cancel click"); },
+      stopPropagation() { throw new Error("Theme reveal must not stop click"); },
+      stopImmediatePropagation() { throw new Error("Theme reveal must not stop click"); },
+    };
+    listeners.get("click")(event);
+    rustOnClickCalls++;
+    savedChoice = "dark";
+    selectedChoice = "dark";
+  }
+
+  return {
+    root, listeners, button, target, animations, snapshots, window, click,
+    get selectedChoice() { return selectedChoice; },
+    get savedChoice() { return savedChoice; },
+    get rustOnClickCalls() { return rustOnClickCalls; },
+  };
 }
 
-test("pointer transition applies the new theme before any server response", async () => {
+test("one click selects the option, saves it, and starts the circular reveal", async () => {
   const h = harness();
-  h.listeners.get("pointerdown")({
-    button: 0, target: h.target, clientX: 150, clientY: 100,
-  });
+  assert.equal(h.listeners.has("pointerdown"), false);
+  h.click();
+  assert.equal(h.rustOnClickCalls, 1);
+  assert.equal(h.selectedChoice, "dark");
+  assert.equal(h.savedChoice, "dark");
   assert.equal(h.root.dataset.theme, "dark");
   assert.equal(h.snapshots.length, 1);
   assert.equal(h.snapshots[0].before, "light");
@@ -72,26 +91,34 @@ test("pointer transition applies the new theme before any server response", asyn
   assert.equal(h.animations[0].options.pseudoElement, "::view-transition-new(root)");
 });
 
-test("fallback applies immediately on unsupported browsers", () => {
+test("unsupported browser still changes and selects with one click", () => {
   const h = harness({ supported: false });
-  h.listeners.get("pointerdown")({
-    button: 0, target: h.target, clientX: 300, clientY: 300,
-  });
+  h.click();
   assert.equal(h.root.dataset.theme, "dark");
+  assert.equal(h.selectedChoice, "dark");
+  assert.equal(h.rustOnClickCalls, 1);
   assert.equal(h.animations.length, 0);
 });
 
-test("reduced-motion preference skips animation", () => {
+test("reduced-motion avoids animation but preserves one-click selection", () => {
   const h = harness({ reduced: true });
-  h.listeners.get("pointerdown")({
-    button: 0, target: h.target, clientX: 300, clientY: 300,
-  });
+  h.click();
   assert.equal(h.root.dataset.theme, "dark");
+  assert.equal(h.selectedChoice, "dark");
   assert.equal(h.snapshots.length, 0);
 });
 
-test("keyboard-triggered click also changes the theme", () => {
+test("keyboard click selects and reveals from the button center", async () => {
   const h = harness();
-  h.listeners.get("click")({ target: h.target });
-  assert.equal(h.root.dataset.theme, "dark");
+  h.click({ keyboard: true });
+  assert.equal(h.selectedChoice, "dark");
+  await Promise.resolve();
+  assert.match(h.animations[0].keyframes.clipPath[0], /circle\(0px at 70px 40px\)/);
+});
+
+test("failed API persistence can restore the old painted theme", () => {
+  const h = harness();
+  h.click();
+  h.window.__seppylRestoreTheme("light");
+  assert.equal(h.root.dataset.theme, "light");
 });

@@ -504,6 +504,41 @@ mod integration_tests {
         assert!(detail.attendance[0].present);
         assert_eq!(detail.scores[0].score, 3);
 
+        // Subsequent updates must persist as well, not just initial inserts.
+        set_score(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(ScoreUpdate { player_id, activity_id: None, score: Some(2) }),
+        ).await.unwrap();
+        set_score(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), score: Some(4) }),
+        ).await.unwrap();
+        set_attendance(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(AttendanceUpdate { player_ids: vec![] }),
+        ).await.unwrap();
+        let updated = get(Extension(claims.clone()), State(state.clone()), Path(id)).await.unwrap().0;
+        assert_eq!(updated.attendance[0].score, Some(2));
+        assert!(!updated.attendance[0].present);
+        assert_eq!(updated.scores[0].score, 4);
+
+        set_attendance(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(AttendanceUpdate { player_ids: vec![player_id] }),
+        ).await.unwrap();
+        update(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(UpdateTraining {
+                name: "Entraînement corrigé".into(),
+                date: DateTime::parse_from_str("2026-10-28 19:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+                notes: "Consignes générales".into(),
+            }),
+        ).await.unwrap();
+        let saved = get(Extension(claims.clone()), State(state.clone()), Path(id)).await.unwrap().0;
+        assert!(saved.attendance[0].present);
+        assert_eq!(saved.training.name, "Entraînement corrigé");
+        assert_eq!(saved.training.notes, "Consignes générales");
+
         let invalid = set_score(
             Extension(claims), State(state), Path(id),
             Json(ScoreUpdate { player_id, activity_id: None, score: Some(6) }),

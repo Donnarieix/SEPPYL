@@ -8,7 +8,7 @@ pub fn TrainingPrint(id: String) -> Element {
     let session = use_context::<Signal<Option<String>>>();
     let token = session.read().clone();
     let fetch_id = id.clone();
-    let mut data = use_resource(move || {
+    let data = use_resource(move || {
         let id = fetch_id.clone();
         let token = token.clone();
         async move {

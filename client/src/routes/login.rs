@@ -64,7 +64,8 @@ pub fn Login() -> Element {
                     disabled: *busy.read(),
                     onclick: move |_| {
                         error.set(None);
-                        is_registration.set(!*is_registration.read());
+                        let next = !*is_registration.read();
+                        is_registration.set(next);
                     },
                     if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
                 }

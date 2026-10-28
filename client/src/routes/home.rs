@@ -41,6 +41,7 @@ pub fn Home() -> Element {
 
     let auth_token = token.unwrap_or_default();
     let snapshot = data.read().clone();
+    let can_create_activity = matches!(snapshot.as_ref(), Some(Ok(matrix)) if !matrix.players.is_empty());
 
     rsx! {
         div { class: "app",
@@ -69,7 +70,7 @@ pub fn Home() -> Element {
                             " Ajouter une joueuse"
                         }
                         button { class: "button solid",
-                            disabled: !matches!(snapshot.as_ref(), Some(Ok(matrix)) if !matrix.players.is_empty()),
+                            disabled: !can_create_activity,
                             onclick: move |_| dialog.set(Some(CreationKind::Activity)),
                             span { class: "plus", "+" }
                             " Nouvelle activité"

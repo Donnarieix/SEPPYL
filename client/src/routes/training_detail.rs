@@ -299,6 +299,8 @@ fn Preparation(
     let mut description = use_signal(String::new);
     let mut image = use_signal(String::new);
     let mut busy = use_signal(|| false);
+    let token_for_submit = token.clone();
+    let training_for_submit = training_id.clone();
 
     let mut totals = BTreeMap::<String, i32>::new();
     for material in &detail.materials {
@@ -313,7 +315,10 @@ fn Preparation(
                         h2 { "Activités de la séance" }
                         p { "Préparez les exercices et leur matériel avant de rejoindre le terrain." }
                     }
-                    button { class: "button outline small", onclick: move |_| adding.set(!*adding.read()), "+ Activité" }
+                    button { class: "button outline small", onclick: move |_| {
+                        let next = !*adding.read();
+                        adding.set(next);
+                    }, "+ Activité" }
                 }
                 if *adding.read() {
                     form { class: "editor-form",
@@ -324,8 +329,8 @@ fn Preparation(
                             if name_value.is_empty() { on_error.call("Donnez un nom à l'activité.".into()); return; }
                             let description_value = description.read().clone();
                             let image_value = image.read().trim().to_string();
-                            let token = token.clone();
-                            let id = training_id.clone();
+                            let token = token_for_submit.clone();
+                            let id = training_for_submit.clone();
                             busy.set(true);
                             spawn(async move {
                                 match trainings::add_activity(

@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use crate::api::trainings::{self, Activity, Detail, Material};
 use crate::api::catalog;
+use crate::api::preferences::{self, AttendanceView};
 use super::{Route, dialogs::PlayerDialog, layout::Header};
 
 #[component]
@@ -28,6 +29,20 @@ pub fn TrainingDetail(id: String) -> Element {
     let mut notice = use_signal(|| None::<String>);
     let mut busy = use_signal(|| false);
     let mut adding_player = use_signal(|| false);
+    // A global, account-specific preference, not tied to the current training.
+    let preference_token = token.clone();
+    let preferences_resource = use_resource(move || {
+        let token = preference_token.clone();
+        async move {
+            match token {
+                Some(token) => preferences::load(&token).await,
+                None => Err("Connexion requise.".to_owned()),
+            }
+        }
+    });
+    let mut preference_override = use_signal(|| None::<AttendanceView>);
+    let mut saving_preference = use_signal(|| false);
+    let mut preference_error = use_signal(|| None::<String>);
 
     if token.is_none() {
         return rsx! {
@@ -38,6 +53,11 @@ pub fn TrainingDetail(id: String) -> Element {
         };
     }
     let token = token.unwrap_or_default();
+    let current_view = preference_override.read().as_ref().copied()
+        .or_else(|| preferences_resource.read().clone().and_then(Result::ok))
+        .unwrap_or_default();
+    let grid_token = token.clone();
+    let list_token = token.clone();
     rsx! {
         div { class: "app",
             Header {}
@@ -78,14 +98,93 @@ pub fn TrainingDetail(id: String) -> Element {
                                         h2 { "Qui est présente ?" }
                                         p { "Cochez les joueuses présentes à cet entraînement." }
                                     }
-                                    button { class: "button outline small", onclick: move |_| adding_player.set(true),
-                                        "+ Joueuse"
+                                    div { class: "attendance-head-actions",
+                                        div { class: "attendance-view-switch",
+                                            role: "group",
+                                            "aria-label": "Mode d'affichage des joueuses",
+                                            button {
+                                                class: if current_view == AttendanceView::Grid { "attendance-view-button active" } else { "attendance-view-button" },
+                                                r#type: "button",
+                                                title: "Vue grille",
+                                                "aria-label": "Afficher les joueuses en grille",
+                                                "aria-pressed": if current_view == AttendanceView::Grid { "true" } else { "false" },
+                                                disabled: *saving_preference.read(),
+                                                onclick: move |_| {
+                                                    if *saving_preference.read() || current_view == AttendanceView::Grid { return; }
+                                                    preference_override.set(Some(AttendanceView::Grid));
+                                                    preference_error.set(None);
+                                                    saving_preference.set(true);
+                                                    let token = grid_token.clone();
+                                                    spawn(async move {
+                                                        if let Err(error) = preferences::save(&token, AttendanceView::Grid).await {
+                                                            preference_override.set(None);
+                                                            preference_error.set(Some(error));
+                                                        }
+                                                        saving_preference.set(false);
+                                                    });
+                                                },
+                                                span { class: "attendance-grid-icon", "aria-hidden": "true",
+                                                    span {}
+                                                    span {}
+                                                    span {}
+                                                    span {}
+                                                }
+                                            }
+                                            button {
+                                                class: if current_view == AttendanceView::List { "attendance-view-button active" } else { "attendance-view-button" },
+                                                r#type: "button",
+                                                title: "Vue liste",
+                                                "aria-label": "Afficher les joueuses en liste",
+                                                "aria-pressed": if current_view == AttendanceView::List { "true" } else { "false" },
+                                                disabled: *saving_preference.read(),
+                                                onclick: move |_| {
+                                                    if *saving_preference.read() || current_view == AttendanceView::List { return; }
+                                                    preference_override.set(Some(AttendanceView::List));
+                                                    preference_error.set(None);
+                                                    saving_preference.set(true);
+                                                    let token = list_token.clone();
+                                                    spawn(async move {
+                                                        if let Err(error) = preferences::save(&token, AttendanceView::List).await {
+                                                            preference_override.set(None);
+                                                            preference_error.set(Some(error));
+                                                        }
+                                                        saving_preference.set(false);
+                                                    });
+                                                },
+                                                span { class: "attendance-list-icon", "aria-hidden": "true",
+                                                    span {}
+                                                    span {}
+                                                    span {}
+                                                }
+                                            }
+                                        }
+                                        button { class: "button outline small", onclick: move |_| adding_player.set(true),
+                                            "+ Joueuse"
+                                        }
+                                    }
+                                }
+                                if let Some(message) = preference_error.read().as_ref() {
+                                    p { class: "attendance-preference-error", role: "alert", "{message}" }
+                                } else if let Some(Err(message)) = preferences_resource.read().clone() {
+                                    p { class: "attendance-preference-error", role: "alert",
+                                        "La préférence d'affichage n'a pas pu être chargée : {message}"
                                     }
                                 }
                                 if detail.players.is_empty() {
                                     div { class: "panel-empty", "Ajoutez d'abord les joueuses de l'équipe." }
                                 } else {
-                                    div { class: "attendance-list",
+                                    if current_view == AttendanceView::List {
+                                        div { class: "attendance-list-heading",
+                                            span { "Joueuse" }
+                                            span { "Présente" }
+                                        }
+                                    }
+                                    div {
+                                        class: if current_view == AttendanceView::List {
+                                            "attendance-list list-mode"
+                                        } else {
+                                            "attendance-list"
+                                        },
                                         for player in &detail.players {
                                             {
                                                 let player_id = player.id.clone();

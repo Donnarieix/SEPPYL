@@ -8,6 +8,9 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub user_id: Uuid,
     pub attendance_view: String,
+    // Nullable so schema-sync can add these fields to older SQLite databases.
+    pub theme: Option<String>,
+    pub density: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

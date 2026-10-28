@@ -914,3 +914,193 @@ button.grid-add-button:hover,
         animation-duration:0.01ms !important;
     }
 }
+
+
+/* Editing dialogs are workspaces, not tiny confirmation popovers. */
+.dialog-backdrop {
+    padding: clamp(16px, 3vh, 40px);
+    align-items: center;
+}
+.dialog-panel {
+    width: min(92vw, 800px);
+    max-width: 800px;
+    max-height: min(94dvh, 1050px);
+    display: flex;
+    flex-direction: column;
+}
+.dialog-panel form {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.dialog-header {
+    flex-shrink: 0;
+    padding: 25px 32px 23px;
+}
+.dialog-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 29px 32px 32px;
+}
+.dialog-footer {
+    flex-shrink: 0;
+    margin-top: auto;
+    padding: 18px 32px;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: var(--surface-soft);
+    border-color: var(--line);
+}
+.dialog-body .field input,
+.dialog-body .field textarea {
+    padding: 13px 15px;
+    line-height: 1.6;
+}
+.dialog-body .field textarea {
+    display: block;
+    min-height: 220px;
+    resize: vertical;
+    width: 100%;
+}
+.dialog-body .field label { font-size: 13px; }
+.dialog-panel.activity-dialog {
+    width: min(94vw, 1080px);
+    max-width: 1080px;
+}
+.activity-dialog .dialog-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(230px, 1fr);
+    align-items: start;
+    column-gap: 30px;
+    row-gap: 20px;
+}
+.activity-dialog .dialog-body > .field { margin: 0; }
+.activity-dialog .dialog-body > .field:first-child { grid-column: 1 / -1; }
+.activity-dialog .dialog-body > .field:nth-child(2) { grid-column: 1; }
+.activity-dialog .dialog-body > .field:nth-child(3) { grid-column: 2; }
+.activity-dialog .dialog-body > .form-error { grid-column: 1 / -1; }
+.activity-dialog .dialog-body textarea { min-height: 290px; }
+.activity-dialog .editor-preview {
+    width: 100%;
+    max-height: 250px;
+    object-fit: contain;
+    background: var(--surface-soft);
+}
+.activity-dialog input[type="file"] { max-width: 100%; }
+.editor-form .field textarea { min-height: 240px; }
+@media (max-width: 780px) {
+    .dialog-panel { width: min(96vw, 800px); }
+    .activity-dialog .dialog-body { grid-template-columns: minmax(0,1fr); gap: 18px; }
+    .activity-dialog .dialog-body > .field:first-child,
+    .activity-dialog .dialog-body > .field:nth-child(2),
+    .activity-dialog .dialog-body > .field:nth-child(3),
+    .activity-dialog .dialog-body > .form-error { grid-column: 1; }
+    .dialog-header { padding: 21px 23px; }
+    .dialog-body { padding: 23px; }
+    .dialog-footer { padding: 17px 23px; }
+}
+@media (max-width: 600px) {
+    .dialog-backdrop { padding: 0; align-items: flex-end; }
+    .dialog-panel, .dialog-panel.activity-dialog {
+        width: 100%;
+        max-width: none;
+        max-height: 96dvh;
+        border-radius: 16px 16px 0 0;
+    }
+    .dialog-header { padding: 21px 19px; }
+    .dialog-body { padding: 20px 19px 24px; }
+    .dialog-footer { padding: 14px 19px calc(14px + env(safe-area-inset-bottom, 0px)); }
+    .activity-dialog .dialog-body textarea { min-height: 240px; }
+}
+
+/* Tabs make account management easier to scan and navigate. */
+.settings-tabs {
+    display: flex;
+    gap: 5px;
+    align-items: stretch;
+    border-bottom: 1px solid var(--line);
+    padding: 0 3px;
+    margin-bottom: 22px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+.settings-tab {
+    flex: 0 0 auto;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 5px 5px 0 0;
+    padding: 13px 23px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 47px;
+}
+.settings-tab:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
+.settings-tab.active {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+    background: var(--surface-soft);
+}
+.settings-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.settings-tab-content { grid-template-columns: minmax(0,1fr); max-width: 960px; }
+.settings-tab-content > :first-child { grid-column: 1; }
+@media(max-width:600px) {
+    .settings-tab { flex: 1 1 auto; text-align: center; padding: 13px 12px; }
+    .settings-tabs { gap: 0; }
+    .settings-tab-content { margin-top: 3px; }
+}
+
+/* Restore the discreet spreadsheet reading experience.
+   Inputs are transparent until hover/focus, without sacrificing editability. */
+.site-root .grid-table .cell-input {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none;
+}
+.site-root .grid-table .cell-input::placeholder {
+    color: transparent;
+    opacity: 0;
+}
+.site-root .grid-table .cell:hover .cell-input:not(:focus),
+.site-root .grid-table .cell-input:hover:not(:focus) {
+    background: var(--surface-hover) !important;
+    border-color: var(--line) !important;
+}
+.site-root .grid-table .cell:hover .cell-input::placeholder,
+.site-root .grid-table .cell-input:focus::placeholder {
+    color: var(--muted);
+    opacity: .6;
+}
+.site-root .grid-table .cell-input:focus {
+    background: var(--surface) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px #7b9abb38 !important;
+}
+.site-root .grid-table .cell-input.has-error {
+    border-color: #c36666 !important;
+}
+@media (hover: none) {
+    /* Touch users need a slight affordance for blank editable cells. */
+    .site-root .grid-table .cell-input::placeholder {
+        color: var(--muted);
+        opacity: .45;
+    }
+}
+
+/* Native browser View Transitions: old theme stays visible while the new
+   theme expands as a circular reveal from the pointer position. */
+::view-transition-old(root), ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+::view-transition-new(root) { z-index: 1; }
+::view-transition-old(root) { z-index: 0; }
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
+}

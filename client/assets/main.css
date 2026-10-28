@@ -389,3 +389,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #4368a8; outline-
     .print-picture { max-height:13cm; }
     @page { size:A4; margin:14mm; }
 }
+
+.registration-toggle { width:100%; margin-top:19px; background:transparent; color:#315374; border:none; font-size:12px; padding:7px; text-decoration:underline; }
+.registration-toggle:hover { color:#173e60; }
+.registration-note { color:#808d9a; font-size:11px; line-height:1.55; margin:10px 0 0; }

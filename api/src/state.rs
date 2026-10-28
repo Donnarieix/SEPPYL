@@ -11,7 +11,18 @@ pub struct AppState {
 
 impl AppState {
     pub async fn default() -> Self {
-        let db = Database::connect("sqlite://data/sappyl.db?mode=rwc")
+        // Use an ignored local copy rather than writing real player data into the
+        // SQLite file already tracked by Git. Keep that original file untouched.
+        const LOCAL_DB: &str = "data/seppyl.local.db";
+        std::fs::create_dir_all("data").expect("Unable to create data directory");
+        if !std::path::Path::new(LOCAL_DB).exists()
+            && std::path::Path::new("data/sappyl.db").exists()
+        {
+            std::fs::copy("data/sappyl.db", LOCAL_DB)
+                .expect("Unable to initialize local database from existing data/sappyl.db");
+        }
+
+        let db = Database::connect("sqlite://data/seppyl.local.db?mode=rwc")
             .await
             .unwrap();
 

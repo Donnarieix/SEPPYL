@@ -3,6 +3,7 @@ use axum::{Json, extract::State, http::StatusCode};
 use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::{entities, state::AppState};
 
@@ -18,7 +19,8 @@ pub struct RegisterRequest {
     request_body = RegisterRequest,
     responses(
         (status = 200, description = "Registration successful"),
-        (status = 409, description = "Conflict: Username already exists"),
+        (status = 400, description = "Username or password is too short"),
+        (status = 409, description = "Username already exists"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -26,28 +28,31 @@ pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(), StatusCode> {
-    let existing_user = entities::user::Entity::find()
-        .filter(entities::user::COLUMN.username.eq(payload.username.clone()))
+    let username = payload.username.trim().to_string();
+    if username.len() < 3 || username.len() > 80 || payload.password.len() < 8 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let existing = entities::user::Entity::find()
+        .filter(entities::user::COLUMN.username.eq(username.clone()))
         .one(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if existing_user.is_some() {
+    if existing.is_some() {
         return Err(StatusCode::CONFLICT);
     }
 
     let hash = Argon2::default()
-        .hash_password(payload.password.clone().as_bytes())
+        .hash_password(payload.password.as_bytes())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user = entities::user::ActiveModel {
-        username: sea_orm::ActiveValue::Set(payload.username),
+        id: sea_orm::ActiveValue::Set(Uuid::new_v4()),
+        username: sea_orm::ActiveValue::Set(username),
         password: sea_orm::ActiveValue::Set(hash.to_string()),
         ..Default::default()
     };
-
-    user.insert(&state.db)
-        .await
+    user.insert(&state.db).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(())

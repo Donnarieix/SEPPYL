@@ -4,6 +4,7 @@ use crate::api::{
     preferences::{self, AttendanceView, Density, Theme, UserPreferences},
 };
 use super::{Route, layout::Header};
+use crate::theme_transition;
 
 #[component]
 pub fn AccountPage() -> Element {
@@ -32,6 +33,7 @@ pub fn AccountPage() -> Element {
     let mut identity_feedback = use_signal(|| None::<(bool, String)>);
     let mut password_feedback = use_signal(|| None::<(bool, String)>);
     let mut appearance_feedback = use_signal(|| None::<(bool, String)>);
+    let mut active_tab = use_signal(|| "appearance".to_string());
 
     if token.is_none() {
         return rsx! {
@@ -62,7 +64,28 @@ pub fn AccountPage() -> Element {
                         p { "Informations personnelles et préférences d'utilisation." }
                     }
                 }
-                div { class: "settings-layout",
+                nav { class: "settings-tabs", role: "tablist", "aria-label": "Rubriques du compte",
+                    button {
+                        class: if active_tab.read().as_str() == "appearance" { "settings-tab active" } else { "settings-tab" },
+                        role: "tab", "aria-selected": if active_tab.read().as_str() == "appearance" { "true" } else { "false" },
+                        onclick: move |_| active_tab.set("appearance".into()),
+                        "Préférences"
+                    }
+                    button {
+                        class: if active_tab.read().as_str() == "profile" { "settings-tab active" } else { "settings-tab" },
+                        role: "tab", "aria-selected": if active_tab.read().as_str() == "profile" { "true" } else { "false" },
+                        onclick: move |_| active_tab.set("profile".into()),
+                        "Informations"
+                    }
+                    button {
+                        class: if active_tab.read().as_str() == "security" { "settings-tab active" } else { "settings-tab" },
+                        role: "tab", "aria-selected": if active_tab.read().as_str() == "security" { "true" } else { "false" },
+                        onclick: move |_| active_tab.set("security".into()),
+                        "Sécurité"
+                    }
+                }
+                div { class: "settings-layout settings-tab-content",
+                    if active_tab.read().as_str() == "appearance" {
                     section { class: "settings-panel",
                         div { class: "settings-panel-heading",
                             h2 { "Apparence" }
@@ -79,14 +102,15 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::System { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::System { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |_| {
+                                        onclick: move |event: MouseEvent| {
                                             let before = *appearance.read();
-                                            if before.theme == Theme::System { return; }
-                                            appearance.set(UserPreferences { theme: Theme::System, ..before });
+                                            if before.theme == Theme::System || *appearance_busy.read() { return; }
+                                            let coords = event.data.client_coordinates();
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_system.clone();
                                             spawn(async move {
+                                                theme_transition::reveal_theme(appearance, Theme::System, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::System, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
@@ -104,14 +128,15 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::Light { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::Light { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |_| {
+                                        onclick: move |event: MouseEvent| {
                                             let before = *appearance.read();
-                                            if before.theme == Theme::Light { return; }
-                                            appearance.set(UserPreferences { theme: Theme::Light, ..before });
+                                            if before.theme == Theme::Light || *appearance_busy.read() { return; }
+                                            let coords = event.data.client_coordinates();
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_light.clone();
                                             spawn(async move {
+                                                theme_transition::reveal_theme(appearance, Theme::Light, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::Light, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
@@ -129,14 +154,15 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::Dark { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::Dark { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |_| {
+                                        onclick: move |event: MouseEvent| {
                                             let before = *appearance.read();
-                                            if before.theme == Theme::Dark { return; }
-                                            appearance.set(UserPreferences { theme: Theme::Dark, ..before });
+                                            if before.theme == Theme::Dark || *appearance_busy.read() { return; }
+                                            let coords = event.data.client_coordinates();
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_dark.clone();
                                             spawn(async move {
+                                                theme_transition::reveal_theme(appearance, Theme::Dark, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::Dark, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
@@ -211,7 +237,7 @@ pub fn AccountPage() -> Element {
                             div { class: "settings-group",
                                 div { class: "settings-group-label",
                                     strong { "Affichage des présences" }
-                                    span { "Choisissez la disposition par défaut des joueuses dans un entraînement." }
+                                    span { "Choisissez la vue affichée par défaut à l’ouverture de l’onglet Présences. Vous pourrez toujours basculer entre grille et liste depuis l’entraînement." }
                                 }
                                 div { class: "settings-choice-group", role: "group", "aria-label": "Affichage des présences",
                                     button {
@@ -263,7 +289,8 @@ pub fn AccountPage() -> Element {
                             }
                         }
                     }
-
+                    }
+                    if active_tab.read().as_str() == "profile" {
                     section { class: "settings-panel",
                         div { class: "settings-panel-heading",
                             h2 { "Informations du compte" }
@@ -324,7 +351,8 @@ pub fn AccountPage() -> Element {
                             None => rsx! { div { class: "settings-panel-content", "Chargement du compte…" } },
                         }
                     }
-
+                    }
+                    if active_tab.read().as_str() == "security" {
                     section { class: "settings-panel",
                         div { class: "settings-panel-heading",
                             h2 { "Sécurité" }
@@ -391,6 +419,7 @@ pub fn AccountPage() -> Element {
                             }
                             p { class: "settings-note", "Votre session actuelle et les autres sessions déjà ouvertes restent valides jusqu'à leur expiration. La gestion centralisée des sessions sera réalisée avec le futur SSO." }
                         }
+                    }
                     }
                 }
                 p { class: "settings-footnote",

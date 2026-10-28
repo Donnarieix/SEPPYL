@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
 };
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter,
     QueryOrder, TransactionTrait,
 };
 use sea_orm::entity::prelude::DateTime;
@@ -411,7 +411,7 @@ mod integration_tests {
     use super::*;
     use axum::{Extension, Json, extract::{Path, State}};
     use sea_orm::{ActiveModelTrait, ActiveValue::Set, Database, DatabaseConnection};
-    use crate::entities::{player, player_user};
+    use crate::entities::{player, player_user, user};
 
     async fn test_db() -> DatabaseConnection {
         let db = Database::connect("sqlite::memory:").await.unwrap();
@@ -427,6 +427,13 @@ mod integration_tests {
         let other = Uuid::new_v4();
         let claims = Claims { sub: owner, exp: u64::MAX };
         let stranger = Claims { sub: other, exp: u64::MAX };
+        // A real user row is required for the player_user foreign key.
+        user::ActiveModel {
+            id: Set(owner),
+            username: Set("test-coach".into()),
+            password: Set("not-used-in-this-test".into()),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let (created, id_string) = create(

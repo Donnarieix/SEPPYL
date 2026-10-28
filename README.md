@@ -105,3 +105,13 @@ Les préférences sont enregistrées **par compte** dans SQLite (`user_preferenc
 **Migration SSO** : les réglages d'interface resteront associés au compte SEPPYL ; les fonctions de gestion de l'identifiant/mot de passe local devront être remplacées par celles du SSO Donnarieix. Pour cette version, changer le mot de passe ne révoque pas les autres JWT déjà émis (leur durée de vie est de 24 h). Ne pas exposer directement le serveur de développement sur Internet.
 
 Pour la validation manuelle, tester des largeurs proches de **360 px**, **768 px**, **1024 px** et **1440 px**, ainsi que les modes clair, sombre et système, notamment les tableaux, la navigation, les modales et la fiche imprimable.
+
+## Finitions UX (fenêtres, thèmes et tableur)
+
+- Les formulaires s'ouvrent dans des fenêtres plus larges. L'éditeur d'activité peut exploiter deux colonnes sur ordinateur (consignes + image), puis revient à une seule colonne sur téléphone. La zone de rédaction est agrandie et la barre d'actions reste accessible.
+- Les paramètres du compte sont répartis en trois onglets : **Préférences**, **Informations** et **Sécurité**.
+- L'option **Affichage des présences** est explicitement présentée comme la **vue par défaut**. Un changement reste possible depuis chaque entraînement.
+- Les cellules du tableur restent discrètes au repos. Leur fondure/bordure d'édition n'apparaît que lors du survol ou de la saisie. Sur tactile, les cellules vides gardent un léger repère pour signaler qu'elles sont éditables.
+- Le changement clair/sombre/système utilise l'API navigateur View Transitions lorsqu'elle est disponible : cercle partant du point de clic et couvrant la fenêtre. En cas de navigateur non compatible ou si l'utilisateur préfère réduire les animations, le changement reste instantané.
+
+Tester en particulier les fenêtres d'activités sur mobile, la saisie de texte long, le passage entre onglets et la transition thème sur Chromium ainsi que son repli sur un navigateur ne prenant pas en charge les transitions.

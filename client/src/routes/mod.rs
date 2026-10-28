@@ -15,6 +15,8 @@ use login::Login;
 use training_detail::TrainingDetail;
 use training_print::TrainingPrint;
 use trainings::Trainings;
+use players::Players;
+use activities::Activities;
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {

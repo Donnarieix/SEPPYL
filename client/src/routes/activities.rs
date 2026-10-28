@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::api::catalog::{self, Activity, Material};
+use crate::api::catalog::{self, Activity};
 use super::{Route,layout::Header};
 
 #[component]
@@ -224,7 +224,7 @@ fn ActivityEditor(
                                             for file in event.files(){
                                                 uploading.set(true);
                                                 let result=match file.read_bytes().await{
-                                                    Ok(bytes)=>catalog::upload(&token,bytes).await,
+                                                    Ok(bytes)=>catalog::upload(&token,bytes.to_vec()).await,
                                                     Err(e)=>Err(format!("Lecture du fichier impossible : {e}")),
                                                 };
                                                 match result {

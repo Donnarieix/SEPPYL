@@ -19,7 +19,8 @@ use crate::{
                 create_activity, delete_activity, get_activities, get_activity, update_activity,
                 update_activity_player,
             },
-            matrix::{create_matrix_activity, get_matrix, update_matrix_result},
+            matrix::{create_matrix_activity, get_matrix, update_matrix_result, select_activity},
+            catalog,
             training,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
@@ -64,9 +65,16 @@ async fn main() {
         .route("/matrix", get(get_matrix))
         .route("/matrix/activity", post(create_matrix_activity))
         .route("/matrix/result", put(update_matrix_result))
+        .route("/matrix/select", post(select_activity))
+        .route("/catalog", get(catalog::list).post(catalog::create))
+        .route("/catalog/{id}", put(catalog::update).delete(catalog::delete))
+        .route("/catalog/{id}/materials", post(catalog::add_material))
+        .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material))
+        .route("/catalog/upload", post(catalog::upload_image).layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)))
         .route("/trainings", get(training::list).post(training::create))
         .route("/trainings/{id}", get(training::get).put(training::update))
         .route("/trainings/{id}/activities", post(training::add_activity))
+        .route("/trainings/{id}/catalog/{catalog_id}", post(training::attach_catalog))
         .route("/trainings/{id}/activities/{activity_id}", delete(training::remove_activity))
         .route("/trainings/{id}/activities/{activity_id}/materials", post(training::add_material))
         .route("/trainings/{id}/activities/{activity_id}/materials/{material_id}", delete(training::remove_material))
@@ -78,6 +86,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/login", post(login))
         .route("/register", post(register))
+        .route("/catalog/images/{filename}", get(catalog::image))
         .merge(protected)
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Apply CORS after merging, so it covers protected routes too.

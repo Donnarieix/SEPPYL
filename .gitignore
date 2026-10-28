@@ -3,3 +3,5 @@
 # Local SQLite working copy, never commit player attendance or ratings
 /data/*.local.db
 /data/*.local.db-*
+
+/data/uploads/

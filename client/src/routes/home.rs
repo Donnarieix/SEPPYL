@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::matrix::{self, Matrix};
+use crate::api::catalog;
 use super::{dialogs::{ActivityDialog, PlayerDialog}, layout::Header};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -40,6 +41,14 @@ pub fn Home() -> Element {
     }
 
     let auth_token = token.unwrap_or_default();
+    let catalog_token = auth_token.clone();
+    let catalog_list = use_resource(move || {
+        let token = catalog_token.clone();
+        async move { catalog::list(&token).await }
+    });
+    let mut catalog_selection = use_signal(String::new);
+    let mut catalog_error = use_signal(|| None::<String>);
+    let token_for_select = auth_token.clone();
     let snapshot = data.read().clone();
     let can_create_activity = matches!(snapshot.as_ref(), Some(Ok(matrix)) if !matrix.players.is_empty());
 
@@ -66,6 +75,8 @@ pub fn Home() -> Element {
                         p { "Suivi des joueuses par activité" }
                     }
                     div { class: "heading-actions",
+                        Link { to: crate::routes::Route::Players {}, class: "button outline", "Gérer les joueuses" }
+                        Link { to: crate::routes::Route::Activities {}, class: "button outline", "Bibliothèque d'activités" }
                         button { class: "button outline", onclick: move |_| dialog.set(Some(CreationKind::Player)),
                             span { class: "plus", "+" }
                             " Ajouter une joueuse"
@@ -79,6 +90,47 @@ pub fn Home() -> Element {
                     }
                 }
 
+                if let Some(message) = catalog_error.read().as_ref() {
+                    p { class: "form-error", role: "alert", "{message}" }
+                }
+                div { class: "catalog-picker matrix-picker",
+                    div { class: "picker-heading",
+                        strong { "Ajouter une colonne à partir de la bibliothèque" }
+                        span { class: "muted-small", "Les activités créées dans les entraînements sont disponibles ici." }
+                    }
+                    match catalog_list.read().clone() {
+                        Some(Ok(items)) => rsx! {
+                            div { class: "picker-fields",
+                                select {
+                                    value: "{catalog_selection}",
+                                    onchange: move |e| catalog_selection.set(e.value()),
+                                    option { value: "", "Choisir une activité…" }
+                                    for item in items {
+                                        option { value: "{item.id}", "{item.name}" }
+                                    }
+                                }
+                                button { class: "button solid small", disabled: catalog_selection.read().is_empty(),
+                                    onclick: {
+                                        let token = token_for_select.clone();
+                                        move |_| {
+                                            let token = token.clone();
+                                            let id = catalog_selection.read().clone();
+                                            spawn(async move {
+                                                match catalog::select_for_table(&token, &id).await {
+                                                    Ok(()) => { catalog_error.set(None); data.restart(); },
+                                                    Err(e) => catalog_error.set(Some(e)),
+                                                }
+                                            });
+                                        }
+                                    },
+                                    "Ajouter au tableur"
+                                }
+                            }
+                        },
+                        Some(Err(e)) => rsx! { p { class: "muted-small", "{e}" } },
+                        None => rsx! { p { class: "muted-small", "Chargement des activités…" } },
+                    }
+                }
                 match snapshot {
                     Some(Ok(matrix)) => rsx! {
                         div { class: "sheet",

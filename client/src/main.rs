@@ -34,6 +34,7 @@ fn App() -> Element {
 
     let current = *appearance.read();
     rsx! {
+        document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
         document::Stylesheet { href: asset!("/assets/main.css") }
         div {
             class: "site-root",

@@ -87,3 +87,21 @@ Les onglets Joueuses et Activités permettent d'administrer les données depuis 
 Au démarrage, les activités d'entraînement antérieures à cette modification sont importées de manière idempotente dans la bibliothèque commune ; les notes déjà saisies restent attachées à leur séance. Les anciennes colonnes de l'ancien tableur restent lisibles, sans conversion automatique vers la bibliothèque.
 
 Les images téléversées possèdent des URLs opaques mais sont pour l'instant servies sans authentification. Ne téléversez pas de photos privées ou sensibles avant la mise en place du contrôle d'accès aux médias.
+
+## Responsive et paramètres du compte
+
+L'interface propose désormais une navigation en haut sur ordinateur et une **barre de navigation inférieure** sur téléphone/tablette. Les pages Entraînements, Présences, Notes, Préparation, Joueuses, Activités et Tableur disposent de règles spécifiques pour les petites largeurs. Le tableur conserve un défilement horizontal volontaire plutôt que d'écraser les colonnes. Les formulaires sont adaptés aux écrans tactiles.
+
+La page **Mon compte** est accessible depuis la navigation (route `/settings`) et propose :
+
+- Thème **système**, **clair** ou **sombre** (le mode système suit les préférences de l'appareil)
+- Densité d'affichage **confortable** ou **compacte**
+- Affichage des présences **grille** ou **liste**
+- Modification de l'identifiant de connexion local
+- Changement du mot de passe local (mot de passe actuel requis ; nouveau mot de passe d'au moins 12 caractères)
+
+Les préférences sont enregistrées **par compte** dans SQLite (`user_preferences`) et restaurées lors de la connexion, indépendamment du navigateur ou de l'appareil. Mettre à jour un réglage n'écrase pas les autres. Le schéma est synchronisé automatiquement, mais sauvegardez au préalable `data/seppyl.local.db`.
+
+**Migration SSO** : les réglages d'interface resteront associés au compte SEPPYL ; les fonctions de gestion de l'identifiant/mot de passe local devront être remplacées par celles du SSO Donnarieix. Pour cette version, changer le mot de passe ne révoque pas les autres JWT déjà émis (leur durée de vie est de 24 h). Ne pas exposer directement le serveur de développement sur Internet.
+
+Pour la validation manuelle, tester des largeurs proches de **360 px**, **768 px**, **1024 px** et **1440 px**, ainsi que les modes clair, sombre et système, notamment les tableaux, la navigation, les modales et la fiche imprimable.

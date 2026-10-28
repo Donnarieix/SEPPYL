@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 use std::collections::BTreeMap;
 
 use crate::api::trainings::{self, Activity, Detail, Material};
+use crate::api::catalog;
 use super::{Route, dialogs::PlayerDialog, layout::Header};
 
 #[component]
@@ -301,6 +302,12 @@ fn Preparation(
     let mut busy = use_signal(|| false);
     let token_for_submit = token.clone();
     let training_for_submit = training_id.clone();
+    let catalog_token = token.clone();
+    let catalog_entries = use_resource(move || {
+        let token = catalog_token.clone();
+        async move { catalog::list(&token).await }
+    });
+    let mut selected = use_signal(String::new);
 
     let mut totals = BTreeMap::<String, i32>::new();
     for material in &detail.materials {
@@ -319,6 +326,50 @@ fn Preparation(
                         let next = !*adding.read();
                         adding.set(next);
                     }, "+ Activité" }
+                }
+                div { class: "catalog-picker",
+                    div { class: "picker-heading",
+                        strong { "Réutiliser une activité" }
+                        Link { to: Route::Activities {}, "Gérer la bibliothèque →" }
+                    }
+                    match catalog_entries.read().clone() {
+                        Some(Ok(available)) => rsx! {
+                            div { class: "picker-fields",
+                                select {
+                                    value: "{selected}",
+                                    onchange: move |e| selected.set(e.value()),
+                                    option { value: "", "Choisir une activité existante…" }
+                                    for item in available {
+                                        option { value: "{item.id}", "{item.name}" }
+                                    }
+                                }
+                                button { class: "button outline small",
+                                    disabled: selected.read().is_empty() || *busy.read(),
+                                    onclick: {
+                                        let token = token.clone();
+                                        let training_id = training_id.clone();
+                                        move |_| {
+                                            let chosen = selected.read().clone();
+                                            if chosen.is_empty() || *busy.read() { return; }
+                                            let token = token.clone();
+                                            let training_id = training_id.clone();
+                                            busy.set(true);
+                                            spawn(async move {
+                                                match catalog::attach_to_training(&token, &training_id, &chosen).await {
+                                                    Ok(()) => { selected.set(String::new()); on_saved.call(()); },
+                                                    Err(e) => on_error.call(e),
+                                                }
+                                                busy.set(false);
+                                            });
+                                        }
+                                    },
+                                    "Ajouter à la séance"
+                                }
+                            }
+                        },
+                        Some(Err(message)) => rsx! { p { class: "muted-small", "{message}" } },
+                        None => rsx! { p { class: "muted-small", "Chargement de la bibliothèque…" } },
+                    }
                 }
                 if *adding.read() {
                     form { class: "editor-form",
@@ -366,7 +417,7 @@ fn Preparation(
                             input { r#type: "url", value: "{image}",
                                 placeholder: "https://…",
                                 oninput: move |e| image.set(e.value()) }
-                            small { "Pour cette version, l'image est référencée par une URL publique (pas de téléversement)." }
+                            small { "Pour téléverser une image, vous pouvez ensuite modifier cette activité dans la bibliothèque." }
                         }
                         button { class: "button solid", r#type: "submit", disabled: *busy.read(),
                             if *busy.read() { "Enregistrement…" } else { "Ajouter cette activité" }
@@ -457,7 +508,7 @@ fn ActivityCard(
                 p { class: "exercise-description", "{activity.description}" }
             }
             if let Some(url) = activity.image_url.as_ref() {
-                img { class: "exercise-image", src: "{url}", alt: "Illustration de {activity.name}" }
+                img { class: "exercise-image", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }
             }
             div { class: "material-section",
                 strong { "Matériel" }

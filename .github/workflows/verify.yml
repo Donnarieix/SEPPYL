@@ -1,0 +1,23 @@
+name: Verify SEPPYL
+
+on:
+  push:
+    branches:
+      - ui-tableur
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Check API
+        run: cargo check --locked -p api
+      - name: Check Web Client
+        run: cargo check --locked -p client --target wasm32-unknown-unknown --no-default-features --features web
+      - name: Test API
+        run: cargo test --locked -p api

@@ -22,6 +22,7 @@ pub fn TrainingDetail(id: String) -> Element {
         }
     });
     let mut tab = use_signal(|| "presence".to_string());
+    let selected_activity = use_signal(String::new);
     let mut selected_override = use_signal(|| None::<Vec<String>>);
     let mut notice = use_signal(|| None::<String>);
     let mut busy = use_signal(|| false);
@@ -153,6 +154,7 @@ pub fn TrainingDetail(id: String) -> Element {
                                 detail: detail.clone(),
                                 token: token.clone(),
                                 training_id: id.clone(),
+                                selected_activity,
                                 on_saved: move |_| { notice.set(Some("Note enregistrée.".into())); data.restart(); },
                                 on_error: move |message| notice.set(Some(message)),
                             }
@@ -191,10 +193,10 @@ fn Notes(
     detail: Detail,
     token: String,
     training_id: String,
+    mut selected_activity: Signal<String>,
     on_saved: EventHandler<()>,
     on_error: EventHandler<String>,
 ) -> Element {
-    let mut selected_activity = use_signal(String::new);
     let mut saving = use_signal(|| None::<String>);
     let present: Vec<_> = detail.players.iter()
         .filter(|p| detail.attendance.iter().any(|a| a.player_id == p.id && a.present))

@@ -57,3 +57,44 @@ pub async fn register(
 
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routes::authentication::login::{login, LoginRequest};
+    use sea_orm::Database;
+
+    #[tokio::test]
+    async fn a_registered_coach_can_log_in() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state = AppState { db };
+
+        register(
+            State(state.clone()),
+            Json(RegisterRequest {
+                username: "valentin-test".into(),
+                password: "test-password-strong".into(),
+            }),
+        ).await.unwrap();
+
+        let response = login(
+            State(state.clone()),
+            Json(LoginRequest {
+                username: "valentin-test".into(),
+                password: "test-password-strong".into(),
+            }),
+        ).await.unwrap();
+        assert!(!response.0.token.is_empty());
+
+        let duplicate = register(
+            State(state),
+            Json(RegisterRequest {
+                username: "valentin-test".into(),
+                password: "another-password".into(),
+            }),
+        ).await;
+        assert!(matches!(duplicate, Err(StatusCode::CONFLICT)));
+    }
+}

@@ -19,7 +19,7 @@ use crate::{
                 create_activity, delete_activity, get_activities, get_activity, update_activity,
                 update_activity_player,
             },
-            matrix::{get_matrix, update_matrix_result},
+            matrix::{create_matrix_activity, get_matrix, update_matrix_result},
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
         miscellaneous::{health::health, me::me},
@@ -61,6 +61,7 @@ async fn main() {
         .route("/activity_player/update", put(update_activity_player))
         .route("/activity/delete/{id}", delete(delete_activity))
         .route("/matrix", get(get_matrix))
+        .route("/matrix/activity", post(create_matrix_activity))
         .route("/matrix/result", put(update_matrix_result))
         .route_layer(axum_middleware::from_fn(auth));
 

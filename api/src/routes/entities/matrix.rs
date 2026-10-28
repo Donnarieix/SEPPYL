@@ -3,7 +3,9 @@ use axum::{
     extract::State,
     http::StatusCode,
 };
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::entity::prelude::DateTime;
+use utoipa::ToSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -120,4 +122,81 @@ pub async fn update_matrix_result(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+
+#[derive(Deserialize, ToSchema)]
+pub struct CreateMatrixActivityRequest {
+    pub name: String,
+    pub date: DateTime,
+}
+
+/// A spreadsheet activity belongs to all of the current user's players.
+/// The initial results are deliberately empty and can be filled in the grid.
+#[utoipa::path(
+    post,
+    path = "/matrix/activity",
+    request_body = CreateMatrixActivityRequest,
+    responses(
+        (status = 201, description = "Activity created for all players"),
+        (status = 400, description = "A name, date and at least one player are required"),
+        (status = 409, description = "An activity with this name already exists"),
+        (status = 500, description = "Database error")
+    )
+)]
+pub async fn create_matrix_activity(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateMatrixActivityRequest>,
+) -> Result<(StatusCode, String), StatusCode> {
+    let name = payload.name.trim();
+    if name.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let players = services::player::get_players(&claims, &state).await?;
+    if players.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let existing = entities::activity::Entity::find()
+        .filter(entities::activity::COLUMN.name.eq(name))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if existing.is_some() {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    let txn = state.db.begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let activity = entities::activity::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        name: Set(name.to_owned()),
+        date: Set(payload.date),
+        ..Default::default()
+    };
+    let activity = activity.insert(&txn)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    for player in &players {
+        entities::activity_player::ActiveModel {
+            activity_id: Set(activity.id),
+            player_id: Set(player.id),
+            result: Set(None),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    txn.commit()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok((StatusCode::CREATED, activity.id.to_string()))
 }

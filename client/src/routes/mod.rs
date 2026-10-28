@@ -9,6 +9,7 @@ mod training_print;
 mod trainings;
 mod players;
 mod activities;
+mod account;
 
 use home::Home;
 use login::Login;
@@ -17,6 +18,7 @@ use training_print::TrainingPrint;
 use trainings::Trainings;
 use players::Players;
 use activities::Activities;
+use account::AccountPage;
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {
@@ -28,6 +30,8 @@ pub enum Route {
     Players {},
     #[route("/activities")]
     Activities {},
+    #[route("/settings")]
+    AccountPage {},
     #[route("/login")]
     Login {},
     #[route("/trainings/:id")]

@@ -13,6 +13,7 @@ use crate::{
     entities,
     routes::authentication::login::Claims,
     services,
+    routes::entities::catalog,
     state::AppState,
 };
 
@@ -24,9 +25,16 @@ pub struct MatrixResult {
 }
 
 #[derive(Serialize)]
+pub struct MatrixActivity {
+    pub id: Uuid,
+    pub name: String,
+    pub date: String,
+}
+
+#[derive(Serialize)]
 pub struct MatrixResponse {
     pub players: Vec<entities::player::Model>,
-    pub activities: Vec<entities::activity::Model>,
+    pub activities: Vec<MatrixActivity>,
     pub results: Vec<MatrixResult>,
 }
 
@@ -54,19 +62,44 @@ pub async fn get_matrix(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let activities = entities::activity::Entity::find()
+    let legacy = entities::activity::Entity::find()
         .filter(entities::activity::COLUMN.id.is_in(
             links.iter().map(|link| link.activity_id),
         ))
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let results = links.into_iter().map(|link| MatrixResult {
+    let selection = entities::catalog_selection::Entity::find()
+        .filter(entities::catalog_selection::COLUMN.user_id.eq(claims.sub))
+        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let selected_ids: Vec<Uuid> = selection.iter().map(|s| s.activity_id).collect();
+    let catalog_activities = if selected_ids.is_empty() { Vec::new() } else {
+        entities::catalog_activity::Entity::find()
+            .filter(entities::catalog_activity::COLUMN.user_id.eq(claims.sub))
+            .filter(entities::catalog_activity::COLUMN.id.is_in(selected_ids))
+            .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
+    let mut activities: Vec<MatrixActivity> = legacy.into_iter().map(|activity| MatrixActivity {
+        id: activity.id, name: activity.name, date: activity.date.to_string(),
+    }).collect();
+    activities.extend(catalog_activities.iter().map(|activity| MatrixActivity {
+        id: activity.id, name: activity.name.clone(), date: String::new(),
+    }));
+
+    let selected_results = if catalog_activities.is_empty() { Vec::new() } else {
+        entities::catalog_result::Entity::find()
+            .filter(entities::catalog_result::COLUMN.user_id.eq(claims.sub))
+            .filter(entities::catalog_result::COLUMN.activity_id.is_in(catalog_activities.iter().map(|a| a.id)))
+            .filter(entities::catalog_result::COLUMN.player_id.is_in(players.iter().map(|p| p.id)))
+            .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
+    let mut results: Vec<MatrixResult> = links.into_iter().map(|link| MatrixResult {
         activity_id: link.activity_id,
         player_id: link.player_id,
         result: link.result,
     }).collect();
+    results.extend(selected_results.into_iter().map(|r| MatrixResult {
+        activity_id: r.activity_id, player_id: r.player_id, result: r.result,
+    }));
 
     Ok(Json(MatrixResponse {
         players,
@@ -92,6 +125,31 @@ pub async fn update_matrix_result(
     let players = services::player::get_players(&claims, &state).await?;
     if !players.iter().any(|player| player.id == payload.player_id) {
         return Err(StatusCode::FORBIDDEN);
+    }
+
+    let catalog = entities::catalog_activity::Entity::find_by_id(payload.activity_id)
+        .filter(entities::catalog_activity::COLUMN.user_id.eq(claims.sub))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if catalog.is_some() {
+        let selected = entities::catalog_selection::Entity::find_by_id((claims.sub, payload.activity_id))
+            .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if selected.is_none() { return Err(StatusCode::FORBIDDEN); }
+        let existing = entities::catalog_result::Entity::find_by_id((claims.sub, payload.activity_id, payload.player_id))
+            .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if let Some(value) = existing {
+            let mut active: entities::catalog_result::ActiveModel = value.into();
+            active.result = Set(payload.result);
+            active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        } else {
+            entities::catalog_result::ActiveModel {
+                user_id: Set(claims.sub),
+                activity_id: Set(payload.activity_id),
+                player_id: Set(payload.player_id),
+                result: Set(payload.result),
+                ..Default::default()
+            }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        return Ok(StatusCode::NO_CONTENT);
     }
 
     if !services::activity::has_rights(&claims, &state, payload.activity_id).await? {
@@ -149,54 +207,38 @@ pub async fn create_matrix_activity(
     State(state): State<AppState>,
     Json(payload): Json<CreateMatrixActivityRequest>,
 ) -> Result<(StatusCode, String), StatusCode> {
-    let name = payload.name.trim();
-    if name.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let players = services::player::get_players(&claims, &state).await?;
-    if players.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let existing = entities::activity::Entity::find()
-        .filter(entities::activity::COLUMN.name.eq(name))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if existing.is_some() {
-        return Err(StatusCode::CONFLICT);
-    }
-
-    let txn = state.db.begin()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let activity = entities::activity::ActiveModel {
-        id: Set(Uuid::new_v4()),
-        name: Set(name.to_owned()),
-        date: Set(payload.date),
+    let _date = payload.date; // catalog definitions are reusable, not tied to a date.
+    let activity = catalog::insert(&claims, &state, catalog::ActivityPayload {
+        name: payload.name,
+        description: String::new(),
+        image_url: None,
+    }).await?;
+    entities::catalog_selection::ActiveModel {
+        user_id: Set(claims.sub),
+        activity_id: Set(activity.id),
         ..Default::default()
-    };
-    let activity = activity.insert(&txn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    for player in &players {
-        entities::activity_player::ActiveModel {
-            activity_id: Set(activity.id),
-            player_id: Set(player.id),
-            result: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    }
-
-    txn.commit()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
+    }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED, activity.id.to_string()))
+}
+
+#[derive(Deserialize)]
+pub struct SelectCatalogActivity { pub activity_id: Uuid }
+
+/// Add or remove an already-created activity from the tableur columns.
+pub async fn select_activity(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(payload): Json<SelectCatalogActivity>,
+) -> Result<StatusCode, StatusCode> {
+    catalog::owned(&claims, &state, payload.activity_id).await?;
+    let exists = entities::catalog_selection::Entity::find_by_id((claims.sub, payload.activity_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if exists.is_none() {
+        entities::catalog_selection::ActiveModel {
+            user_id: Set(claims.sub),
+            activity_id: Set(payload.activity_id),
+            ..Default::default()
+        }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    Ok(StatusCode::NO_CONTENT)
 }

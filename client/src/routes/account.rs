@@ -116,6 +116,14 @@ pub fn AccountPage() -> Element {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
                                                         appearance.set(before);
+                                                        #[cfg(feature = "web")]
+                                                        {
+                                                            let script = format!(
+                                                                "window.__seppylRestoreTheme?.('{}')",
+                                                                before.theme.as_str()
+                                                            );
+                                                            let _ = document::eval(&script);
+                                                        }
                                                         appearance_feedback.set(Some((false, error)));
                                                     }
                                                 }
@@ -144,6 +152,14 @@ pub fn AccountPage() -> Element {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
                                                         appearance.set(before);
+                                                        #[cfg(feature = "web")]
+                                                        {
+                                                            let script = format!(
+                                                                "window.__seppylRestoreTheme?.('{}')",
+                                                                before.theme.as_str()
+                                                            );
+                                                            let _ = document::eval(&script);
+                                                        }
                                                         appearance_feedback.set(Some((false, error)));
                                                     }
                                                 }
@@ -172,6 +188,14 @@ pub fn AccountPage() -> Element {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
                                                         appearance.set(before);
+                                                        #[cfg(feature = "web")]
+                                                        {
+                                                            let script = format!(
+                                                                "window.__seppylRestoreTheme?.('{}')",
+                                                                before.theme.as_str()
+                                                            );
+                                                            let _ = document::eval(&script);
+                                                        }
                                                         appearance_feedback.set(Some((false, error)));
                                                     }
                                                 }

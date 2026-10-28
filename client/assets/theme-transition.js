@@ -1,43 +1,37 @@
-// SEPPYL — browser-only visual effects.
-// The real theme and its persistence are owned by Rust/Dioxus.
-// We start the visual transition on pointerdown (before Dioxus's click
-// handler rerenders), so the browser can capture the OLD theme reliably.
+// SEPPYL — one click both selects the theme in Dioxus and reveals it.
+// Starting a View Transition on pointerdown interferes with the later click,
+// and can prevent the Dioxus handler from persisting the first selection.
 (() => {
   if (window.__seppylThemeRevealInstalled) return;
   window.__seppylThemeRevealInstalled = true;
 
-  let lastPointerChange = 0;
+  function setTheme(next) {
+    const root = document.querySelector(".site-root");
+    if (root) root.dataset.theme = next;
+  }
 
-  function beginThemeReveal(button, x, y) {
+  function reveal(button, x, y) {
     const root = document.querySelector(".site-root");
     if (!root || button.disabled) return;
     const next = button.getAttribute("data-theme-option");
     if (!["system", "light", "dark"].includes(next)) return;
     if (root.dataset.theme === next) return;
 
-    const changeTheme = () => {
-      // This is immediate and doesn't wait for Rust, the API or any message.
-      root.dataset.theme = next;
-    };
-
+    // The browser paints; Dioxus owns selected state and persistence.
+    const apply = () => setTheme(next);
     if (
-      !document.startViewTransition ||
+      typeof document.startViewTransition !== "function" ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      changeTheme();
+      apply();
       return;
     }
-
-    // Keep only one theme transition active at a time.
-    if (document.activeViewTransition) {
-      document.activeViewTransition.skipTransition();
-    }
-
     try {
-      // The browser snapshots the old appearance first; the DOM update is
-      // synchronous inside this callback, not a cross-language handshake.
-      const transition = document.startViewTransition(changeTheme);
-      const maxRadius = Math.hypot(
+      if (document.activeViewTransition) {
+        document.activeViewTransition.skipTransition();
+      }
+      const transition = document.startViewTransition(apply);
+      const radius = Math.hypot(
         Math.max(x, innerWidth - x),
         Math.max(y, innerHeight - y),
       );
@@ -46,7 +40,7 @@
           {
             clipPath: [
               "circle(0px at " + x + "px " + y + "px)",
-              "circle(" + maxRadius + "px at " + x + "px " + y + "px)",
+              "circle(" + radius + "px at " + x + "px " + y + "px)",
             ],
           },
           {
@@ -56,30 +50,26 @@
           },
         );
       }).catch(() => {
-        // A canceled transition shouldn't interrupt the actual theme change.
-        changeTheme();
+        apply(); // A canceled transition must never leave the wrong theme.
       });
     } catch (_) {
-      changeTheme();
+      apply();
     }
   }
 
-  // Mouse, pen and touch: trigger before the Dioxus click listener updates
-  // the reactive state, ensuring the old frame is still visible.
-  document.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    const button = event.target.closest("[data-theme-option]");
-    if (!button) return;
-    lastPointerChange = performance.now();
-    beginThemeReveal(button, event.clientX, event.clientY);
-  }, { capture: true });
-
-  // Keyboard and assistive-technology activation has no pointerdown.
+  // Capture phase sees the native click before Dioxus does, without stopping
+  // event propagation or replacing the clicked element.
   document.addEventListener("click", (event) => {
-    if (performance.now() - lastPointerChange < 800) return;
-    const button = event.target.closest("[data-theme-option]");
+    const button = event.target?.closest?.("[data-theme-option]");
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    beginThemeReveal(button, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const keyboard = event.detail === 0;
+    const x = keyboard ? rect.left + rect.width / 2 : event.clientX;
+    const y = keyboard ? rect.top + rect.height / 2 : event.clientY;
+    reveal(button, x, y);
   }, { capture: true });
+
+  // Used when the API rejects a preference save, so the painted theme and
+  // Dioxus-selected option both roll back to the previous value.
+  window.__seppylRestoreTheme = setTheme;
 })();

@@ -33,13 +33,20 @@ fn App() -> Element {
     });
 
     let current = *appearance.read();
+    // The server preference supplies the initial DOM theme. During a click,
+    // JavaScript manages data-theme for the View Transition; the Dioxus
+    // signal still updates the selected button immediately.
+    let initial_theme = preferences.read().clone()
+        .and_then(Result::ok)
+        .unwrap_or_default()
+        .theme;
     rsx! {
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
         document::Stylesheet { href: asset!("/assets/main.css") }
         document::Script { src: asset!("/assets/theme-transition.js") }
         div {
             class: "site-root",
-            "data-theme": current.theme.as_str(),
+            "data-theme": initial_theme.as_str(),
             "data-density": current.density.as_str(),
             Router::<routes::Route> {}
         }

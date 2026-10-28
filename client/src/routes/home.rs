@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use crate::api::matrix::{self, Matrix};
 use crate::api::catalog;
-use super::{dialogs::{ActivityDialog, PlayerDialog}, layout::Header};
+use super::{activities::ActivityEditor, dialogs::PlayerDialog, layout::Header};
 
 #[derive(Clone, Copy, PartialEq)]
 enum CreationKind {
@@ -11,7 +11,7 @@ enum CreationKind {
 
 #[component]
 pub fn Home() -> Element {
-    let mut session = use_context::<Signal<Option<String>>>();
+    let session = use_context::<Signal<Option<String>>>();
     let navigator = use_navigator();
     let mut search = use_signal(String::new);
     let mut dialog = use_signal(|| None::<CreationKind>);
@@ -42,7 +42,7 @@ pub fn Home() -> Element {
 
     let auth_token = token.unwrap_or_default();
     let catalog_token = auth_token.clone();
-    let catalog_list = use_resource(move || {
+    let mut catalog_list = use_resource(move || {
         let token = catalog_token.clone();
         async move { catalog::list(&token).await }
     });
@@ -50,43 +50,16 @@ pub fn Home() -> Element {
     let mut catalog_error = use_signal(|| None::<String>);
     let token_for_select = auth_token.clone();
     let snapshot = data.read().clone();
-    let can_create_activity = matches!(snapshot.as_ref(), Some(Ok(matrix)) if !matrix.players.is_empty());
+    let token_for_created = auth_token.clone();
 
     rsx! {
         div { class: "app",
             Header {}
-            header { class: "app-header legacy-header",
-                div { class: "app-header-content",
-                    div { class: "wordmark", "SEPPYL" }
-                    span { class: "header-divider" }
-                    span { class: "header-section", "Résultats" }
-                    button { class: "header-logout", onclick: move |_| {
-                        crate::session::clear();
-                        session.set(None);
-                        navigator.push(crate::routes::Route::Login {});
-                    }, "Se déconnecter" }
-                }
-            }
-
             main { class: "page",
                 div { class: "page-heading",
                     div {
                         h1 { "Tableau des résultats" }
                         p { "Suivi des joueuses par activité" }
-                    }
-                    div { class: "heading-actions",
-                        Link { to: crate::routes::Route::Players {}, class: "button outline", "Gérer les joueuses" }
-                        Link { to: crate::routes::Route::Activities {}, class: "button outline", "Bibliothèque d'activités" }
-                        button { class: "button outline", onclick: move |_| dialog.set(Some(CreationKind::Player)),
-                            span { class: "plus", "+" }
-                            " Ajouter une joueuse"
-                        }
-                        button { class: "button solid",
-                            disabled: !can_create_activity,
-                            onclick: move |_| dialog.set(Some(CreationKind::Activity)),
-                            span { class: "plus", "+" }
-                            " Nouvelle activité"
-                        }
                     }
                 }
 
@@ -157,27 +130,16 @@ pub fn Home() -> Element {
                                 }
                             }
 
-                            if matrix.players.is_empty() {
-                                div { class: "empty-state",
-                                    div { class: "empty-title", "Commencez par ajouter une joueuse" }
-                                    p { "Les joueuses occupent les lignes du tableau. Vous pourrez ensuite créer des activités et saisir leurs résultats." }
-                                    button { class: "button solid", onclick: move |_| dialog.set(Some(CreationKind::Player)),
-                                        "Ajouter une joueuse"
-                                    }
-                                }
-                            } else if matrix.activities.is_empty() {
-                                div { class: "empty-state",
-                                    div { class: "empty-title", "Ajoutez votre première activité" }
-                                    p { "La liste des joueuses est prête. Créez une activité pour ajouter une colonne de résultats." }
-                                    button { class: "button solid", onclick: move |_| dialog.set(Some(CreationKind::Activity)),
-                                        "Créer une activité"
-                                    }
-                                }
-                            } else {
-                                MatrixTable {
-                                    matrix: matrix.clone(),
-                                    filter: search.read().clone(),
-                                    token: auth_token.clone(),
+                            MatrixTable {
+                                matrix: matrix.clone(),
+                                filter: search.read().clone(),
+                                token: auth_token.clone(),
+                                on_add_player: move |_| dialog.set(Some(CreationKind::Player)),
+                                on_add_activity: move |_| dialog.set(Some(CreationKind::Activity)),
+                            }
+                            if matrix.players.is_empty() || matrix.activities.is_empty() {
+                                p { class: "grid-empty-note",
+                                    "Utilisez les boutons + dans le tableau pour ajouter une joueuse ou une activité."
                                 }
                             }
                         }
@@ -205,10 +167,27 @@ pub fn Home() -> Element {
                 }
             }
             if *dialog.read() == Some(CreationKind::Activity) {
-                ActivityDialog {
+                ActivityEditor {
                     token: auth_token.clone(),
+                    activity: None,
                     on_cancel: move |_| dialog.set(None),
-                    on_created: move |_| { dialog.set(None); data.restart(); },
+                    on_saved: move |new_id: String| {
+                        let token = token_for_created.clone();
+                        spawn(async move {
+                            match catalog::select_for_table(&token, &new_id).await {
+                                Ok(()) => {
+                                    catalog_error.set(None);
+                                    data.restart();
+                                }
+                                Err(error) => catalog_error.set(Some(format!(
+                                    "L'activité a été créée dans la bibliothèque mais n'a pas pu être ajoutée au tableur : {error}"
+                                ))),
+                            }
+                            dialog.set(None);
+                            catalog_list.restart();
+                        });
+                    },
+                    on_error: move |message| catalog_error.set(Some(message)),
                 }
             }
         }
@@ -216,7 +195,13 @@ pub fn Home() -> Element {
 }
 
 #[component]
-fn MatrixTable(matrix: Matrix, filter: String, token: String) -> Element {
+fn MatrixTable(
+    matrix: Matrix,
+    filter: String,
+    token: String,
+    on_add_player: EventHandler<()>,
+    on_add_activity: EventHandler<()>,
+) -> Element {
     let mut players = matrix.players.clone();
     players.sort_by(|a, b| a.number.cmp(&b.number).then_with(|| a.lastname.cmp(&b.lastname)));
     let mut activities = matrix.activities.clone();
@@ -239,7 +224,19 @@ fn MatrixTable(matrix: Matrix, filter: String, token: String) -> Element {
                         for activity in &activities {
                             th { key: "{activity.id}", class: "activity-column",
                                 span { class: "activity-title", "{activity.name}" }
-                                span { class: "activity-date", "{activity.date.get(..10).unwrap_or(&activity.date)}" }
+                                if !activity.date.is_empty() {
+                                    span { class: "activity-date", "{activity.date.get(..10).unwrap_or(&activity.date)}" }
+                                }
+                            }
+                        }
+                        th { class: "new-activity-column",
+                            button {
+                                class: "grid-add-button",
+                                r#type: "button",
+                                "aria-label": "Créer une activité",
+                                title: "Créer une activité",
+                                onclick: move |_| on_add_activity.call(()),
+                                "+"
                             }
                         }
                     }
@@ -267,11 +264,29 @@ fn MatrixTable(matrix: Matrix, filter: String, token: String) -> Element {
                                     }
                                 }
                             }
+                            td { class: "grid-add-spacer" }
                         }
+                    }
+                    tr { class: "grid-add-row",
+                        th { class: "player-column", scope: "row",
+                            button {
+                                class: "grid-add-player",
+                                r#type: "button",
+                                title: "Ajouter une joueuse",
+                                "aria-label": "Ajouter une joueuse",
+                                onclick: move |_| on_add_player.call(()),
+                                span { class: "grid-add-button", "+" }
+                                span { "Ajouter une joueuse" }
+                            }
+                        }
+                        for activity in &activities {
+                            td { key: "{activity.id}", class: "grid-add-spacer" }
+                        }
+                        td { class: "grid-add-spacer" }
                     }
                 }
             }
-            if visible.is_empty() {
+            if visible.is_empty() && !matrix.players.is_empty() {
                 div { class: "no-results", "Aucune joueuse trouvée." }
             }
         }

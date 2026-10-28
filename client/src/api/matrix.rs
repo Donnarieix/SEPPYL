@@ -169,3 +169,20 @@ pub async fn create_activity(token: &str, name: &str, date: &str) -> Result<(), 
         status => Err(format!("Impossible de créer l'activité (HTTP {status}).")),
     }
 }
+
+
+/// Create a separate account (e.g. Valentin and another coach).
+/// Each account has private data until shared-team support is added.
+pub async fn register(username: &str, password: &str) -> Result<(), String> {
+    let response = Client::new()
+        .post(format!("{}/register", api_url()))
+        .json(&Credentials { username, password })
+        .send()
+        .await
+        .map_err(|error| format!("API inaccessible : {error}"))?;
+    match response.status() {
+        StatusCode::OK => Ok(()),
+        StatusCode::CONFLICT => Err("Cet identifiant existe déjà.".into()),
+        status => Err(format!("Inscription impossible (HTTP {status}).")),
+    }
+}

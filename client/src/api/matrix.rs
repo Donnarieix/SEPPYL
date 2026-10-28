@@ -1,7 +1,9 @@
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
-const API_URL: &str = "http://127.0.0.1:3000";
+fn api_url() -> &'static str {
+    option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000")
+}
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct Player {
@@ -41,7 +43,7 @@ struct CellUpdate<'a> {
 
 pub async fn load(token: &str) -> Result<Matrix, String> {
     let response = Client::new()
-        .get(format!("{API_URL}/matrix"))
+        .get(format!("{}/matrix", api_url()))
         .bearer_auth(token)
         .send()
         .await
@@ -63,7 +65,7 @@ pub async fn save(
     result: &str,
 ) -> Result<(), String> {
     let response = Client::new()
-        .put(format!("{API_URL}/matrix/result"))
+        .put(format!("{}/matrix/result", api_url()))
         .bearer_auth(token)
         .json(&CellUpdate {
             player_id,
@@ -92,7 +94,7 @@ struct LoginResponse {
 
 pub async fn login(username: &str, password: &str) -> Result<String, String> {
     let response = Client::new()
-        .post(format!("{API_URL}/login"))
+        .post(format!("{}/login", api_url()))
         .json(&Credentials { username, password })
         .send()
         .await
@@ -124,7 +126,7 @@ pub async fn create_player(
     number: u32,
 ) -> Result<(), String> {
     let response = Client::new()
-        .post(format!("{API_URL}/player/create"))
+        .post(format!("{}/player/create", api_url()))
         .bearer_auth(token)
         .json(&NewPlayer { firstname, lastname, number })
         .send()
@@ -152,7 +154,7 @@ pub async fn create_activity(token: &str, name: &str, date: &str) -> Result<(), 
     // The server expects a NaiveDateTime, not the YYYY-MM-DD produced by an HTML date input.
     let at_midnight = format!("{date}T00:00:00");
     let response = Client::new()
-        .post(format!("{API_URL}/matrix/activity"))
+        .post(format!("{}/matrix/activity", api_url()))
         .bearer_auth(token)
         .json(&NewActivity { name, date: &at_midnight })
         .send()

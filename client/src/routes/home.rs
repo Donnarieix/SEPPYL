@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::matrix::{self, Matrix};
-use super::dialogs::{ActivityDialog, PlayerDialog};
+use super::{dialogs::{ActivityDialog, PlayerDialog}, layout::Header};
 
 #[derive(Clone, Copy, PartialEq)]
 enum CreationKind {
@@ -44,7 +44,8 @@ pub fn Home() -> Element {
 
     rsx! {
         div { class: "app",
-            header { class: "app-header",
+            Header {}
+            header { class: "app-header legacy-header",
                 div { class: "app-header-content",
                     div { class: "wordmark", "SEPPYL" }
                     span { class: "header-divider" }

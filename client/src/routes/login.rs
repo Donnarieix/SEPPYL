@@ -28,7 +28,7 @@ pub fn Login() -> Element {
                             match matrix::login(&username_value, &password_value).await {
                                 Ok(token) => {
                                     session.set(Some(token));
-                                    navigator.push(crate::routes::Route::Home {});
+                                    navigator.push(crate::routes::Route::Trainings {});
                                 }
                                 Err(message) => error.set(Some(message)),
                             }

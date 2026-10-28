@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use std::collections::BTreeMap;
 use crate::api::trainings;
+use super::Route;
 
 #[component]
 pub fn TrainingPrint(id: String) -> Element {
@@ -22,7 +23,7 @@ pub fn TrainingPrint(id: String) -> Element {
         main { class: "print-sheet",
             div { class: "print-guidance",
                 p { "Fiche d'entraînement — pour la conserver hors connexion : Ctrl+P → Enregistrer au format PDF." }
-                a { href: "/entrainements/{id}", "← Retour à l'entraînement" }
+                Link { to: Route::TrainingDetail { id: id.clone() }, "← Retour à l'entraînement" }
             }
             match data.read().clone() {
                 Some(Ok(detail)) => rsx! {

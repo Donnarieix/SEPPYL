@@ -404,3 +404,104 @@ mod tests {
         assert!(!valid_image_url(Some("javascript:alert(1)")));
     }
 }
+
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use axum::{Extension, Json, extract::{Path, State}};
+    use sea_orm::{ActiveModelTrait, ActiveValue::Set, Database, DatabaseConnection};
+    use crate::entities::{player, player_user};
+
+    async fn test_db() -> DatabaseConnection {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*")
+            .sync(&db).await.unwrap();
+        db
+    }
+
+    #[tokio::test]
+    async fn a_training_can_be_planned_scored_and_is_private_to_its_owner() {
+        let state = AppState { db: test_db().await };
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let claims = Claims { sub: owner, exp: u64::MAX };
+        let stranger = Claims { sub: other, exp: u64::MAX };
+        let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+
+        let (created, id_string) = create(
+            Extension(claims.clone()),
+            State(state.clone()),
+            Json(CreateTraining { name: "Entraînement test".into(), date }),
+        ).await.unwrap();
+        assert_eq!(created, StatusCode::CREATED);
+        let id = Uuid::parse_str(&id_string).unwrap();
+
+        // No data from another coach may be exposed by a guessed UUID.
+        let forbidden = get(
+            Extension(stranger.clone()), State(state.clone()), Path(id),
+        ).await;
+        assert!(matches!(forbidden, Err(StatusCode::NOT_FOUND)));
+        let other_list = list(Extension(stranger), State(state.clone())).await.unwrap().0;
+        assert!(other_list.is_empty());
+
+        let player_id = Uuid::new_v4();
+        player::ActiveModel {
+            id: Set(player_id),
+            firstname: Set("Camille".into()),
+            lastname: Set("Exemple".into()),
+            number: Set(8),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        player_user::ActiveModel {
+            user_id: Set(owner),
+            player_id: Set(player_id),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+
+        let (_, activity_id) = add_activity(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(CreateActivity {
+                name: "Passes".into(),
+                description: "En binôme, pendant 10 minutes.".into(),
+                image_url: None,
+            })
+        ).await.unwrap();
+        let activity_id = Uuid::parse_str(&activity_id).unwrap();
+
+        add_material(
+            Extension(claims.clone()), State(state.clone()), Path((id, activity_id)),
+            Json(CreateMaterial { name: "Ballons".into(), quantity: 5 }),
+        ).await.unwrap();
+
+        set_attendance(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(AttendanceUpdate { player_ids: vec![player_id] }),
+        ).await.unwrap();
+
+        set_score(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(ScoreUpdate { player_id, activity_id: None, score: Some(5) }),
+        ).await.unwrap();
+
+        set_score(
+            Extension(claims.clone()), State(state.clone()), Path(id),
+            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), score: Some(3) }),
+        ).await.unwrap();
+
+        let detail = get(Extension(claims.clone()), State(state.clone()), Path(id))
+            .await.unwrap().0;
+        assert_eq!(detail.activities.len(), 1);
+        assert_eq!(detail.activities[0].name, "Passes");
+        assert_eq!(detail.materials[0].quantity, 5);
+        assert_eq!(detail.attendance[0].score, Some(5));
+        assert!(detail.attendance[0].present);
+        assert_eq!(detail.scores[0].score, 3);
+
+        let invalid = set_score(
+            Extension(claims), State(state), Path(id),
+            Json(ScoreUpdate { player_id, activity_id: None, score: Some(6) }),
+        ).await;
+        assert!(matches!(invalid, Err(StatusCode::BAD_REQUEST)));
+    }
+}

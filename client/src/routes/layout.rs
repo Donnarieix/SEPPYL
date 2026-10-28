@@ -14,6 +14,8 @@ pub fn Header() -> Element {
                 nav { class: "topbar-nav",
                     Link { to: Route::Trainings {}, "Entraînements" }
                     Link { to: Route::Home {}, "Tableur" }
+                    Link { to: Route::Players {}, "Joueuses" }
+                    Link { to: Route::Activities {}, "Activités" }
                 }
                 button { class: "logout-link", onclick: move |_| {
                     crate::session::clear();

@@ -7,6 +7,8 @@ mod login;
 mod training_detail;
 mod training_print;
 mod trainings;
+mod players;
+mod activities;
 
 use home::Home;
 use login::Login;
@@ -20,6 +22,10 @@ pub enum Route {
     Trainings {},
     #[route("/tableau")]
     Home {},
+    #[route("/joueuses")]
+    Players {},
+    #[route("/activites")]
+    Activities {},
     #[route("/login")]
     Login {},
     #[route("/entrainements/:id")]

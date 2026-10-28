@@ -52,6 +52,7 @@ pub fn Home() -> Element {
                     span { class: "header-divider" }
                     span { class: "header-section", "Résultats" }
                     button { class: "header-logout", onclick: move |_| {
+                        crate::session::clear();
                         session.set(None);
                         navigator.push(crate::routes::Route::Login {});
                     }, "Se déconnecter" }

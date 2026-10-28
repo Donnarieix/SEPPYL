@@ -144,32 +144,6 @@ pub async fn create_player(
     }
 }
 
-#[derive(Serialize)]
-struct NewActivity<'a> {
-    name: &'a str,
-    date: &'a str,
-}
-
-pub async fn create_activity(token: &str, name: &str, date: &str) -> Result<(), String> {
-    // The server expects a NaiveDateTime, not the YYYY-MM-DD produced by an HTML date input.
-    let at_midnight = format!("{date}T00:00:00");
-    let response = Client::new()
-        .post(format!("{}/matrix/activity", api_url()))
-        .bearer_auth(token)
-        .json(&NewActivity { name, date: &at_midnight })
-        .send()
-        .await
-        .map_err(|error| format!("Impossible de contacter l'API : {error}"))?;
-
-    match response.status() {
-        StatusCode::CREATED => Ok(()),
-        StatusCode::UNAUTHORIZED => Err("Session expirée. Reconnectez-vous.".into()),
-        StatusCode::BAD_REQUEST => Err("Renseignez un nom et une date, puis créez au moins une joueuse.".into()),
-        StatusCode::CONFLICT => Err("Une activité porte déjà ce nom.".into()),
-        status => Err(format!("Impossible de créer l'activité (HTTP {status}).")),
-    }
-}
-
 
 /// Create a separate account (e.g. Valentin and another coach).
 /// Each account has private data until shared-team support is added.

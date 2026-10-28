@@ -22,16 +22,16 @@ use activities::Activities;
 pub enum Route {
     #[route("/")]
     Trainings {},
-    #[route("/tableau")]
+    #[route("/spreadsheet")]
     Home {},
-    #[route("/joueuses")]
+    #[route("/players")]
     Players {},
-    #[route("/activites")]
+    #[route("/activities")]
     Activities {},
     #[route("/login")]
     Login {},
-    #[route("/entrainements/:id")]
+    #[route("/trainings/:id")]
     TrainingDetail { id: String },
-    #[route("/entrainements/:id/fiche")]
+    #[route("/trainings/:id/print")]
     TrainingPrint { id: String },
 }

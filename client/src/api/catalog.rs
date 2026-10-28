@@ -39,12 +39,25 @@ pub async fn list(token:&str)->Result<Vec<Activity>,String> {
     if !response.status().is_success() {check(response).await?;return Err("Réponse inattendue.".into());}
     response.json().await.map_err(|e|e.to_string())
 }
-pub async fn upsert(token:&str,id:Option<&str>,name:&str,description:&str,image_url:Option<&str>)->Result<(),String>{
+#[derive(Deserialize)]
+struct CreatedActivity { id: String }
+
+/// Return the canonical activity ID, including when creating from the spreadsheet.
+pub async fn upsert(token:&str,id:Option<&str>,name:&str,description:&str,image_url:Option<&str>)->Result<String,String>{
     let client=Client::new();
     let url=match id {Some(id)=>format!("{}/catalog/{id}",api_base()),None=>format!("{}/catalog",api_base())};
     let request=if id.is_some() {client.put(url)} else {client.post(url)};
-    check(request.bearer_auth(token).json(&Payload{name,description,image_url})
-        .send().await.map_err(|e|e.to_string())?).await
+    let response=request.bearer_auth(token).json(&Payload{name,description,image_url})
+        .send().await.map_err(|e|e.to_string())?;
+    if !response.status().is_success() {
+        check(response).await?;
+        return Err("Réponse inattendue lors de la sauvegarde.".into());
+    }
+    match id {
+        Some(existing)=>Ok(existing.to_owned()),
+        None=>response.json::<CreatedActivity>().await.map(|created|created.id)
+            .map_err(|e|format!("L'activité a été créée mais sa réponse est illisible : {e}")),
+    }
 }
 pub async fn remove(token:&str,id:&str)->Result<(),String>{
     check(Client::new().delete(format!("{}/catalog/{id}",api_base())).bearer_auth(token)

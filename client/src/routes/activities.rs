@@ -152,16 +152,16 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
         if *editing.read(){
             ActivityEditor{token:token.clone(),activity:Some(activity.clone()),
                 on_cancel:move |_|editing.set(false),
-                on_saved:move |_|{editing.set(false);on_saved.call(());},
+                on_saved:move |_id: String|{editing.set(false);on_saved.call(());},
                 on_error}
         }
     }
 }
 
 #[component]
-fn ActivityEditor(
+pub fn ActivityEditor(
     token:String,activity:Option<Activity>,
-    on_cancel:EventHandler<()>,on_saved:EventHandler<()>,on_error:EventHandler<String>
+    on_cancel:EventHandler<()>,on_saved:EventHandler<String>,on_error:EventHandler<String>
 )->Element{
     let mut name=use_signal(||activity.as_ref().map(|a|a.name.clone()).unwrap_or_default());
     let mut description=use_signal(||activity.as_ref().map(|a|a.description.clone()).unwrap_or_default());
@@ -192,7 +192,7 @@ fn ActivityEditor(
                         busy.set(true);
                         spawn(async move{
                             match catalog::upsert(&token,id.as_deref(),&n,&d,if i.is_empty(){None}else{Some(&i)}).await{
-                                Ok(())=>on_saved.call(()),
+                                Ok(id)=>on_saved.call(id),
                                 Err(e)=>{error.set(Some(e.clone()));on_error.call(e);}
                             }
                             busy.set(false);

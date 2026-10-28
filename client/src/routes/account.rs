@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use crate::api::{
     account,
-    preferences::{self, Density, Theme, UserPreferences},
+    preferences::{self, AttendanceView, Density, Theme, UserPreferences},
 };
 use super::{Route, layout::Header};
 
@@ -49,6 +49,8 @@ pub fn AccountPage() -> Element {
     let theme_token_dark = token.clone();
     let density_token_comfortable = token.clone();
     let density_token_compact = token.clone();
+    let attendance_grid_token = token.clone();
+    let attendance_list_token = token.clone();
 
     rsx! {
         div { class: "app",
@@ -203,6 +205,56 @@ pub fn AccountPage() -> Element {
                                             });
                                         },
                                         "Compact"
+                                    }
+                                }
+                            }
+                            div { class: "settings-group",
+                                div { class: "settings-group-label",
+                                    strong { "Affichage des présences" }
+                                    span { "Choisissez la disposition par défaut des joueuses dans un entraînement." }
+                                }
+                                div { class: "settings-choice-group", role: "group", "aria-label": "Affichage des présences",
+                                    button {
+                                        class: if prefs.attendance_view == AttendanceView::Grid { "settings-choice selected" } else { "settings-choice" },
+                                        "aria-pressed": if prefs.attendance_view == AttendanceView::Grid { "true" } else { "false" },
+                                        disabled: *appearance_busy.read(),
+                                        onclick: move |_| {
+                                            let before = *appearance.read();
+                                            if before.attendance_view == AttendanceView::Grid { return; }
+                                            appearance.set(UserPreferences { attendance_view: AttendanceView::Grid, ..before });
+                                            appearance_busy.set(true);
+                                            appearance_feedback.set(None);
+                                            let token = attendance_grid_token.clone();
+                                            spawn(async move {
+                                                if let Err(error) = preferences::save(&token, AttendanceView::Grid).await {
+                                                    appearance.set(before);
+                                                    appearance_feedback.set(Some((false, error)));
+                                                }
+                                                appearance_busy.set(false);
+                                            });
+                                        },
+                                        "Grille"
+                                    }
+                                    button {
+                                        class: if prefs.attendance_view == AttendanceView::List { "settings-choice selected" } else { "settings-choice" },
+                                        "aria-pressed": if prefs.attendance_view == AttendanceView::List { "true" } else { "false" },
+                                        disabled: *appearance_busy.read(),
+                                        onclick: move |_| {
+                                            let before = *appearance.read();
+                                            if before.attendance_view == AttendanceView::List { return; }
+                                            appearance.set(UserPreferences { attendance_view: AttendanceView::List, ..before });
+                                            appearance_busy.set(true);
+                                            appearance_feedback.set(None);
+                                            let token = attendance_list_token.clone();
+                                            spawn(async move {
+                                                if let Err(error) = preferences::save(&token, AttendanceView::List).await {
+                                                    appearance.set(before);
+                                                    appearance_feedback.set(Some((false, error)));
+                                                }
+                                                appearance_busy.set(false);
+                                            });
+                                        },
+                                        "Liste"
                                     }
                                 }
                             }

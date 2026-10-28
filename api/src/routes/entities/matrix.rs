@@ -242,3 +242,84 @@ pub async fn select_activity(
     }
     Ok(StatusCode::NO_CONTENT)
 }
+
+
+#[cfg(test)]
+mod shared_catalog_tests {
+    use super::*;
+    use crate::{
+        entities::{player, player_user, user},
+        routes::entities::{catalog, training},
+    };
+    use sea_orm::{Database, ActiveModelTrait};
+
+    #[tokio::test]
+    async fn an_activity_from_a_training_can_be_selected_in_the_spreadsheet() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state = AppState { db };
+        let uid = Uuid::new_v4();
+        let claims = Claims { sub: uid, exp: u64::MAX };
+        user::ActiveModel {
+            id: Set(uid),
+            username: Set("owner".into()),
+            password: Set("test".into()),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let pid = Uuid::new_v4();
+        player::ActiveModel {
+            id: Set(pid), firstname: Set("Alice".into()),
+            lastname: Set("Martin".into()), number: Set(9), ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        player_user::ActiveModel {
+            user_id: Set(uid), player_id: Set(pid), ..Default::default()
+        }.insert(&state.db).await.unwrap();
+
+        let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let (_, tid) = training::create(
+            Extension(claims.clone()), State(state.clone()),
+            Json(training::CreateTraining { name: "Séance".into(), date })
+        ).await.unwrap();
+        let tid = Uuid::parse_str(&tid).unwrap();
+
+        // Created inside a training but stored as a shared definition.
+        training::add_activity(
+            Extension(claims.clone()), State(state.clone()), axum::extract::Path(tid),
+            Json(training::CreateActivity {
+                name: "Circuit de passes".into(), description: "En binôme".into(),
+                image_url: None
+            }),
+        ).await.unwrap();
+        let library = catalog::list(Extension(claims.clone()), State(state.clone()))
+            .await.unwrap().0;
+        assert_eq!(library.len(), 1);
+        let aid = library[0].activity.id;
+        select_activity(
+            Extension(claims.clone()), State(state.clone()),
+            Json(SelectCatalogActivity { activity_id: aid }),
+        ).await.unwrap();
+        update_matrix_result(
+            Extension(claims.clone()), State(state.clone()),
+            Json(UpdateMatrixResultRequest {
+                activity_id: aid, player_id: pid, result: Some("4".into())
+            }),
+        ).await.unwrap();
+        let grid = get_matrix(Extension(claims.clone()), State(state.clone())).await.unwrap().0;
+        assert!(grid.activities.iter().any(|a| a.id == aid && a.name == "Circuit de passes"));
+        assert!(grid.results.iter().any(|r| r.activity_id == aid && r.player_id == pid && r.result.as_deref() == Some("4")));
+
+        // Editing the catalog title updates the training without touching its score IDs.
+        catalog::update(
+            Extension(claims.clone()), State(state.clone()), axum::extract::Path(aid),
+            Json(catalog::ActivityPayload {
+                name: "Circuit corrigé".into(),
+                description: "Nouvelle consigne".into(),
+                image_url: None
+            })
+        ).await.unwrap();
+        let training_detail = training::get(
+            Extension(claims), State(state), axum::extract::Path(tid)
+        ).await.unwrap().0;
+        assert_eq!(training_detail.activities[0].name, "Circuit corrigé");
+    }
+}

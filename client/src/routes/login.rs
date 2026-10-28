@@ -39,6 +39,7 @@ pub fn Login() -> Element {
                             }.await;
                             match result {
                                 Ok(token) => {
+                                    crate::session::save(&token);
                                     session.set(Some(token));
                                     navigator.push(crate::routes::Route::Trainings {});
                                 }

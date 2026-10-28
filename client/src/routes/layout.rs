@@ -16,6 +16,7 @@ pub fn Header() -> Element {
                     Link { to: Route::Home {}, "Tableur" }
                 }
                 button { class: "logout-link", onclick: move |_| {
+                    crate::session::clear();
                     session.set(None);
                     navigator.push(Route::Login {});
                 }, "Déconnexion" }

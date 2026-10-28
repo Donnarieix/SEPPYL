@@ -24,7 +24,7 @@ use crate::{
             training,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences},
+        miscellaneous::{health::health, me::me, preferences, account},
     },
     state::AppState,
 };
@@ -52,6 +52,9 @@ async fn main() {
     let protected = Router::new()
         .route("/me", get(me))
         .route("/preferences", get(preferences::get).put(preferences::update))
+        .route("/account", get(account::get))
+        .route("/account/profile", put(account::update_profile))
+        .route("/account/password", put(account::change_password))
         .route("/player/list", get(get_players))
         .route("/player/get/{id}", get(get_player))
         .route("/player/create", post(create_player))

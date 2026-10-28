@@ -1,5 +1,4 @@
-//! Preferences persisted per account by the API, independent of authentication
-//! provider (local JWT now, Donnarieix SSO later).
+//! Account preferences, independent of identity provider (local JWT / future SSO).
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -9,42 +8,72 @@ fn api_url() -> &'static str {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AttendanceView {
-    #[default]
-    Grid,
-    List,
+pub enum AttendanceView { #[default] Grid, List }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme { #[default] System, Light, Dark }
+impl Theme {
+    pub fn as_str(self) -> &'static str {
+        match self { Self::System => "system", Self::Light => "light", Self::Dark => "dark" }
+    }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct UserPreferences {
-    attendance_view: AttendanceView,
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Density { #[default] Comfortable, Compact }
+impl Density {
+    pub fn as_str(self) -> &'static str {
+        match self { Self::Comfortable => "comfortable", Self::Compact => "compact" }
+    }
 }
 
-pub async fn load(token: &str) -> Result<AttendanceView, String> {
-    let response = Client::new()
-        .get(format!("{}/preferences", api_url()))
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|e| format!("Impossible de charger la préférence : {e}"))?;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserPreferences {
+    pub attendance_view: AttendanceView,
+    pub theme: Theme,
+    pub density: Density,
+}
+#[derive(Serialize)]
+struct PreferencePatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attendance_view: Option<AttendanceView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    theme: Option<Theme>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    density: Option<Density>,
+}
+
+pub async fn get(token: &str) -> Result<UserPreferences, String> {
+    let response = Client::new().get(format!("{}/preferences", api_url()))
+        .bearer_auth(token).send().await
+        .map_err(|e| format!("Impossible de charger les préférences : {e}"))?;
     if !response.status().is_success() {
-        return Err(format!("Chargement de la préférence impossible (HTTP {}).", response.status()));
+        return Err(format!("Préférences indisponibles (HTTP {}).", response.status()));
     }
     response.json::<UserPreferences>().await
-        .map(|preferences| preferences.attendance_view)
-        .map_err(|e| format!("Préférence invalide : {e}"))
+        .map_err(|e| format!("Préférences invalides : {e}"))
 }
 
-pub async fn save(token: &str, attendance_view: AttendanceView) -> Result<(), String> {
-    let response = Client::new()
-        .put(format!("{}/preferences", api_url()))
-        .bearer_auth(token)
-        .json(&UserPreferences { attendance_view })
-        .send()
-        .await
+async fn patch(token: &str, change: PreferencePatch) -> Result<UserPreferences, String> {
+    let response = Client::new().put(format!("{}/preferences", api_url()))
+        .bearer_auth(token).json(&change).send().await
         .map_err(|e| format!("Impossible de sauvegarder la préférence : {e}"))?;
     if !response.status().is_success() {
-        return Err(format!("Sauvegarde de la préférence impossible (HTTP {}).", response.status()));
+        return Err(format!("Préférence non enregistrée (HTTP {}).", response.status()));
     }
-    Ok(())
+    response.json::<UserPreferences>().await.map_err(|e| e.to_string())
+}
+
+/// Compatibility API for the attendance view selection.
+pub async fn load(token: &str) -> Result<AttendanceView, String> {
+    get(token).await.map(|prefs| prefs.attendance_view)
+}
+pub async fn save(token: &str, attendance_view: AttendanceView) -> Result<(), String> {
+    patch(token, PreferencePatch { attendance_view: Some(attendance_view), theme: None, density: None })
+        .await.map(|_| ())
+}
+pub async fn save_appearance(token: &str, theme: Theme, density: Density)
+    -> Result<UserPreferences, String> {
+    patch(token, PreferencePatch { attendance_view: None, theme: Some(theme), density: Some(density) }).await
 }

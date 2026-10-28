@@ -262,8 +262,8 @@ fn ResultCell(
         });
     };
 
-    let on_change = persist.clone();
-    let on_retry = persist.clone();
+    let mut on_change = persist.clone();
+    let mut on_retry = persist.clone();
 
     rsx! {
         div { class: "cell",

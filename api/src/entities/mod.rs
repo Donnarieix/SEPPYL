@@ -7,3 +7,7 @@ pub mod training_activity;
 pub mod training_attendance;
 pub mod training_score;
 pub mod training_material;
+pub mod catalog_activity;
+pub mod catalog_material;
+pub mod catalog_selection;
+pub mod catalog_result;

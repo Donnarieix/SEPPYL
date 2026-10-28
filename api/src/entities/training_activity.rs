@@ -9,6 +9,8 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
     pub training_id: Uuid,
+    // Nullable, so pre-existing training activities remain valid.
+    pub catalog_id: Option<Uuid>,
     pub name: String,
     pub description: String,
     pub image_url: Option<String>,

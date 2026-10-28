@@ -171,6 +171,8 @@ fn ActivityEditor(
     let mut error=use_signal(||None::<String>);
     let id=activity.as_ref().map(|a|a.id.clone());
     let editing=id.is_some();
+    let token_for_submit = token.clone();
+    let token_for_upload = token.clone();
     rsx!{
         div{class:"dialog-backdrop",
             div{class:"dialog-panel activity-dialog",role:"dialog","aria-modal":"true",
@@ -186,7 +188,7 @@ fn ActivityEditor(
                         let d=description.read().clone();
                         let i=image.read().trim().to_string();
                         if n.is_empty(){error.set(Some("Le nom de l'activité est obligatoire.".into()));return;}
-                        let token=token.clone();let id=id.clone();
+                        let token=token_for_submit.clone();let id=id.clone();
                         busy.set(true);
                         spawn(async move{
                             match catalog::upsert(&token,id.as_deref(),&n,&d,if i.is_empty(){None}else{Some(&i)}).await{
@@ -217,7 +219,7 @@ fn ActivityEditor(
                             input{r#type:"file",accept:".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif",
                                 disabled:*uploading.read(),
                                 onchange:{
-                                    let token=token.clone();
+                                    let token=token_for_upload.clone();
                                     move |event| {
                                         let token=token.clone();
                                         async move {

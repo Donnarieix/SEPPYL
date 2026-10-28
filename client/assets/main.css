@@ -393,3 +393,46 @@ button:focus-visible, input:focus-visible { outline: 2px solid #4368a8; outline-
 .registration-toggle { width:100%; margin-top:19px; background:transparent; color:#315374; border:none; font-size:12px; padding:7px; text-decoration:underline; }
 .registration-toggle:hover { color:#173e60; }
 .registration-note { color:#808d9a; font-size:11px; line-height:1.55; margin:10px 0 0; }
+
+/* Shared data-management screens */
+.topbar-nav { gap: 18px; flex-wrap: wrap; }
+.players-sheet { overflow-x: auto; }
+.roster-table { border-collapse: collapse; width:100%; min-width:560px; text-align:left; }
+.roster-table th { font-size:12px; color:#78828e; padding:14px 20px; background:#f8f9fb; font-weight:600; border-bottom:1px solid #e6e9ed; }
+.roster-table td { font-size:13px; padding:15px 20px; border-bottom:1px solid #eef0f3; }
+.roster-table tr:last-child td { border-bottom:0; }
+.roster-table tr:hover td { background:#fafbfc; }
+.roster-actions { display:flex; gap:6px; align-items:center; }
+.button.danger { background:#b94d4d; color:white; }
+.button.danger:hover { background:#993434; }
+.catalog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:18px; align-items:start; }
+.catalog-card { border:1px solid #dfe4eb; background:#fff; border-radius:7px; overflow:hidden; min-width:0; }
+.catalog-thumbnail { width:100%; height:180px; display:block; object-fit:cover; background:#f0f2f5; }
+.catalog-no-image { display:flex; justify-content:center; align-items:center; color:#a7b0bc; font-size:12px; }
+.catalog-content { padding:20px; }
+.catalog-content h2 { margin:0 0 12px; font-size:16px; font-weight:700; }
+.catalog-description { margin:0 0 18px; color:#5b6774; white-space:pre-wrap; line-height:1.55; font-size:12px; min-height:45px; max-height:110px; overflow:hidden; }
+.catalog-description.empty { color:#a0a9b3; }
+.catalog-equipment { padding:15px 0; border-top:1px solid #e9edf2; }
+.catalog-equipment>strong { display:block; margin-bottom:8px; font-size:12px; }
+.catalog-actions { display:flex; gap:8px; padding-top:14px; border-top:1px solid #e9edf2; align-items:center; }
+.activity-dialog { max-width:610px; }
+.editor-preview { max-width:100%; max-height:190px; object-fit:cover; border:1px solid #e0e4e9; border-radius:5px; margin:4px 0; }
+.catalog-picker { background:#fff; border:1px solid #e0e5eb; border-radius:7px; padding:17px 20px; margin-bottom:17px; }
+.picker-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.picker-heading strong { font-size:13px; }
+.picker-heading a { color:#385d7f; text-decoration:none; font-size:12px; }
+.picker-fields { display:flex; gap:10px; align-items:center; }
+.picker-fields select { flex:1; min-width:0; background:white; border:1px solid #dce1e7; border-radius:5px; padding:10px 12px; color:#263441; font-size:13px; }
+.matrix-picker { margin-bottom:22px; }
+@media(max-width:750px){
+  .topbar-inner { min-height:58px; height:auto; gap:9px; flex-wrap:wrap; padding-top:12px; padding-bottom:10px; }
+  .topbar .logo { margin-right:8px; }
+  .topbar-nav { order:3; width:100%; height:34px; gap:20px; overflow:auto; flex-wrap:nowrap; }
+  .topbar-nav a { flex-shrink:0; }
+  .logout-link { margin-left:auto; }
+  .catalog-grid { grid-template-columns:minmax(0,1fr); }
+  .picker-fields { flex-direction:column; align-items:stretch; }
+  .catalog-picker { padding:14px; }
+  .roster-table td,.roster-table th { padding:12px; }
+}

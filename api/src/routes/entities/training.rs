@@ -196,11 +196,11 @@ pub async fn update(
     if !valid_name(&body.name) || body.notes.len() > 20_000 {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let mut training = owned_training(&claims, &state, id).await?;
-    training.name = body.name.trim().to_string();
-    training.date = body.date;
-    training.notes = body.notes;
-    let active: training::ActiveModel = training.into();
+    let training = owned_training(&claims, &state, id).await?;
+    let mut active: training::ActiveModel = training.into();
+    active.name = Set(body.name.trim().to_string());
+    active.date = Set(body.date);
+    active.notes = Set(body.notes);
     active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -311,9 +311,9 @@ pub async fn set_attendance(
             .one(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let is_present = present.contains(&player.id);
         match current {
-            Some(mut attendance) => {
-                attendance.present = is_present;
-                let active: training_attendance::ActiveModel = attendance.into();
+            Some(attendance) => {
+                let mut active: training_attendance::ActiveModel = attendance.into();
+                active.present = Set(is_present);
                 active.update(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             None if is_present => {
@@ -359,9 +359,9 @@ pub async fn set_score(
                 let active: training_score::ActiveModel = score.into();
                 active.delete(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
-            (Some(mut score), Some(value)) => {
-                score.score = value;
-                let active: training_score::ActiveModel = score.into();
+            (Some(score), Some(value)) => {
+                let mut active: training_score::ActiveModel = score.into();
+                active.score = Set(value);
                 active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             (None, Some(value)) => {
@@ -375,9 +375,8 @@ pub async fn set_score(
             (None, None) => {}
         }
     } else {
-        let mut attendance = attendance;
-        attendance.score = body.score;
-        let active: training_attendance::ActiveModel = attendance.into();
+        let mut active: training_attendance::ActiveModel = attendance.into();
+        active.score = Set(body.score);
         active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok(StatusCode::NO_CONTENT)

@@ -105,9 +105,9 @@ pub async fn update_matrix_result(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Some(mut link) = current {
-        link.result = payload.result;
-        let active: entities::activity_player::ActiveModel = link.into();
+    if let Some(link) = current {
+        let mut active: entities::activity_player::ActiveModel = link.into();
+        active.result = Set(payload.result);
         active.update(&state.db).await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     } else {

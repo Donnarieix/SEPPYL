@@ -4,6 +4,7 @@ use api::preferences::{self, UserPreferences};
 mod api;
 mod routes;
 mod session;
+mod theme_transition;
 
 fn main() {
     dioxus::launch(App);

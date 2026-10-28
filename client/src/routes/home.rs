@@ -68,7 +68,7 @@ pub fn Home() -> Element {
                             " Ajouter une joueuse"
                         }
                         button { class: "button solid",
-                            disabled: matches!(snapshot.as_ref(), Some(Ok(matrix)) if matrix.players.is_empty()),
+                            disabled: !matches!(snapshot.as_ref(), Some(Ok(matrix)) if !matrix.players.is_empty()),
                             onclick: move |_| dialog.set(Some(CreationKind::Activity)),
                             span { class: "plus", "+" }
                             " Nouvelle activité"

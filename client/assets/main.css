@@ -1104,3 +1104,183 @@ button.grid-add-button:hover,
 @media (prefers-reduced-motion: reduce) {
     ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
+
+
+/* --- Motion system -----------------------------------------------------
+   Short, transform/opacity-based motion to keep the application responsive
+   on phones. Avoid transitions on every background/color during theme reveal:
+   the View Transitions API owns that particular effect.
+------------------------------------------------------------------------ */
+:root {
+    --seppyl-ease: cubic-bezier(.2,.7,.2,1);
+    --seppyl-fast: 140ms;
+    --seppyl-normal: 230ms;
+    --seppyl-enter: 330ms;
+}
+@keyframes seppyl-page-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes seppyl-panel-enter {
+    from { opacity: 0; transform: translateY(9px) scale(.992); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes seppyl-modal-in {
+    from { opacity: 0; transform: translateY(18px) scale(.975); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes seppyl-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes seppyl-row-enter {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes seppyl-toast-in {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Route content and tab/panel content enter without blocking interaction. */
+.site-root .page > .page-heading,
+.site-root .page > .back-link,
+.site-root .settings-page > .settings-tabs,
+.site-root .login-card {
+    animation: seppyl-page-enter var(--seppyl-enter) var(--seppyl-ease) both;
+}
+.site-root :is(
+    .settings-tab-content > .settings-panel,
+    .training-page > .panel,
+    .training-page > .preparation-layout,
+    .training-page > .inline-notice,
+    .settings-panel-content,
+    .catalog-picker,
+    .empty-state
+) {
+    animation: seppyl-panel-enter var(--seppyl-normal) var(--seppyl-ease) both;
+}
+.site-root .catalog-grid > .catalog-card:nth-child(-n+8),
+.site-root .training-list > .training-row:nth-child(-n+8) {
+    animation: seppyl-row-enter 260ms var(--seppyl-ease) both;
+}
+.site-root .catalog-grid > :nth-child(2),
+.site-root .training-list > :nth-child(2) { animation-delay: 25ms; }
+.site-root .catalog-grid > :nth-child(3),
+.site-root .training-list > :nth-child(3) { animation-delay: 45ms; }
+.site-root .catalog-grid > :nth-child(4),
+.site-root .training-list > :nth-child(4) { animation-delay: 65ms; }
+
+/* Dialogs gently settle in; no lag in showing the actual form. */
+.site-root .dialog-backdrop {
+    animation: seppyl-backdrop-in 170ms ease-out both;
+}
+.site-root .dialog-panel {
+    animation: seppyl-modal-in 260ms var(--seppyl-ease) both;
+    transform-origin: 50% 80%;
+}
+.site-root .settings-feedback,
+.site-root .form-error,
+.site-root .inline-notice,
+.site-root .login-error,
+.site-root .attendance-preference-error {
+    animation: seppyl-toast-in 180ms ease-out both;
+}
+
+/* Navigation and micro-interactions have a common, quick rhythm. */
+.site-root :is(
+    .topbar-nav a, .topbar-account, .mobile-nav-link, .settings-tab,
+    .tab, .attendance-view-button, .settings-choice, .grid-add-button
+) {
+    transition: color var(--seppyl-fast) ease,
+                background-color var(--seppyl-fast) ease,
+                border-color var(--seppyl-fast) ease,
+                box-shadow var(--seppyl-fast) ease;
+}
+.site-root :is(
+    .button, .rating-button, .icon-button, .refresh, .logout-link,
+    .catalog-actions button, .remove-link
+) {
+    transition: transform var(--seppyl-fast) var(--seppyl-ease),
+                background-color var(--seppyl-fast) ease,
+                border-color var(--seppyl-fast) ease,
+                box-shadow var(--seppyl-fast) ease,
+                opacity var(--seppyl-fast) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+    .site-root .button:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px #071b2d17;
+    }
+    .site-root .catalog-card {
+        transition: transform 200ms var(--seppyl-ease),
+                    box-shadow 200ms var(--seppyl-ease),
+                    border-color 200ms ease;
+    }
+    .site-root .catalog-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 9px 24px #071b2d17;
+        border-color: var(--accent);
+    }
+    .site-root .training-row {
+        transition: padding-left 200ms var(--seppyl-ease),
+                    background-color 160ms ease;
+    }
+    .site-root .training-row:hover { padding-left: 29px; }
+    .site-root .settings-choice:not(:disabled):hover {
+        transform: translateY(-1px);
+    }
+}
+.site-root .button:not(:disabled):active,
+.site-root .rating-button:not(:disabled):active,
+.site-root .attendance-view-button:not(:disabled):active,
+.site-root .settings-choice:not(:disabled):active {
+    transform: scale(.975);
+}
+.site-root :is(.grid-table tbody tr, .roster-table tbody tr, .attendance-row, .score-row) {
+    transition: background-color var(--seppyl-fast) ease;
+}
+.site-root .cell-input {
+    transition: box-shadow 120ms ease, border-color 120ms ease,
+                background-color 120ms ease;
+}
+.site-root :is(input:not([type="checkbox"]), textarea, select):focus-visible {
+    transition: box-shadow 150ms ease, border-color 150ms ease;
+    outline-offset: 1px;
+}
+/* Clear and instant feedback for asynchronous actions. */
+.site-root button:disabled { cursor: not-allowed; }
+.site-root .settings-choice:disabled { cursor: wait; }
+.site-root .cell-status.is-saved { animation: seppyl-toast-in 180ms ease-out both; }
+
+/* Ensure the theme reveal has no default fade layer that hides the circle. */
+::view-transition-image-pair(root) { isolation: auto; }
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none !important;
+    mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 0; }
+::view-transition-new(root) { z-index: 1; }
+
+/* Small screens: use shorter travel distances and avoid layout shifts. */
+@media (max-width: 600px) {
+    @keyframes seppyl-modal-in {
+        from { opacity: 0; transform: translateY(28px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .site-root .dialog-panel { transform-origin: 50% 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .site-root *, .site-root *::before, .site-root *::after {
+        animation-duration: .01ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+    ::view-transition-image-pair(root),
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none !important;
+    }
+}

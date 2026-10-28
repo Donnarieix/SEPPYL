@@ -108,3 +108,62 @@ pub async fn login(username: &str, password: &str) -> Result<String, String> {
         .map(|response| response.token)
         .map_err(|error| error.to_string())
 }
+
+
+#[derive(Serialize)]
+struct NewPlayer<'a> {
+    firstname: &'a str,
+    lastname: &'a str,
+    number: u32,
+}
+
+pub async fn create_player(
+    token: &str,
+    firstname: &str,
+    lastname: &str,
+    number: u32,
+) -> Result<(), String> {
+    let response = Client::new()
+        .post(format!("{API_URL}/player/create"))
+        .bearer_auth(token)
+        .json(&NewPlayer { firstname, lastname, number })
+        .send()
+        .await
+        .map_err(|error| format!("Impossible de contacter l'API : {error}"))?;
+
+    match response.status() {
+        StatusCode::CREATED => Ok(()),
+        StatusCode::UNAUTHORIZED => Err("Session expirée. Reconnectez-vous.".into()),
+        StatusCode::FORBIDDEN => Err("Vous n'avez pas le droit d'ajouter cette joueuse.".into()),
+        StatusCode::CONFLICT => Err("Cette joueuse existe déjà.".into()),
+        StatusCode::INTERNAL_SERVER_ERROR =>
+            Err("Création impossible. Vérifiez notamment si ce prénom existe déjà dans la base.".into()),
+        status => Err(format!("Impossible de créer la joueuse (HTTP {status}).")),
+    }
+}
+
+#[derive(Serialize)]
+struct NewActivity<'a> {
+    name: &'a str,
+    date: &'a str,
+}
+
+pub async fn create_activity(token: &str, name: &str, date: &str) -> Result<(), String> {
+    // The server expects a NaiveDateTime, not the YYYY-MM-DD produced by an HTML date input.
+    let at_midnight = format!("{date}T00:00:00");
+    let response = Client::new()
+        .post(format!("{API_URL}/matrix/activity"))
+        .bearer_auth(token)
+        .json(&NewActivity { name, date: &at_midnight })
+        .send()
+        .await
+        .map_err(|error| format!("Impossible de contacter l'API : {error}"))?;
+
+    match response.status() {
+        StatusCode::CREATED => Ok(()),
+        StatusCode::UNAUTHORIZED => Err("Session expirée. Reconnectez-vous.".into()),
+        StatusCode::BAD_REQUEST => Err("Renseignez un nom et une date, puis créez au moins une joueuse.".into()),
+        StatusCode::CONFLICT => Err("Une activité porte déjà ce nom.".into()),
+        status => Err(format!("Impossible de créer l'activité (HTTP {status}).")),
+    }
+}

@@ -41,7 +41,7 @@ Exemple avec une IP de PC **fictive** \`192.168.1.50\` et un client servi sur le
    \`\`\`powershell
    $env:SEPPYL_API_URL="http://192.168.1.50:3000"
    cd client
-   dx serve --platform web --host 0.0.0.0 --port 8080
+   dx serve --platform web --addr 0.0.0.0 --port 8080
    \`\`\`
 3. Vérifier l'adresse effectivement indiquée par Dioxus et adapter les commandes à la version de votre CLI. Ouvrir \`http://192.168.1.50:8080\` sur le téléphone. L'accès dépend également du pare-feu Windows.
 

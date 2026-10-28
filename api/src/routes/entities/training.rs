@@ -14,10 +14,11 @@ use uuid::Uuid;
 
 use crate::{
     entities::{
-        player, training, training_activity, training_attendance, training_material, training_score,
+        player, training, training_activity, training_attendance, training_material, training_score, catalog_activity, catalog_material,
     },
     routes::authentication::login::Claims,
     services,
+    routes::entities::catalog,
     state::AppState,
 };
 
@@ -158,7 +159,7 @@ pub async fn get(
         .all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let activities = training_activity::Entity::find()
+    let mut activities = training_activity::Entity::find()
         .filter(training_activity::COLUMN.training_id.eq(id))
         .order_by_asc(training_activity::COLUMN.sort_order)
         .all(&state.db)
@@ -181,6 +182,25 @@ pub async fn get(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         (materials, scores)
     };
+
+    // Activity definitions are shared: edits to the catalog update the training
+    // and its printable handout, while score IDs remain training-specific.
+    let mut materials = materials;
+    for activity in &mut activities {
+        let Some(catalog_id) = activity.catalog_id else { continue; };
+        let Some(definition) = catalog_activity::Entity::find_by_id(catalog_id)
+            .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
+            .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else { continue };
+        activity.name = definition.name;
+        activity.description = definition.description;
+        activity.image_url = definition.image_url;
+        let equipment = catalog_material::Entity::find()
+            .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
+            .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        materials.extend(equipment.into_iter().map(|item| training_material::Model {
+            id: item.id, activity_id: activity.id, name: item.name, quantity: item.quantity,
+        }));
+    }
 
     Ok(Json(TrainingDetail {
         training, players, attendance, activities, materials, scores,
@@ -222,17 +242,51 @@ pub async fn add_activity(
         .all(&state.db).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.len();
 
+    let definition = catalog::insert(&claims, &state, catalog::ActivityPayload {
+        name: body.name.clone(),
+        description: body.description.clone(),
+        image_url: body.image_url.clone(),
+    }).await?;
     let new = training_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
         training_id: Set(id),
-        name: Set(body.name.trim().to_string()),
-        description: Set(body.description),
-        image_url: Set(body.image_url.filter(|url| !url.trim().is_empty())),
+        catalog_id: Set(Some(definition.id)),
+        name: Set(definition.name),
+        description: Set(definition.description),
+        image_url: Set(definition.image_url),
         sort_order: Set(count as i32),
         ..Default::default()
     };
     let saved = new.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED, saved.id.to_string()))
+}
+
+
+pub async fn attach_catalog(
+    Extension(claims): Extension<Claims>, State(state): State<AppState>,
+    Path((id, catalog_id)): Path<(Uuid, Uuid)>,
+) -> Result<(StatusCode, String), ApiError> {
+    owned_training(&claims, &state, id).await?;
+    let def = catalog::owned(&claims, &state, catalog_id).await?;
+    let existing = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .filter(training_activity::COLUMN.catalog_id.eq(catalog_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if existing.is_some() { return Err(StatusCode::CONFLICT); }
+    let count = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.len();
+    let linked = training_activity::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        training_id: Set(id),
+        catalog_id: Set(Some(catalog_id)),
+        name: Set(def.name),
+        description: Set(def.description),
+        image_url: Set(def.image_url),
+        sort_order: Set(count as i32),
+        ..Default::default()
+    }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, linked.id.to_string()))
 }
 
 pub async fn remove_activity(
@@ -260,9 +314,19 @@ pub async fn add_material(
     Path((training_id, activity_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateMaterial>,
 ) -> Result<(StatusCode, String), ApiError> {
-    owned_activity(&claims, &state, training_id, activity_id).await?;
+    let activity = owned_activity(&claims, &state, training_id, activity_id).await?;
     if !valid_name(&body.name) || !(1..=100_000).contains(&body.quantity) {
         return Err(StatusCode::BAD_REQUEST);
+    }
+    if let Some(catalog_id) = activity.catalog_id {
+        let material = catalog_material::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            activity_id: Set(catalog_id),
+            name: Set(body.name.trim().into()),
+            quantity: Set(body.quantity),
+            ..Default::default()
+        }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        return Ok((StatusCode::CREATED, material.id.to_string()));
     }
     let new = training_material::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -280,7 +344,16 @@ pub async fn remove_material(
     State(state): State<AppState>,
     Path((training_id, activity_id, material_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    owned_activity(&claims, &state, training_id, activity_id).await?;
+    let activity = owned_activity(&claims, &state, training_id, activity_id).await?;
+    if let Some(catalog_id) = activity.catalog_id {
+        let item = catalog_material::Entity::find_by_id(material_id)
+            .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
+            .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        let active: catalog_material::ActiveModel = item.into();
+        active.delete(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
     let item = training_material::Entity::find_by_id(material_id)
         .filter(training_material::COLUMN.activity_id.eq(activity_id))
         .one(&state.db).await

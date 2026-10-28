@@ -504,3 +504,114 @@ button.grid-add-button:hover,
     .grid-table .new-activity-column,
     .grid-table td.grid-add-spacer { min-width: 58px; width: 58px; }
 }
+
+
+/* Odoo-inspired attendance view switcher; user preference is saved by the API. */
+.attendance-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+.attendance-view-switch {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border: 1px solid #d9e0e7;
+    background: #f5f7f9;
+    border-radius: 6px;
+}
+.attendance-view-button {
+    width: 35px;
+    height: 32px;
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #6c7886;
+    cursor: pointer;
+}
+.attendance-view-button:hover:not(:disabled) {
+    color: #263d55;
+    background: #edf1f5;
+}
+.attendance-view-button.active {
+    color: #263d55;
+    background: #fff;
+    box-shadow: 0 1px 3px #253a511e;
+}
+.attendance-view-button:focus-visible {
+    outline: 2px solid #476990;
+    outline-offset: 2px;
+}
+.attendance-grid-icon {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    grid-template-columns: repeat(2, 6px);
+    grid-template-rows: repeat(2, 6px);
+    gap: 3px;
+}
+.attendance-grid-icon span {
+    display: block;
+    border: 1.5px solid currentColor;
+    border-radius: 1px;
+}
+.attendance-list-icon {
+    width: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.attendance-list-icon span {
+    display: block;
+    height: 2px;
+    width: 16px;
+    border-radius: 2px;
+    background: currentColor;
+}
+.attendance-list.list-mode {
+    grid-template-columns: minmax(0, 1fr);
+}
+.attendance-list.list-mode .attendance-row {
+    min-height: 58px;
+    padding: 12px 22px;
+    border-right: 0;
+}
+.attendance-list.list-mode .attendance-row:nth-child(odd) {
+    border-right: 0;
+}
+.attendance-list.list-mode .attendance-row input {
+    order: 3;
+    margin: 0 2px 0 auto;
+}
+.attendance-list.list-mode .attendance-row .shirt-number { order: 1; }
+.attendance-list.list-mode .attendance-row strong { order: 2; }
+.attendance-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 26px;
+    border-bottom: 1px solid #e4e8ed;
+    background: #f8f9fb;
+    color: #6d7987;
+    font-size: 11px;
+    font-weight: 600;
+}
+.attendance-preference-error {
+    margin: 0;
+    padding: 10px 21px;
+    border-bottom: 1px solid #efd3d3;
+    color: #9d4545;
+    background: #fff8f7;
+    font-size: 12px;
+}
+@media(max-width:650px) {
+    .attendance-head-actions { gap: 8px; }
+    .attendance-view-button { width: 33px; height: 32px; }
+    .attendance-list.list-mode .attendance-row { padding: 12px 15px; }
+    .attendance-list-heading { padding: 10px 19px; }
+}

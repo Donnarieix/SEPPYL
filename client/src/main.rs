@@ -4,7 +4,6 @@ use api::preferences::{self, UserPreferences};
 mod api;
 mod routes;
 mod session;
-mod theme_transition;
 
 fn main() {
     dioxus::launch(App);
@@ -37,6 +36,7 @@ fn App() -> Element {
     rsx! {
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
         document::Stylesheet { href: asset!("/assets/main.css") }
+        document::Script { src: asset!("/assets/theme-transition.js") }
         div {
             class: "site-root",
             "data-theme": current.theme.as_str(),

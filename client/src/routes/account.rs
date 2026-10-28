@@ -4,7 +4,6 @@ use crate::api::{
     preferences::{self, AttendanceView, Density, Theme, UserPreferences},
 };
 use super::{Route, layout::Header};
-use crate::theme_transition;
 
 #[component]
 pub fn AccountPage() -> Element {
@@ -102,15 +101,17 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::System { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::System { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |event: MouseEvent| {
+                                        "data-theme-option": "system",
+                                        onclick: move |_| {
                                             let before = *appearance.read();
                                             if before.theme == Theme::System || *appearance_busy.read() { return; }
-                                            let coords = event.data.client_coordinates();
+                                            // Optimistic UI: the browser reveal is cosmetic;
+                                            // applying the theme must never await the API.
+                                            appearance.set(UserPreferences { theme: Theme::System, ..before });
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_system.clone();
                                             spawn(async move {
-                                                theme_transition::reveal_theme(appearance, Theme::System, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::System, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
@@ -128,15 +129,17 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::Light { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::Light { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |event: MouseEvent| {
+                                        "data-theme-option": "light",
+                                        onclick: move |_| {
                                             let before = *appearance.read();
                                             if before.theme == Theme::Light || *appearance_busy.read() { return; }
-                                            let coords = event.data.client_coordinates();
+                                            // Optimistic UI: the browser reveal is cosmetic;
+                                            // applying the theme must never await the API.
+                                            appearance.set(UserPreferences { theme: Theme::Light, ..before });
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_light.clone();
                                             spawn(async move {
-                                                theme_transition::reveal_theme(appearance, Theme::Light, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::Light, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {
@@ -154,15 +157,17 @@ pub fn AccountPage() -> Element {
                                         class: if prefs.theme == Theme::Dark { "settings-choice selected" } else { "settings-choice" },
                                         "aria-pressed": if prefs.theme == Theme::Dark { "true" } else { "false" },
                                         disabled: *appearance_busy.read(),
-                                        onclick: move |event: MouseEvent| {
+                                        "data-theme-option": "dark",
+                                        onclick: move |_| {
                                             let before = *appearance.read();
                                             if before.theme == Theme::Dark || *appearance_busy.read() { return; }
-                                            let coords = event.data.client_coordinates();
+                                            // Optimistic UI: the browser reveal is cosmetic;
+                                            // applying the theme must never await the API.
+                                            appearance.set(UserPreferences { theme: Theme::Dark, ..before });
                                             appearance_busy.set(true);
                                             appearance_feedback.set(None);
                                             let token = theme_token_dark.clone();
                                             spawn(async move {
-                                                theme_transition::reveal_theme(appearance, Theme::Dark, coords.x, coords.y).await;
                                                 match preferences::save_appearance(&token, Theme::Dark, before.density).await {
                                                     Ok(saved) => appearance.set(saved),
                                                     Err(error) => {

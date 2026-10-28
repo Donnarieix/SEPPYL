@@ -41,7 +41,7 @@ async fn main() {
     // dx serve may choose a different local port on every run.
     // Permit HTTP loopback origins for development without allowing arbitrary websites.
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin, _| is_local_dev_origin(origin)))
+        .allow_origin(AllowOrigin::predicate(|origin, _| is_allowed_origin(origin)))
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
@@ -139,4 +139,19 @@ mod cors_tests {
             assert!(!is_local_dev_origin(&origin.parse().unwrap()), "{origin}");
         }
     }
+}
+
+
+// Additional origins are explicitly allowed for LAN development, e.g. a phone
+// accessing the dev server from the same Wi-Fi. Do NOT use insecure HTTP on a
+// public network or expose the development API directly to the Internet.
+fn is_allowed_origin(origin: &HeaderValue) -> bool {
+    if is_local_dev_origin(origin) {
+        return true;
+    }
+    let Ok(value) = origin.to_str() else { return false; };
+    std::env::var("SEPPYL_ALLOWED_ORIGINS")
+        .unwrap_or_default()
+        .split(',')
+        .any(|candidate| !candidate.trim().is_empty() && candidate.trim() == value)
 }

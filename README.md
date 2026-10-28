@@ -115,3 +115,13 @@ Pour la validation manuelle, tester des largeurs proches de **360 px**, **768 px
 - Le changement clair/sombre/système utilise l'API navigateur View Transitions lorsqu'elle est disponible : cercle partant du point de clic et couvrant la fenêtre. En cas de navigateur non compatible ou si l'utilisateur préfère réduire les animations, le changement reste instantané.
 
 Tester en particulier les fenêtres d'activités sur mobile, la saisie de texte long, le passage entre onglets et la transition thème sur Chromium ainsi que son repli sur un navigateur ne prenant pas en charge les transitions.
+
+## Animations et changement instantané de thème
+
+La transition de thème est désormais gérée **directement par le navigateur** dans `client/assets/theme-transition.js` : l'événement pointerdown déclenche le cercle avant le rerender Dioxus, puis le clic applique immédiatement la préférence locale et démarre sa sauvegarde API indépendamment. Aucun échange de messages `dioxus.send`/`recv` ni attente réseau n'est nécessaire pour l'effet.
+
+Le JavaScript est inclus via `document::Script`. Des tests Node sans dépendance (`node --test client/tests/theme-transition.test.cjs`) vérifient le changement immédiat, le cercle, le clavier et la préférence « réduire les animations ».
+
+Les pages, cartes, fenêtres, listes, onglets et boutons reçoivent aussi des transitions CSS courtes basées principalement sur `transform` et `opacity`, fluides sur téléphone. Les animations non essentielles respectent `prefers-reduced-motion: reduce`. Sans prise en charge de View Transitions, le thème change immédiatement sans cercle.
+
+**Dépannage Dioxus :** `Waiting for cargo-metadata` et le temps de `Build completed` concernent la résolution des dépendances et la compilation initiale par la CLI, et non une latence de l'animation à l'écran. Vérifier que Cargo n'attend pas un verrou ou un accès réseau. Une fois les dépendances disponibles, `cargo metadata --no-deps --offline` aide à isoler les lenteurs de Cargo.

@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -37,11 +37,10 @@ mod state;
 async fn main() {
     let _ = dotenvy::dotenv();
 
+    // dx serve may choose a different local port on every run.
+    // Permit HTTP loopback origins for development without allowing arbitrary websites.
     let cors = CorsLayer::new()
-        .allow_origin([
-            "http://localhost:8080".parse::<HeaderValue>().unwrap(),
-            "http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),
-        ])
+        .allow_origin(AllowOrigin::predicate(|origin, _| is_local_dev_origin(origin)))
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
@@ -77,4 +76,57 @@ async fn main() {
 
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+
+// A browser's Origin header must match the exact local hostname and (optional)
+// numeric port. Prefix matching alone would also allow localhost.evil.example.
+fn is_local_dev_origin(origin: &HeaderValue) -> bool {
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+
+    for hostname in ["http://localhost", "http://127.0.0.1"] {
+        if origin == hostname {
+            return true;
+        }
+        if let Some(port) = origin.strip_prefix(hostname).and_then(|rest| rest.strip_prefix(':')) {
+            if port.parse::<u16>().is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod cors_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_loopback_dev_origins_on_dynamic_ports() {
+        for origin in [
+            "http://localhost",
+            "http://localhost:8080",
+            "http://127.0.0.1:50987",
+            "http://127.0.0.1:8080",
+        ] {
+            assert!(is_local_dev_origin(&origin.parse().unwrap()), "{origin}");
+        }
+    }
+
+    #[test]
+    fn rejects_external_or_lookalike_origins() {
+        for origin in [
+            "https://attacker.example",
+            "http://localhost.evil.example:8080",
+            "http://127.0.0.1.evil.example",
+            "http://localhost:8080.evil.example",
+            "http://192.168.1.100:8080",
+            "https://localhost:8080",
+            "null",
+        ] {
+            assert!(!is_local_dev_origin(&origin.parse().unwrap()), "{origin}");
+        }
+    }
 }

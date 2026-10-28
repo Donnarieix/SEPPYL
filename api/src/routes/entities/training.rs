@@ -64,8 +64,8 @@ pub struct TrainingDetail {
 
 #[derive(Deserialize)]
 pub struct CreateTraining {
-    name: String,
-    date: DateTime,
+    pub name: String,
+    pub date: DateTime,
 }
 
 #[derive(Deserialize)]
@@ -77,9 +77,9 @@ pub struct UpdateTraining {
 
 #[derive(Deserialize)]
 pub struct CreateActivity {
-    name: String,
-    description: String,
-    image_url: Option<String>,
+    pub name: String,
+    pub description: String,
+    pub image_url: Option<String>,
 }
 
 #[derive(Deserialize)]

@@ -20,6 +20,7 @@ use crate::{
                 update_activity_player,
             },
             matrix::{create_matrix_activity, get_matrix, update_matrix_result},
+            training,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
         miscellaneous::{health::health, me::me},
@@ -63,6 +64,14 @@ async fn main() {
         .route("/matrix", get(get_matrix))
         .route("/matrix/activity", post(create_matrix_activity))
         .route("/matrix/result", put(update_matrix_result))
+        .route("/trainings", get(training::list).post(training::create))
+        .route("/trainings/{id}", get(training::get).put(training::update))
+        .route("/trainings/{id}/activities", post(training::add_activity))
+        .route("/trainings/{id}/activities/{activity_id}", delete(training::remove_activity))
+        .route("/trainings/{id}/activities/{activity_id}/materials", post(training::add_material))
+        .route("/trainings/{id}/activities/{activity_id}/materials/{material_id}", delete(training::remove_material))
+        .route("/trainings/{id}/attendance", put(training::set_attendance))
+        .route("/trainings/{id}/scores", put(training::set_score))
         .route_layer(axum_middleware::from_fn(auth));
 
     let app = Router::new()

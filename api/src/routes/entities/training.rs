@@ -1,0 +1,406 @@
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter,
+    QueryOrder, TransactionTrait,
+};
+use sea_orm::entity::prelude::DateTime;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use uuid::Uuid;
+
+use crate::{
+    entities::{
+        player, training, training_activity, training_attendance, training_material, training_score,
+    },
+    routes::authentication::login::Claims,
+    services,
+    state::AppState,
+};
+
+type ApiError = StatusCode;
+
+async fn owned_training(
+    claims: &Claims,
+    state: &AppState,
+    id: Uuid,
+) -> Result<training::Model, ApiError> {
+    training::Entity::find_by_id(id)
+        .filter(training::COLUMN.user_id.eq(claims.sub))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn owned_activity(
+    claims: &Claims,
+    state: &AppState,
+    training_id: Uuid,
+    activity_id: Uuid,
+) -> Result<training_activity::Model, ApiError> {
+    owned_training(claims, state, training_id).await?;
+    training_activity::Entity::find_by_id(activity_id)
+        .filter(training_activity::COLUMN.training_id.eq(training_id))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Serialize)]
+pub struct TrainingDetail {
+    pub training: training::Model,
+    pub players: Vec<player::Model>,
+    pub attendance: Vec<training_attendance::Model>,
+    pub activities: Vec<training_activity::Model>,
+    pub materials: Vec<training_material::Model>,
+    pub scores: Vec<training_score::Model>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateTraining {
+    name: String,
+    date: DateTime,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTraining {
+    name: String,
+    date: DateTime,
+    notes: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateActivity {
+    name: String,
+    description: String,
+    image_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateMaterial {
+    name: String,
+    quantity: i32,
+}
+
+#[derive(Deserialize)]
+pub struct AttendanceUpdate {
+    player_ids: Vec<Uuid>,
+}
+
+#[derive(Deserialize)]
+pub struct ScoreUpdate {
+    player_id: Uuid,
+    activity_id: Option<Uuid>,
+    score: Option<i32>,
+}
+
+fn valid_name(name: &str) -> bool {
+    !name.trim().is_empty() && name.len() <= 150
+}
+
+fn valid_score(score: Option<i32>) -> bool {
+    score.is_none_or(|value| (0..=5).contains(&value))
+}
+
+fn valid_image_url(url: Option<&str>) -> bool {
+    url.is_none_or(|url| {
+        url.len() <= 2000 && (url.starts_with("https://") || url.starts_with("http://"))
+    })
+}
+
+pub async fn list(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<training::Model>>, ApiError> {
+    let trainings = training::Entity::find()
+        .filter(training::COLUMN.user_id.eq(claims.sub))
+        .order_by_desc(training::COLUMN.date)
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(trainings))
+}
+
+pub async fn create(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<CreateTraining>,
+) -> Result<(StatusCode, String), ApiError> {
+    if !valid_name(&body.name) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let new = training::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        user_id: Set(claims.sub),
+        name: Set(body.name.trim().to_string()),
+        date: Set(body.date),
+        notes: Set(String::new()),
+        ..Default::default()
+    };
+    let item = new.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, item.id.to_string()))
+}
+
+pub async fn get(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<TrainingDetail>, ApiError> {
+    let training = owned_training(&claims, &state, id).await?;
+    let players = services::player::get_players(&claims, &state).await?;
+    let attendance = training_attendance::Entity::find()
+        .filter(training_attendance::COLUMN.training_id.eq(id))
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let activities = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .order_by_asc(training_activity::COLUMN.sort_order)
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let activity_ids: Vec<Uuid> = activities.iter().map(|a| a.id).collect();
+    let (materials, scores) = if activity_ids.is_empty() {
+        (Vec::new(), Vec::new())
+    } else {
+        let materials = training_material::Entity::find()
+            .filter(training_material::COLUMN.activity_id.is_in(activity_ids.clone()))
+            .all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let scores = training_score::Entity::find()
+            .filter(training_score::COLUMN.activity_id.is_in(activity_ids))
+            .all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (materials, scores)
+    };
+
+    Ok(Json(TrainingDetail {
+        training, players, attendance, activities, materials, scores,
+    }))
+}
+
+pub async fn update(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateTraining>,
+) -> Result<StatusCode, ApiError> {
+    if !valid_name(&body.name) || body.notes.len() > 20_000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut training = owned_training(&claims, &state, id).await?;
+    training.name = body.name.trim().to_string();
+    training.date = body.date;
+    training.notes = body.notes;
+    let active: training::ActiveModel = training.into();
+    active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn add_activity(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<CreateActivity>,
+) -> Result<(StatusCode, String), ApiError> {
+    owned_training(&claims, &state, id).await?;
+    if !valid_name(&body.name) || body.description.len() > 20_000
+        || !valid_image_url(body.image_url.as_deref()) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let count = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .all(&state.db).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.len();
+
+    let new = training_activity::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        training_id: Set(id),
+        name: Set(body.name.trim().to_string()),
+        description: Set(body.description),
+        image_url: Set(body.image_url.filter(|url| !url.trim().is_empty())),
+        sort_order: Set(count as i32),
+        ..Default::default()
+    };
+    let saved = new.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, saved.id.to_string()))
+}
+
+pub async fn remove_activity(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path((training_id, activity_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, ApiError> {
+    let activity = owned_activity(&claims, &state, training_id, activity_id).await?;
+    let txn = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    training_score::Entity::delete_many()
+        .filter(training_score::COLUMN.activity_id.eq(activity_id))
+        .exec(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    training_material::Entity::delete_many()
+        .filter(training_material::COLUMN.activity_id.eq(activity_id))
+        .exec(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let active: training_activity::ActiveModel = activity.into();
+    active.delete(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn add_material(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path((training_id, activity_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<CreateMaterial>,
+) -> Result<(StatusCode, String), ApiError> {
+    owned_activity(&claims, &state, training_id, activity_id).await?;
+    if !valid_name(&body.name) || !(1..=100_000).contains(&body.quantity) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let new = training_material::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        activity_id: Set(activity_id),
+        name: Set(body.name.trim().to_string()),
+        quantity: Set(body.quantity),
+        ..Default::default()
+    };
+    let material = new.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, material.id.to_string()))
+}
+
+pub async fn remove_material(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path((training_id, activity_id, material_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<StatusCode, ApiError> {
+    owned_activity(&claims, &state, training_id, activity_id).await?;
+    let item = training_material::Entity::find_by_id(material_id)
+        .filter(training_material::COLUMN.activity_id.eq(activity_id))
+        .one(&state.db).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let active: training_material::ActiveModel = item.into();
+    active.delete(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn set_attendance(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AttendanceUpdate>,
+) -> Result<StatusCode, ApiError> {
+    owned_training(&claims, &state, id).await?;
+    let players = services::player::get_players(&claims, &state).await?;
+    let allowed: HashSet<Uuid> = players.iter().map(|p| p.id).collect();
+    let present: HashSet<Uuid> = body.player_ids.into_iter().collect();
+
+    if !present.is_subset(&allowed) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let txn = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    for player in players {
+        let current = training_attendance::Entity::find_by_id((id, player.id))
+            .one(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let is_present = present.contains(&player.id);
+        match current {
+            Some(mut attendance) => {
+                attendance.present = is_present;
+                let active: training_attendance::ActiveModel = attendance.into();
+                active.update(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            None if is_present => {
+                training_attendance::ActiveModel {
+                    training_id: Set(id),
+                    player_id: Set(player.id),
+                    present: Set(true),
+                    score: Set(None),
+                    ..Default::default()
+                }.insert(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            None => {}
+        }
+    }
+    txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn set_score(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ScoreUpdate>,
+) -> Result<StatusCode, ApiError> {
+    owned_training(&claims, &state, id).await?;
+    if !valid_score(body.score) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let Some(attendance) = training_attendance::Entity::find_by_id((id, body.player_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+    if !attendance.present {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if let Some(activity_id) = body.activity_id {
+        owned_activity(&claims, &state, id, activity_id).await?;
+        let current = training_score::Entity::find_by_id((activity_id, body.player_id))
+            .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        match (current, body.score) {
+            (Some(score), None) => {
+                let active: training_score::ActiveModel = score.into();
+                active.delete(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            (Some(mut score), Some(value)) => {
+                score.score = value;
+                let active: training_score::ActiveModel = score.into();
+                active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            (None, Some(value)) => {
+                training_score::ActiveModel {
+                    activity_id: Set(activity_id),
+                    player_id: Set(body.player_id),
+                    score: Set(value),
+                    ..Default::default()
+                }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            (None, None) => {}
+        }
+    } else {
+        let mut attendance = attendance;
+        attendance.score = body.score;
+        let active: training_attendance::ActiveModel = attendance.into();
+        active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{valid_image_url, valid_name, valid_score};
+
+    #[test]
+    fn score_is_bounded_inclusively() {
+        assert!(valid_score(None));
+        assert!(valid_score(Some(0)));
+        assert!(valid_score(Some(5)));
+        assert!(!valid_score(Some(-1)));
+        assert!(!valid_score(Some(6)));
+    }
+
+    #[test]
+    fn rejects_empty_names_and_untrusted_image_schemes() {
+        assert!(!valid_name("  "));
+        assert!(valid_name("Échauffement"));
+        assert!(valid_image_url(Some("https://example.org/diagramme.png")));
+        assert!(!valid_image_url(Some("javascript:alert(1)")));
+    }
+}

@@ -72,3 +72,18 @@ Réalisé pour cette première itération :
 - Partage de l'équipe et des séances entre entraîneurs
 - Édition avancée, droits et déploiement HTTPS hors réseau local
 - Véritable mode hors ligne *dans* l'application (la fiche PDF est hors ligne, la saisie ne l'est pas)
+
+
+## Sessions et future connexion SSO
+
+Le client rétablit la session du navigateur après un rafraîchissement, grâce à un adaptateur local de stockage des jetons (client/src/session.rs). Le jeton local expire après 24 heures. La déconnexion efface le jeton sauvegardé.
+
+Ce mécanisme est temporaire : lors de l'arrivée du SSO Donnarieix, on remplacera le fournisseur d'authentification et on privilégiera un flux OIDC avec des cookies HttpOnly Secure SameSite. Tant que le jeton est conservé dans localStorage, ce prototype ne convient pas à un déploiement public avec des données sensibles.
+
+## Bibliothèque commune
+
+Les onglets Joueuses et Activités permettent d'administrer les données depuis l'application. Les activités comportent une vignette (URL ou téléversement de PNG, JPEG, WebP ou GIF, jusqu'à 4 Mo), une description et du matériel. Une activité peut ensuite être attachée à un entraînement ou ajoutée comme colonne du tableur. Les évaluations restent distinctes par entraînement.
+
+Au démarrage, les activités d'entraînement antérieures à cette modification sont importées de manière idempotente dans la bibliothèque commune ; les notes déjà saisies restent attachées à leur séance. Les anciennes colonnes de l'ancien tableur restent lisibles, sans conversion automatique vers la bibliothèque.
+
+Les images téléversées possèdent des URLs opaques mais sont pour l'instant servies sans authentification. Ne téléversez pas de photos privées ou sensibles avant la mise en place du contrôle d'accès aux médias.

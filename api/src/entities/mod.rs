@@ -11,3 +11,4 @@ pub mod catalog_activity;
 pub mod catalog_material;
 pub mod catalog_selection;
 pub mod catalog_result;
+pub mod user_preference;

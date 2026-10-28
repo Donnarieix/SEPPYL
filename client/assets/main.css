@@ -436,3 +436,71 @@ button:focus-visible, input:focus-visible { outline: 2px solid #4368a8; outline-
   .catalog-picker { padding:14px; }
   .roster-table td,.roster-table th { padding:12px; }
 }
+
+
+/* Spreadsheet creation affordances: + in the header and a new row at the bottom. */
+.grid-table .new-activity-column {
+    min-width: 64px;
+    width: 64px;
+    text-align: center;
+    padding: 8px;
+    background: #f7f8fa;
+}
+.grid-add-button {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid #d4dbe4;
+    border-radius: 5px;
+    color: #45596d;
+    background: #fff;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1;
+}
+button.grid-add-button:hover,
+.grid-add-player:hover .grid-add-button {
+    background: #eef3f8;
+    border-color: #9eafc2;
+    color: #263d55;
+}
+.grid-table td.grid-add-spacer {
+    min-width: 64px;
+    padding: 0;
+    background: #fbfcfd;
+}
+.grid-table tbody tr.grid-add-row { height: 49px; }
+.grid-table tbody tr.grid-add-row th {
+    background: #f9fafc;
+    padding: 7px 12px;
+}
+.grid-table tbody tr.grid-add-row td { background: #f9fafc; }
+.grid-add-player {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #617084;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+}
+.grid-add-player .grid-add-button { width: 27px; height: 27px; font-size: 18px; }
+.grid-add-player:hover { color: #263d55; }
+.grid-empty-note {
+    margin: 0;
+    padding: 12px 17px;
+    font-size: 12px;
+    color: #838f9d;
+    background: #fbfcfd;
+    border-top: 1px solid #e9edf1;
+}
+@media(max-width:650px){
+    .grid-table .new-activity-column,
+    .grid-table td.grid-add-spacer { min-width: 58px; width: 58px; }
+}

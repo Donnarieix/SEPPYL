@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+mod dialogs;
 mod home;
 mod login;
 

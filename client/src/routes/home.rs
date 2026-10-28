@@ -3,7 +3,7 @@ use crate::api::matrix::{self, Matrix};
 
 #[component]
 pub fn Home() -> Element {
-    let session = use_context::<Signal<Option<String>>>();
+    let mut session = use_context::<Signal<Option<String>>>();
     let navigator = use_navigator();
     let mut search = use_signal(String::new);
     let token = session.read().clone();

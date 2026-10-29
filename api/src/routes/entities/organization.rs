@@ -476,3 +476,29 @@ pub async fn eligible_users(
         role:u.role.unwrap_or_else(||"user".into()),
     }).collect()))
 }
+
+#[derive(Serialize)]
+pub struct ClubCapabilities{
+    pub can_manage:bool,
+    pub can_create_team:bool,
+    pub can_write_teams:Vec<Uuid>,
+}
+pub async fn capabilities(
+    Extension(claims):Extension<Claims>,
+    Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,
+)->ApiResult<Json<ClubCapabilities>>{
+    if !can_access_club(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let can_manage=can_manage_club(&state,&claims,role.0,id).await?;
+    let teams=team::Entity::find().filter(team::COLUMN.club_id.eq(id))
+        .all(&state.db).await.map_err(db_error)?;
+    let mut can_write_teams=Vec::new();
+    for team in teams{
+        if role.0.can_write() && can_write_team(&state,&claims,role.0,team.id).await?{
+            can_write_teams.push(team.id);
+        }
+    }
+    Ok(Json(ClubCapabilities{can_manage,can_create_team:can_manage,can_write_teams}))
+}

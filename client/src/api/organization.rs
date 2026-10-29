@@ -124,3 +124,15 @@ pub async fn eligible_users(token:&str,club_id:&str)->Result<Vec<User>,String>{
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r.status())?;r.json().await.map_err(|e|e.to_string())
 }
+
+#[derive(Clone,Debug,Deserialize,PartialEq)]
+pub struct ClubCapabilities{
+    pub can_manage:bool,
+    pub can_create_team:bool,
+    pub can_write_teams:Vec<String>,
+}
+pub async fn capabilities(token:&str,club_id:&str)->Result<ClubCapabilities,String>{
+    let r=Client::new().get(format!("{}/clubs/{club_id}/capabilities",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}

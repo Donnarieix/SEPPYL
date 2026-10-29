@@ -38,7 +38,7 @@ jobs:
         run: dx build --platform web --release
       - name: Package web
         run: |
-          index="$(find target/dx -path '*/release/web/public/index.html' -print -quit)"
+          index="$(find . -path '*/release/web/public/index.html' -print -quit)"
           test -n "$index"
           tar czf "$RUNNER_TEMP/seppyl-web.tar.gz" -C "$(dirname "$index")" .
       - uses: actions/upload-artifact@v4

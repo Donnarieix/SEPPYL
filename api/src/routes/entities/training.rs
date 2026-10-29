@@ -192,7 +192,7 @@ pub async fn get(
             .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else { continue };
         activity.name = definition.name;
-        activity.description = definition.description;
+        activity.description = catalog::sanitize_description(&definition.description);
         activity.image_url = definition.image_url;
         let equipment = catalog_material::Entity::find()
             .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))

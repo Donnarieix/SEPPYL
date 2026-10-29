@@ -34,6 +34,11 @@ pub fn valid_image(value: Option<&str>) -> bool {
         (url.starts_with("https://") || url.starts_with("http://") || url.starts_with("/catalog/images/"))
     })
 }
+/// Strip active content before returning HTML to the Dioxus editor/print view.
+pub fn sanitize_description(value:&str)->String{
+    ammonia::clean(value)
+}
+
 pub fn valid_payload(body: &ActivityPayload) -> bool {
     !body.name.trim().is_empty() && body.name.len() <= 150 &&
         body.description.len() <= 20_000 && valid_image(body.image_url.as_deref())
@@ -54,7 +59,7 @@ pub async fn insert(
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
         name: Set(body.name.trim().into()),
-        description: Set(body.description),
+        description: Set(sanitize_description(&body.description)),
         image_url: Set(body.image_url.filter(|s| !s.is_empty())),
         ..Default::default()
     }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
@@ -73,9 +78,9 @@ pub async fn list(
             .filter(catalog_material::COLUMN.activity_id.is_in(ids))
             .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
-    Ok(Json(activities.into_iter().map(|a| CatalogEntry {
+    Ok(Json(activities.into_iter().map(|mut a| CatalogEntry {
+        activity: { a.description=sanitize_description(&a.description); a },
         materials: materials.iter().filter(|m| m.activity_id == a.id).cloned().collect(),
-        activity: a,
     }).collect()))
 }
 
@@ -93,7 +98,7 @@ pub async fn update(
     let activity = owned(&claims, &state, id).await?;
     let mut active: catalog_activity::ActiveModel = activity.into();
     active.name = Set(body.name.trim().into());
-    active.description = Set(body.description);
+    active.description = Set(sanitize_description(&body.description));
     active.image_url = Set(body.image_url.filter(|s| !s.is_empty()));
     active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)

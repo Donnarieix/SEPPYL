@@ -5,7 +5,7 @@
   if (window.__seppylTacticsInstalled) return;
   window.__seppylTacticsInstalled = true;
   const NS = "http://www.w3.org/2000/svg";
-  const TOOLS = new Set(["select", "player", "opponent", "ball", "cone", "arrow", "erase"]);
+  const TOOLS = new Set(["select", "player", "opponent", "ball", "cone", "goal", "arrow", "curve", "erase"]);
   const DEFAULTS = {
     player: "#2455b6", opponent: "#c6403c",
     ball: "#f8f8f5", cone: "#ee9228", arrow: "#202f43"
@@ -32,7 +32,11 @@
   });
 
   function setup(root) {
-    if (root.dataset.tacticsInitialized) return;
+    if (root.dataset.tacticsInitialized) {
+      if (root.__tacticsRevision !== root.dataset.tacticsRevision)
+        root.__tacticsReload?.();
+      return;
+    }
     const svg = root.querySelector("[data-tactics-svg]");
     const output = root.querySelector("[data-tactics-output]");
     if (!svg || !output) return;
@@ -47,6 +51,8 @@
     let marquee = null;
     let arrowStart = null;
     let color = DEFAULTS.player;
+    let brushSize=22;
+    let draggingCurve=null;
 
     const position = event => {
       const point = svg.createSVGPoint();
@@ -168,6 +174,18 @@
       selected.clear();
       render(); sync();
     }
+    function loadDiagram() {
+      let loaded=[];
+      try {
+        const decoded=JSON.parse(root.dataset.tacticsInitial||"[]");
+        if(Array.isArray(decoded))loaded=decoded;
+      }catch(_){loaded=[];}
+      objects=loaded;
+      selected.clear();dragging=null;lineStart=null;draggingCurve=null;
+      root.__tacticsRevision=root.dataset.tacticsRevision;
+      render();
+    }
+    root.__tacticsReload=loadDiagram;
     root.querySelectorAll("[data-tactic-tool]").forEach(button => {
       button.addEventListener("click", () => {
         if (TOOLS.has(button.dataset.tacticTool)) activate(button.dataset.tacticTool);
@@ -274,5 +292,5 @@
   }
   const scan = () => document.querySelectorAll(".seppyl-tactics-board").forEach(setup);
   scan();
-  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, attributes:true, attributeFilter:["data-tactics-revision"] });
 })();

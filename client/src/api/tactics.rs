@@ -5,6 +5,7 @@ fn base()->&'static str{option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.
 pub struct DrawingObject {
     pub id:String,pub kind:String,pub x:f64,pub y:f64,
     pub end_x:Option<f64>,pub end_y:Option<f64>,pub label:Option<String>,
+    #[serde(default)] pub color:Option<String>,
 }
 #[derive(Clone,Debug,PartialEq,Serialize,Deserialize)]
 pub struct Diagram { pub id:String,pub name:String,pub layout:String,pub objects:Vec<DrawingObject> }

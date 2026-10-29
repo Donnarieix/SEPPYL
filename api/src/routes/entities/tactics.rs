@@ -18,6 +18,8 @@ pub struct DrawingObject {
     pub end_x:Option<f64>,
     pub end_y:Option<f64>,
     pub label:Option<String>,
+    #[serde(default)]
+    pub color:Option<String>,
 }
 #[derive(Clone,Serialize,Deserialize)]
 pub struct DiagramPayload {
@@ -32,6 +34,10 @@ pub struct Diagram {
     pub layout:String,
     pub objects:Vec<DrawingObject>,
 }
+fn valid_color(value:&str)->bool{
+    value.len()==7 && value.starts_with('#') &&
+        value.as_bytes()[1..].iter().all(|c|c.is_ascii_hexdigit())
+}
 fn validate(body:&DiagramPayload)->bool{
     let kind_ok=|k:&str|matches!(k,"player"|"opponent"|"cone"|"ball"|"arrow");
     !body.name.trim().is_empty() && body.name.len()<=150 &&
@@ -40,6 +46,7 @@ fn validate(body:&DiagramPayload)->bool{
     body.objects.iter().all(|o| {
         kind_ok(&o.kind) && !o.id.is_empty() && o.id.len()<=64 &&
         o.label.as_deref().is_none_or(|s|s.len()<=35) &&
+        o.color.as_deref().is_none_or(valid_color) &&
         o.x.is_finite() && o.y.is_finite() &&
         (0.0..=800.0).contains(&o.x) && (0.0..=500.0).contains(&o.y) &&
         o.end_x.is_none_or(|x|x.is_finite()&&(0.0..=800.0).contains(&x)) &&
@@ -109,8 +116,13 @@ mod tests{
     fn rejects_untrusted_objects_and_invalid_positions(){
         let mut good=DiagramPayload{name:"Exercice".into(),layout:"football".into(),
             objects:vec![DrawingObject{id:"1".into(),kind:"player".into(),x:400.0,y:250.0,
-                end_x:None,end_y:None,label:Some("A1".into())}]};
+                end_x:None,end_y:None,label:Some("A1".into()),color:None}]};
         assert!(validate(&good));
+        good.objects[0].color=Some("#123ABC".into());
+        assert!(validate(&good));
+        good.objects[0].color=Some("red;script".into());
+        assert!(!validate(&good));
+        good.objects[0].color=None;
         good.objects[0].kind="script".into();
         assert!(!validate(&good));
         good.objects[0].kind="player".into();

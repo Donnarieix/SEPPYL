@@ -75,7 +75,7 @@ async fn main() {
         .route("/catalog", get(catalog::list).post(catalog::create))
         .route("/catalog/{id}", put(catalog::update).delete(catalog::delete))
         .route("/catalog/{id}/materials", post(catalog::add_material))
-        .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material))
+        .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material).put(catalog::update_material))
         .route("/catalog/upload", post(catalog::upload_image).layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)))
         .route("/trainings", get(training::list).post(training::create))
         .route("/trainings/{id}", get(training::get).put(training::update))

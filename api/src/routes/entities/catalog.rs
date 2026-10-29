@@ -141,6 +141,27 @@ pub async fn add_material(
     Ok((StatusCode::CREATED, Json(item)))
 }
 
+
+pub async fn update_material(
+    Extension(claims):Extension<Claims>,
+    State(state):State<AppState>,
+    Path((id,material_id)):Path<(Uuid,Uuid)>,
+    Json(body):Json<MaterialPayload>,
+)->Result<StatusCode,StatusCode>{
+    owned(&claims,&state,id).await?;
+    if body.name.trim().is_empty() || body.name.len()>150 ||
+       !(1..=100_000).contains(&body.quantity){return Err(StatusCode::BAD_REQUEST)}
+    let material=catalog_material::Entity::find_by_id(material_id)
+        .filter(catalog_material::COLUMN.activity_id.eq(id))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut model:catalog_material::ActiveModel=material.into();
+    model.name=Set(body.name.trim().to_owned());
+    model.quantity=Set(body.quantity);
+    model.update(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn remove_material(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path((id, material_id)): Path<(Uuid, Uuid)>,

@@ -38,6 +38,11 @@ mod state;
 #[tokio::main]
 async fn main() {
     let _ = dotenvy::dotenv();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "api=info,tower_http=warn".into()))
+        .init();
+    tracing::info!("SEPPYL API initializing");
 
     // dx serve may choose a different local port on every run.
     // Permit HTTP loopback origins for development without allowing arbitrary websites.

@@ -109,11 +109,12 @@
         drawing.markers.push({kind:tool,x:end.x,y:end.y});
       pointerStart=null;drag=null;render();commit();
     });
-    root.addEventListener("click",event=>{
+    const controls=root.closest(".tactic-edit-page") || root;
+    controls.addEventListener("click",event=>{
       const button=event.target.closest?.("[data-tactic-tool]");
       if(button){
         tool=button.getAttribute("data-tactic-tool");
-        root.querySelectorAll("[data-tactic-tool]").forEach(b=>b.classList.toggle("active",b===button));
+        controls.querySelectorAll("[data-tactic-tool]").forEach(b=>b.classList.toggle("active",b===button));
       }
       if(event.target.closest?.("[data-tactic-clear]")){
         if(window.confirm("Effacer tous les éléments de ce schéma ?")){
@@ -126,7 +127,7 @@
         document.body.appendChild(a);a.click();a.remove();
       }
     });
-    root.querySelector("[data-tactic-pitch]")?.addEventListener("change",event=>{
+    controls.querySelector("[data-tactic-pitch]")?.addEventListener("change",event=>{
       drawing.pitch=event.target.value;commit();render();
     });
     const observer=new ResizeObserver(render);observer.observe(canvas);

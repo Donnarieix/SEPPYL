@@ -43,6 +43,16 @@ pub fn Organization()->Element{
         }
     });
     let mut team_id=use_signal(String::new);
+    let club_roster_token=token.clone();
+    let club_roster=use_resource(move ||{
+        let token=club_roster_token.clone();
+        let id=club_id.read().clone();
+        async move{
+            if id.is_empty(){Ok(Vec::new())}else{
+                match token{Some(token)=>org::club_players(&token,&id).await,None=>Err("Connexion requise.".into())}
+            }
+        }
+    });
     let mut tab=use_signal(||"overview".to_string());
     let mut new_team=use_signal(String::new);
     let mut roster_action=use_signal(||"create".to_string());
@@ -172,7 +182,27 @@ pub fn Organization()->Element{
                             }
                         }else if *tab.read()=="roster"{
                             if team_id.read().is_empty(){
-                                div{class:"workspace-empty",h2{"Choisissez une équipe"},p{"Sélectionnez une équipe en haut pour afficher les joueuses."}}
+                                section{class:"panel",
+                                    div{class:"panel-head",
+                                        div{h2{"Effectif du club"}
+                                            p{"Toutes les joueuses rattachées à ce club. Choisissez une équipe pour consulter ou modifier son effectif."}}
+                                    }
+                                    match club_roster.read().clone(){
+                                        Some(Ok(people))=>rsx!{
+                                            if people.is_empty(){p{class:"panel-empty","Aucune joueuse rattachée à ce club."}}
+                                            div{class:"workspace-roster-list",
+                                                for player in people{
+                                                    div{class:"workspace-roster-item",key:"{player.id}",
+                                                        span{class:"roster-number","{player.number}"}
+                                                        strong{"{player.firstname} {player.lastname}"}
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        Some(Err(error))=>rsx!{p{class:"panel-empty","{error}"}},
+                                        None=>rsx!{p{class:"panel-empty","Chargement de l’effectif…"}},
+                                    }
+                                }
                             }else{
                                 section{class:"panel",
                                     div{class:"panel-head",

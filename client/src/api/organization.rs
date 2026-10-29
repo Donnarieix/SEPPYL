@@ -158,3 +158,9 @@ pub async fn create_team_player(token:&str,id:&str,firstname:&str,lastname:&str,
         .send().await.map_err(|e|e.to_string())?;
     check(r.status())
 }
+
+pub async fn club_players(token:&str,club_id:&str)->Result<Vec<crate::api::players::Player>,String>{
+    let r=Client::new().get(format!("{}/clubs/{club_id}/players",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}

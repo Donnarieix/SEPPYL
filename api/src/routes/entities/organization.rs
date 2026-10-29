@@ -3,7 +3,7 @@
 //! Team membership does not implicitly grant access to other teams.
 use axum::{Extension, Json, extract::{Path, State}, http::StatusCode};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
-use serde::Deserialize;
+use serde::{Deserialize,Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
 use crate::{
@@ -235,3 +235,80 @@ mod integration_tests {
         assert_eq!(visible.len(),1);
     }
 }
+
+#[derive(Serialize)]
+pub struct UserSummary {
+    pub id: Uuid,
+    pub username: String,
+    pub role: String,
+}
+pub async fn list_users(
+    Extension(role): Extension<CurrentRole>,
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<UserSummary>>> {
+    if role.0 != Role::Administrator { return Err(StatusCode::FORBIDDEN); }
+    let users = user::Entity::find().all(&state.db).await.map_err(db_error)?;
+    Ok(Json(users.into_iter().map(|u| UserSummary {
+        id: u.id, username: u.username,
+        role: u.role.unwrap_or_else(|| "trainer".into()),
+    }).collect()))
+}
+pub async fn list_club_members(
+    Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
+    State(state): State<AppState>, Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<club_membership::Model>>> {
+    if !can_manage_club(&state, &claims, role.0, id).await? {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let rows = club_membership::Entity::find()
+        .filter(club_membership::COLUMN.club_id.eq(id))
+        .all(&state.db).await.map_err(db_error)?;
+    Ok(Json(rows))
+}
+pub async fn list_team_members(
+    Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
+    State(state): State<AppState>, Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<team_membership::Model>>> {
+    let t=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if !can_manage_club(&state,&claims,role.0,t.club_id).await? {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let rows=team_membership::Entity::find()
+        .filter(team_membership::COLUMN.team_id.eq(id))
+        .all(&state.db).await.map_err(db_error)?;
+    Ok(Json(rows))
+}
+pub async fn remove_club_member(
+    Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
+    State(state): State<AppState>, Path((id,user_id)): Path<(Uuid,Uuid)>,
+) -> ApiResult<StatusCode> {
+    if !can_manage_club(&state,&claims,role.0,id).await? {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if let Some(row)=club_membership::Entity::find_by_id((user_id,id))
+        .one(&state.db).await.map_err(db_error)? {
+        let active:club_membership::ActiveModel=row.into();
+        active.delete(&state.db).await.map_err(db_error)?;
+    }
+    tracing::warn!(actor=%claims.sub, target=%user_id, club=%id, action="club.member.remove");
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn remove_team_member(
+    Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
+    State(state): State<AppState>, Path((id,user_id)): Path<(Uuid,Uuid)>,
+) -> ApiResult<StatusCode> {
+    let t=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if !can_manage_club(&state,&claims,role.0,t.club_id).await? {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if let Some(row)=team_membership::Entity::find_by_id((user_id,id))
+        .one(&state.db).await.map_err(db_error)? {
+        let active:team_membership::ActiveModel=row.into();
+        active.delete(&state.db).await.map_err(db_error)?;
+    }
+    tracing::warn!(actor=%claims.sub,target=%user_id,team=%id,action="team.member.remove");
+    Ok(StatusCode::NO_CONTENT)
+}
+

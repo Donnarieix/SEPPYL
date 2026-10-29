@@ -1,7 +1,11 @@
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 pub fn api_base() -> &'static str {
-    option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000")
+    option_env!("SEPPYL_API_URL").unwrap_or(if cfg!(debug_assertions) {
+        "http://127.0.0.1:3000"
+    } else {
+        "/api"
+    })
 }
 pub fn image_src(url: &str) -> String {
     if url.starts_with('/') { format!("{}{}", api_base(), url) } else { url.to_owned() }

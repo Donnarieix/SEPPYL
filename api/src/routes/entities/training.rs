@@ -388,6 +388,7 @@ pub async fn add_material(
         return Err(StatusCode::BAD_REQUEST);
     }
     if let Some(catalog_id) = activity.catalog_id {
+        catalog::writable(&claims,&state,catalog_id).await?;
         let material = catalog_material::ActiveModel {
             id: Set(Uuid::new_v4()),
             activity_id: Set(catalog_id),
@@ -415,6 +416,7 @@ pub async fn remove_material(
 ) -> Result<StatusCode, ApiError> {
     let activity = owned_activity(&claims, &state, training_id, activity_id).await?;
     if let Some(catalog_id) = activity.catalog_id {
+        catalog::writable(&claims,&state,catalog_id).await?;
         let item = catalog_material::Entity::find_by_id(material_id)
             .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?

@@ -12,10 +12,10 @@ pub struct Material { pub id:String, pub activity_id:String, pub name:String, pu
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Activity {
     pub id: String, pub user_id:String, pub name:String, pub description:String,
-    pub image_url:Option<String>, pub description_html:Option<String>, pub materials:Vec<Material>,
+    pub image_url:Option<String>, pub description_html:Option<String>, pub team_id:Option<String>, pub materials:Vec<Material>,
 }
 #[derive(Serialize)]
-struct Payload<'a> { name:&'a str, description:&'a str, description_html:Option<&'a str>, image_url:Option<&'a str> }
+struct Payload<'a> { name:&'a str, description:&'a str, description_html:Option<&'a str>, image_url:Option<&'a str>, team_id:Option<&'a str> }
 #[derive(Serialize)]
 struct MaterialPayload<'a> { name:&'a str, quantity:i32 }
 #[derive(Serialize)]
@@ -43,11 +43,11 @@ pub async fn list(token:&str)->Result<Vec<Activity>,String> {
 struct CreatedActivity { id: String }
 
 /// Return the canonical activity ID, including when creating from the spreadsheet.
-pub async fn upsert(token:&str,id:Option<&str>,name:&str,description:&str,description_html:Option<&str>,image_url:Option<&str>)->Result<String,String>{
+pub async fn upsert(token:&str,id:Option<&str>,name:&str,description:&str,description_html:Option<&str>,image_url:Option<&str>,team_id:Option<&str>)->Result<String,String>{
     let client=Client::new();
     let url=match id {Some(id)=>format!("{}/catalog/{id}",api_base()),None=>format!("{}/catalog",api_base())};
     let request=if id.is_some() {client.put(url)} else {client.post(url)};
-    let response=request.bearer_auth(token).json(&Payload{name,description,description_html,image_url})
+    let response=request.bearer_auth(token).json(&Payload{name,description,description_html,image_url,team_id})
         .send().await.map_err(|e|e.to_string())?;
     if !response.status().is_success() {
         check(response).await?;

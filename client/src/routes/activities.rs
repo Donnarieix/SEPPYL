@@ -176,6 +176,20 @@ pub fn ActivityEditor(
     let mut name=use_signal(||activity.as_ref().map(|a|a.name.clone()).unwrap_or_default());
     let mut description=use_signal(||activity.as_ref().map(|a|a.description.clone()).unwrap_or_default());
     let mut description_html=use_signal(||activity.as_ref().and_then(|a|a.description_html.clone()));
+    let mut team_id=use_signal(||activity.as_ref().and_then(|a|a.team_id.clone()).unwrap_or_default());
+    let team_token=token.clone();
+    let available_teams=use_resource(move ||{
+        let token=team_token.clone();
+        async move{
+            let mut teams=Vec::new();
+            for club in organization::clubs(&token).await?{
+                for team in organization::teams(&token,&club.id).await?{
+                    teams.push((team.id,format!("{} · {}",club.name,team.name)));
+                }
+            }
+            Ok::<Vec<(String,String)>,String>(teams)
+        }
+    });
     let mut image=use_signal(||activity.as_ref().and_then(|a|a.image_url.clone()).unwrap_or_default());
     let mut busy=use_signal(||false);
     let mut uploading=use_signal(||false);
@@ -198,12 +212,13 @@ pub fn ActivityEditor(
                         let n=name.read().trim().to_string();
                         let d=description.read().clone();
                         let html=description_html.read().clone();
+                        let selected_team=team_id.read().clone();
                         let i=image.read().trim().to_string();
                         if n.is_empty(){error.set(Some("Le nom de l'activité est obligatoire.".into()));return;}
                         let token=token_for_submit.clone();let id=id.clone();
                         busy.set(true);
                         spawn(async move{
-                            match catalog::upsert(&token,id.as_deref(),&n,&d,html.as_deref(),if i.is_empty(){None}else{Some(&i)}).await{
+                            match catalog::upsert(&token,id.as_deref(),&n,&d,html.as_deref(),if i.is_empty(){None}else{Some(&i)},if selected_team.is_empty(){None}else{Some(&selected_team)}).await{
                                 Ok(id)=>on_saved.call(id),
                                 Err(e)=>{error.set(Some(e.clone()));on_error.call(e);}
                             }
@@ -214,6 +229,16 @@ pub fn ActivityEditor(
                         div{class:"field",
                             label{"Nom de l'activité"}
                             input{value:"{name}",required:true,maxlength:"150",oninput:move |e|name.set(e.value())}
+                        }
+                        div{class:"field",
+                            label{"Bibliothèque partagée"}
+                            select{value:"{team_id}",onchange:move |e|team_id.set(e.value()),
+                                option{value:"","Activité personnelle"}
+                                if let Some(Ok(teams))=available_teams.read().clone(){
+                                    for (id,label) in teams{option{value:"{id}","{label}"}}
+                                }
+                            }
+                            small{"Une activité liée à une équipe est visible par ses membres."}
                         }
                         div{class:"field",
                             label{"Description et consignes"}

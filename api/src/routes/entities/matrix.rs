@@ -213,6 +213,7 @@ pub async fn create_matrix_activity(
         description: String::new(),
         description_html: None,
         image_url: None,
+        team_id: None,
     }).await?;
     entities::catalog_selection::ActiveModel {
         user_id: Set(claims.sub),
@@ -316,7 +317,8 @@ mod shared_catalog_tests {
                 name: "Circuit corrigé".into(),
                 description: "Nouvelle consigne".into(),
                 description_html: None,
-                image_url: None
+                image_url: None,
+                team_id: None
             })
         ).await.unwrap();
         let training_detail = training::get(

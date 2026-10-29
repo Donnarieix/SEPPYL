@@ -1,4 +1,4 @@
-//! Shared activity library. All mutations are scoped to the authenticated owner.
+//! Activity library. Personal definitions remain private; team definitions are shared only with their assigned team.
 use axum::{
     Extension, Json, body::Bytes, extract::{Path, State},
     http::{StatusCode, header, HeaderMap}, response::IntoResponse,
@@ -6,7 +6,7 @@ use axum::{
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::authentication::login::Claims, state::AppState};
+use crate::{entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::{authentication::login::Claims,entities::organization}, state::AppState};
 
 #[derive(Serialize)]
 pub struct CatalogEntry {
@@ -20,6 +20,7 @@ pub struct ActivityPayload {
     pub description: String,
     pub description_html: Option<String>,
     pub image_url: Option<String>,
+    pub team_id: Option<Uuid>,
 }
 #[derive(Deserialize)]
 pub struct MaterialPayload {
@@ -44,18 +45,44 @@ pub fn valid_payload(body: &ActivityPayload) -> bool {
 pub async fn owned(
     claims: &Claims, state: &AppState, id: Uuid
 ) -> Result<catalog_activity::Model, StatusCode> {
-    catalog_activity::Entity::find_by_id(id)
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+    let item=catalog_activity::Entity::find_by_id(id)
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if item.user_id==claims.sub{return Ok(item);}
+    let role=organization::user_role(state,claims.sub).await?;
+    if let Some(team_id)=item.team_id {
+        if organization::can_read_team(state,claims,role,team_id).await?{return Ok(item);}
+    }
+    Err(StatusCode::NOT_FOUND)
+}
+pub async fn writable(claims:&Claims,state:&AppState,id:Uuid)
+    ->Result<catalog_activity::Model,StatusCode>{
+    let item=owned(claims,state,id).await?;
+    let role=organization::user_role(state,claims.sub).await?;
+    if !role.can_write(){return Err(StatusCode::FORBIDDEN);}
+    if let Some(team_id)=item.team_id {
+        if !organization::can_write_team(state,claims,role,team_id).await?{
+            return Err(StatusCode::NOT_FOUND);
+        }
+    } else if item.user_id!=claims.sub && role!=crate::middleware::Role::Administrator {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(item)
 }
 pub async fn insert(
     claims: &Claims, state: &AppState, body: ActivityPayload
 ) -> Result<catalog_activity::Model, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
+    if let Some(team_id)=body.team_id {
+        let role=organization::user_role(state,claims.sub).await?;
+        if !role.can_write() || !organization::can_write_team(state,claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     catalog_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(body.team_id),
         name: Set(body.name.trim().into()),
         description: Set(body.description),
         description_html: Set(body.description_html.map(|html| ammonia::clean(&html))),
@@ -68,9 +95,17 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CatalogEntry>>, StatusCode> {
-    let activities = catalog_activity::Entity::find()
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let all=catalog_activity::Entity::find().all(&state.db)
+        .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let role=organization::user_role(&state,claims.sub).await?;
+    let mut activities=Vec::new();
+    for activity in all {
+        let visible=if activity.user_id==claims.sub {true}
+        else if let Some(team_id)=activity.team_id {
+            organization::can_read_team(&state,&claims,role,team_id).await?
+        } else {false};
+        if visible {activities.push(activity);}
+    }
     let ids: Vec<Uuid> = activities.iter().map(|a| a.id).collect();
     let materials = if ids.is_empty() { Vec::new() } else {
         catalog_material::Entity::find()
@@ -94,8 +129,15 @@ pub async fn update(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>, Json(body): Json<ActivityPayload>
 ) -> Result<StatusCode, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
-    let activity = owned(&claims, &state, id).await?;
+    let activity = writable(&claims, &state, id).await?;
+    if let Some(team_id)=body.team_id {
+        let role=organization::user_role(&state,claims.sub).await?;
+        if !organization::can_write_team(&state,&claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     let mut active: catalog_activity::ActiveModel = activity.into();
+    if let Some(team_id)=body.team_id {active.team_id=Set(Some(team_id));}
     active.name = Set(body.name.trim().into());
     active.description = Set(body.description);
     // Older clients that omit rich HTML should not erase existing formatting.
@@ -110,7 +152,7 @@ pub async fn update(
 pub async fn delete(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>
 ) -> Result<StatusCode, StatusCode> {
-    let item = owned(&claims, &state, id).await?;
+    let item = writable(&claims, &state, id).await?;
     // Do not orphan existing training and spreadsheet results.
     let in_training = training_activity::Entity::find()
         .filter(training_activity::COLUMN.catalog_id.eq(id))
@@ -138,7 +180,7 @@ pub async fn add_material(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path(id): Path<Uuid>, Json(body): Json<MaterialPayload>,
 ) -> Result<(StatusCode, Json<catalog_material::Model>), StatusCode> {
-    owned(&claims, &state, id).await?;
+    writable(&claims, &state, id).await?;
     if body.name.trim().is_empty() || body.name.len() > 150 || !(1..=100000).contains(&body.quantity) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -267,7 +309,8 @@ mod richer_catalog_tests {
             Json(ActivityPayload{
                 name:"Passes".into(),description:"Consignes".into(),
                 description_html:Some("<p><strong>Passes</strong></p>".into()),
-                image_url:None
+                image_url:None,
+                team_id:None
             })).await.unwrap();
         assert_eq!(activity.0.description_html.as_deref(),Some("<p><strong>Passes</strong></p>"));
         let id=activity.0.id;

@@ -216,7 +216,6 @@ pub async fn get(
     for activity in &mut activities {
         let Some(catalog_id) = activity.catalog_id else { continue; };
         let Some(definition) = catalog_activity::Entity::find_by_id(catalog_id)
-            .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else { continue };
         activity.name = definition.name;
         activity.description = definition.description;
@@ -275,6 +274,7 @@ pub async fn add_activity(
         description: body.description.clone(),
         description_html: None,
         image_url: body.image_url.clone(),
+        team_id: access_training(&claims,&state,id,true).await?.team_id,
     }).await?;
     let new = training_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -298,6 +298,11 @@ pub async fn attach_catalog(
 ) -> Result<(StatusCode, String), ApiError> {
     owned_training(&claims, &state, id).await?;
     let def = catalog::owned(&claims, &state, catalog_id).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    // Do not attach a catalog entry shared with some other team.
+    if let Some(activity_team)=def.team_id {
+        if training.team_id!=Some(activity_team) {return Err(StatusCode::FORBIDDEN);}
+    }
     let existing = training_activity::Entity::find()
         .filter(training_activity::COLUMN.training_id.eq(id))
         .filter(training_activity::COLUMN.catalog_id.eq(catalog_id))

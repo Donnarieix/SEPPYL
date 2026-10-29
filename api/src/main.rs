@@ -22,6 +22,7 @@ use crate::{
             matrix::{create_matrix_activity, get_matrix, update_matrix_result, select_activity},
             catalog,
             club,
+            tactics,
             training,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
@@ -78,6 +79,9 @@ async fn main() {
         .route("/catalog/{id}/materials", post(catalog::add_material))
         .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material).put(catalog::update_material))
         .route("/catalog/upload", post(catalog::upload_image).layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)))
+        .route("/tactics",get(tactics::library).post(tactics::create_board))
+        .route("/tactics/folders",post(tactics::create_folder))
+        .route("/tactics/{id}",put(tactics::save_board).delete(tactics::delete_board))
         .route("/clubs",get(club::list).post(club::create_club))
         .route("/clubs/{club_id}/teams",post(club::create_team))
         .route("/clubs/{club_id}/members",put(club::assign_club))
@@ -100,6 +104,7 @@ async fn main() {
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))
+        .route("/public/tactics/{id}",get(tactics::public_board))
         .merge(protected)
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Apply CORS after merging, so it covers protected routes too.

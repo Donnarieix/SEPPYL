@@ -4,3 +4,4 @@ pub mod player;
 pub mod training;
 pub mod catalog;
 pub mod club;
+pub mod tactics;

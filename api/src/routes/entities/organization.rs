@@ -190,3 +190,48 @@ pub async fn grant_global_role(
     tracing::warn!(actor=%claims.sub, target=%user_id, action="role.global.change");
     Ok(StatusCode::NO_CONTENT)
 }
+
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use sea_orm::Database;
+
+    #[tokio::test]
+    async fn club_and_team_memberships_are_scoped() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let admin_id=Uuid::new_v4();
+        let trainer_id=Uuid::new_v4();
+        let stranger_id=Uuid::new_v4();
+        for (id,name,role) in [(admin_id,"admin","administrator"),(trainer_id,"coach","user"),(stranger_id,"other","user")] {
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let admin=Claims{sub:admin_id,exp:u64::MAX};
+        let coach=Claims{sub:trainer_id,exp:u64::MAX};
+        let stranger=Claims{sub:stranger_id,exp:u64::MAX};
+        let denied=create_club(Extension(coach.clone()),Extension(CurrentRole(Role::User)),
+            State(state.clone()),Json(CreateNamed{name:"Club".into()})).await;
+        assert!(matches!(denied,Err(StatusCode::FORBIDDEN)));
+        let (_,club)=create_club(Extension(admin.clone()),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Json(CreateNamed{name:"Club".into()})).await.unwrap();
+        let club_id=club.0.id;
+        let (_,team)=create_team(Extension(admin.clone()),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Path(club_id),Json(CreateNamed{name:"Équipe U16".into()})).await.unwrap();
+        let team_id=team.0.id;
+        assert!(!can_access_club(&state,&stranger,Role::User,club_id).await.unwrap());
+        grant_team_membership(
+            Extension(admin.clone()),Extension(CurrentRole(Role::Administrator)),State(state.clone()),
+            Path((team_id,trainer_id)),Json(GrantMembership{role:"trainer".into()})
+        ).await.unwrap();
+        assert!(can_access_club(&state,&coach,Role::User,club_id).await.unwrap());
+        assert!(can_write_team(&state,&coach,Role::User,team_id).await.unwrap());
+        assert!(!can_write_team(&state,&stranger,Role::User,team_id).await.unwrap());
+        let visible=list_clubs(Extension(coach),Extension(CurrentRole(Role::User)),State(state)).await.unwrap().0;
+        assert_eq!(visible.len(),1);
+    }
+}

@@ -29,6 +29,8 @@ use crate::{
     state::AppState,
 };
 
+mod access;
+mod audit;
 mod entities;
 mod middleware;
 mod routes;
@@ -84,7 +86,8 @@ async fn main() {
         .route("/trainings/{id}/activities/{activity_id}/materials/{material_id}", delete(training::remove_material))
         .route("/trainings/{id}/attendance", put(training::set_attendance))
         .route("/trainings/{id}/scores", put(training::set_score))
-        .route_layer(axum_middleware::from_fn(auth));
+        .route_layer(axum_middleware::from_fn_with_state(state.clone(), audit::record))
+        .route_layer(axum_middleware::from_fn_with_state(state.clone(), auth));
 
     let app = Router::new()
         .route("/health", get(health))

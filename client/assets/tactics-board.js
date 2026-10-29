@@ -16,6 +16,7 @@
     catch (_) { drawing = null; }
     if (!drawing || !Array.isArray(drawing.markers) || !Array.isArray(drawing.arrows))
       drawing = { pitch: "football", markers: [], arrows: [] };
+    const readonly=root.getAttribute("data-readonly")==="true";
     let tool = "player";
     let drag = null;
     let pointerStart = null;
@@ -83,7 +84,7 @@
     }
 
     canvas.addEventListener("pointerdown", event => {
-      if(event.button!==0)return;
+      if(readonly||event.button!==0)return;
       canvas.setPointerCapture(event.pointerId);
       pointerStart=pos(event);
       if(tool==="select"){
@@ -97,7 +98,7 @@
       render();
     });
     canvas.addEventListener("pointerup", event => {
-      if(!pointerStart)return;
+      if(readonly||!pointerStart)return;
       const end=pos(event);
       if(tool==="arrow" && Math.hypot(end.x-pointerStart.x,end.y-pointerStart.y)>.025)
         drawing.arrows.push({x1:pointerStart.x,y1:pointerStart.y,x2:end.x,y2:end.y});

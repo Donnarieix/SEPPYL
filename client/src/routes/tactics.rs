@@ -248,3 +248,39 @@ pub fn TacticEditor(
         }
     }
 }
+
+
+/// Explicitly published, read-only diagrams are the only resource available to visitors.
+#[component]
+pub fn TacticsPublic(id:String)->Element{
+    let fetch_id=id.clone();
+    let board=use_resource(move||{
+        let id=fetch_id.clone();
+        async move{tactics::public_get(&id).await}
+    });
+    rsx!{
+        main { class:"page tactics-page",
+            div { class:"page-heading",
+                div {
+                    h1 { "Schéma tactique public" }
+                    p { "Consultation sans compte. Le schéma ne peut pas être modifié ici." }
+                }
+                Link { to:Route::Login {},class:"button outline","Se connecter" }
+            }
+            match board.read().clone(){
+                Some(Ok(board))=>rsx!{
+                    section { class:"tactic-edit-page",
+                        h2 { "{board.name}" }
+                        div { class:"tactic-canvas-shell","data-tactics-editor":"true",
+                            "data-initial":"{board.content}",
+                            "data-readonly":"true",
+                            canvas { "data-tactic-canvas":"true",width:"960",height:"600","aria-label":"Schéma tactique public" }
+                        }
+                    }
+                },
+                Some(Err(e))=>rsx!{p{class:"form-error",role:"alert","{e}"}},
+                None=>rsx!{p{"Chargement…"}},
+            }
+        }
+    }
+}

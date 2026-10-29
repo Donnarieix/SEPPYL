@@ -20,7 +20,7 @@ use training_print::TrainingPrint;
 use trainings::Trainings;
 use players::Players;
 use activities::Activities;
-use tactics::TacticsPage;
+use tactics::{TacticsPage,TacticsPublic};
 use account::AccountPage;
 
 #[derive(Routable, Clone, PartialEq)]
@@ -33,6 +33,8 @@ pub enum Route {
     Players {},
     #[route("/activities")]
     Activities {},
+    #[route("/public/tactics/:id")]
+    TacticsPublic {id:String},
     #[route("/tactics")]
     TacticsPage {},
     #[route("/settings")]

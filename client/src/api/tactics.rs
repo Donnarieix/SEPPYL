@@ -38,3 +38,10 @@ pub async fn delete(token:&str,id:&str)->Result<(),String>{
        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     if resp.status().is_success(){Ok(())}else{Err(format!("Suppression refusée (HTTP {}).",crate::session::observe_status(resp.status())))}
 }
+
+pub async fn public_get(id:&str)->Result<Board,String>{
+    let response=Client::new().get(format!("{}/public/tactics/{id}",base()))
+        .send().await.map_err(|e|e.to_string())?;
+    if !response.status().is_success(){return Err("Schéma introuvable ou privé.".into())}
+    response.json::<Board>().await.map_err(|e|e.to_string())
+}

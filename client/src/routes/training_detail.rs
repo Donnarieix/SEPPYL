@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use crate::api::trainings::{self, Activity, Detail, Material};
 use crate::api::catalog;
 use crate::api::preferences::{self, AttendanceView};
-use super::{Route, dialogs::PlayerDialog, layout::Header};
+use super::{Route, dialogs::PlayerDialog, layout::Header,rich_editor::RichEditor};
 
 
 /// Move an existing entry before the target. No-op for invalid or equal IDs.
@@ -529,9 +529,10 @@ fn Preparation(
                         }
                         div { class: "field",
                             label { "Déroulement et consignes" }
-                            textarea { value: "{description}", rows: "5", maxlength: "20000",
-                                placeholder: "Objectifs, consignes, durée, organisation…",
-                                oninput: move |e| description.set(e.value()) }
+                            RichEditor {
+                                initial: String::new(),
+                                on_change:move |html:String|description.set(html),
+                            }
                         }
                         div { class: "field",
                             label { "Lien vers une image (facultatif)" }
@@ -708,7 +709,7 @@ fn ActivityCard(
                 }
             }
             if !activity.description.trim().is_empty() {
-                p { class: "exercise-description", "{activity.description}" }
+                div { class: "exercise-description rich-render", dangerous_inner_html: "{activity.description}" }
             }
             if let Some(url) = activity.image_url.as_ref() {
                 img { class: "exercise-image", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }

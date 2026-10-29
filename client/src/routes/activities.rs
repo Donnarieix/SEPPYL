@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::catalog::{self, Activity};
-use super::{Route,layout::Header};
+use super::{Route,layout::Header,rich_editor::RichEditor};
 
 #[component]
 pub fn Activities()->Element{
@@ -73,7 +73,7 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
             div{class:"catalog-content",
                 h2{"{activity.name}"}
                 if !activity.description.is_empty(){
-                    p{class:"catalog-description","{activity.description}"}
+                    div{class:"catalog-description rich-render",dangerous_inner_html:"{activity.description}"}
                 }else{p{class:"catalog-description empty","Aucune description"}}
                 div{class:"catalog-equipment",
                     strong{"Matériel"}
@@ -273,7 +273,10 @@ pub fn ActivityEditor(
                         }
                         div{class:"field",
                             label{"Description et consignes"}
-                            textarea{rows:"5",maxlength:"20000",value:"{description}",oninput:move |e|description.set(e.value())}
+                            RichEditor {
+                                initial:activity.as_ref().map(|a|a.description.clone()).unwrap_or_default(),
+                                on_change:move |html:String|description.set(html),
+                            }
                         }
                         div{class:"field",
                             label{"Image de couverture"}

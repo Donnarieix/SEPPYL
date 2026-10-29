@@ -7,3 +7,4 @@ pub mod preferences;
 pub mod account;
 pub mod tactics;
 pub mod organization;
+pub mod audit;

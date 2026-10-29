@@ -67,6 +67,9 @@ pub fn AccountPage() -> Element {
                     Link { to: Route::Organization {}, class: "button outline",
                         "Gérer les clubs, les équipes et les droits d'accès" }
                 }
+                div{class:"settings-organization-link",
+                    Link{to:Route::AuditLog{},class:"button outline","Journal des opérations (administrateurs)"}
+                }
                 nav { class: "settings-tabs", role: "tablist", "aria-label": "Rubriques du compte",
                     button {
                         class: if active_tab.read().as_str() == "appearance" { "settings-tab active" } else { "settings-tab" },

@@ -1478,3 +1478,10 @@ button.grid-add-button:hover,
     .organization-form > .field,.organization-form > input { flex-basis:auto;width:100%; }
     .organization-user { gap:8px;padding:12px; }
 }
+
+.audit-table-wrap{overflow-x:auto;}
+.audit-table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;}
+.audit-table th,.audit-table td{border-bottom:1px solid var(--line);padding:13px 16px;text-align:left;color:var(--text);}
+.audit-table th{background:var(--surface-soft);font-size:11px;color:var(--muted);}
+.audit-table code{font-size:10px;}
+.audit-table tbody tr:hover{background:var(--surface-hover);}

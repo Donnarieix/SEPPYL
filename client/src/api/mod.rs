@@ -5,3 +5,4 @@ pub mod catalog;
 pub mod players;
 pub mod preferences;
 pub mod account;
+pub mod tactics;

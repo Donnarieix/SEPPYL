@@ -80,6 +80,7 @@ async fn main() {
         .route("/trainings", get(training::list).post(training::create))
         .route("/trainings/{id}", get(training::get).put(training::update))
         .route("/trainings/{id}/activities", post(training::add_activity))
+        .route("/trainings/{id}/activities/order", put(training::reorder_activities))
         .route("/trainings/{id}/catalog/{catalog_id}", post(training::attach_catalog))
         .route("/trainings/{id}/activities/{activity_id}", delete(training::remove_activity))
         .route("/trainings/{id}/activities/{activity_id}/materials", post(training::add_material))

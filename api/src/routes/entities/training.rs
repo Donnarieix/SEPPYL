@@ -289,6 +289,38 @@ pub async fn attach_catalog(
     Ok((StatusCode::CREATED, linked.id.to_string()))
 }
 
+
+#[derive(Deserialize)]
+pub struct ReorderActivities { pub activity_ids: Vec<Uuid> }
+
+/// Atomic reorder; rejects omitted/duplicated/foreign exercise IDs.
+pub async fn reorder_activities(
+    Extension(claims):Extension<Claims>,
+    State(state):State<AppState>,
+    Path(id):Path<Uuid>,
+    Json(body):Json<ReorderActivities>,
+)->Result<StatusCode,ApiError>{
+    owned_training(&claims,&state,id).await?;
+    let activities=training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let original:HashSet<Uuid>=activities.iter().map(|a|a.id).collect();
+    let submitted:HashSet<Uuid>=body.activity_ids.iter().copied().collect();
+    if original.len()!=body.activity_ids.len() || submitted!=original{
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let transaction=state.db.begin().await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (index,activity_id) in body.activity_ids.iter().enumerate(){
+        let activity=activities.iter().find(|a|a.id==*activity_id)
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let mut active:training_activity::ActiveModel=activity.clone().into();
+        active.sort_order=Set(index as i32);
+        active.update(&transaction).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    transaction.commit().await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn remove_activity(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,

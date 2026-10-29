@@ -22,6 +22,8 @@ pub fn AccountPage() -> Element {
         }
     });
 
+    let admin_request=account_data.read().clone();
+    let is_admin=matches!(admin_request,Some(Ok(ref user)) if user.role=="administrator");
     let mut username = use_signal(|| None::<String>);
     let mut current_password = use_signal(String::new);
     let mut new_password = use_signal(String::new);
@@ -63,12 +65,12 @@ pub fn AccountPage() -> Element {
                         p { "Informations personnelles et préférences d'utilisation." }
                     }
                 }
-                div { class: "settings-organization-link",
-                    Link { to: Route::Organization {}, class: "button outline",
-                        "Gérer les clubs, les équipes et les droits d'accès" }
-                }
-                div{class:"settings-organization-link",
-                    Link{to:Route::AuditLog{},class:"button outline","Journal des opérations (administrateurs)"}
+                div{class:"account-quick-links",
+                    Link{to:Route::Organization{},class:"button outline","Mon club"}
+                    if is_admin{
+                        Link{to:Route::Administration{},class:"button outline","Administration"}
+                        Link{to:Route::AuditLog{},class:"button outline","Journal d'audit"}
+                    }
                 }
                 nav { class: "settings-tabs", role: "tablist", "aria-label": "Rubriques du compte",
                     button {

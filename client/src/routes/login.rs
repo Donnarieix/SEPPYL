@@ -65,12 +65,12 @@ pub fn Login() -> Element {
                     disabled: *busy.read(),
                     onclick: move |_| {
                         error.set(None);
-                        let next = !*is_registration.read();
-                        is_registration.set(next);
+                        is_registration.set(!*is_registration.read());
                     },
-                    Link { to: crate::routes::Route::PublicDirectory {}, class:"registration-toggle", "Explorer les clubs publics sans compte" }
-                if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
+                    if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
                 }
+                Link { to: crate::routes::Route::PublicDirectory {},
+                    class:"public-login-link","Explorer les clubs publics sans compte" }
                 if *is_registration.read() {
                     p { class: "registration-note", "Après inscription, votre compte est en lecture seule jusqu’à son rattachement à un club ou une équipe et l’attribution des droits adaptés." }
                 }

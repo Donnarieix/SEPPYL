@@ -46,14 +46,15 @@ pub fn TrainingPrint(id: String) -> Element {
                         for (index, activity) in detail.activities.iter().enumerate() {
                             article { class: "print-activity", key: "{activity.id}",
                                 h3 { "{index + 1}. {activity.name}" }
+                                if let Some(url) = activity.image_url.as_ref() {
+                                    img { class: "print-picture", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }
+                                }
                                 if let Some(html)=activity.description_html.as_deref() {
                                     div { class: "preformatted rich-description", dangerous_inner_html: html }
                                 } else if !activity.description.trim().is_empty() {
                                     p { class: "preformatted", "{activity.description}" }
                                 }
-                                if let Some(url) = activity.image_url.as_ref() {
-                                    img { class: "print-picture", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }
-                                }
+
                                 {
                                     let materials: Vec<_> = detail.materials.iter()
                                         .filter(|m| m.activity_id == activity.id).collect();

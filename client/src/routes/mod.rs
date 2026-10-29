@@ -13,6 +13,8 @@ mod account;
 mod rich_editor;
 mod tactics;
 mod organization;
+mod administration;
+mod membership;
 mod public_directory;
 mod audit;
 
@@ -26,6 +28,7 @@ use activities::Activities;
 use account::AccountPage;
 use tactics::Tactics;
 use organization::Organization;
+use administration::Administration;
 use public_directory::PublicDirectory;
 use audit::AuditLog;
 
@@ -41,8 +44,10 @@ pub enum Route {
     Activities {},
     #[route("/tactics")]
     Tactics {},
-    #[route("/organization")]
+    #[route("/club")]
     Organization {},
+    #[route("/admin")]
+    Administration {},
     #[route("/audit")]
     AuditLog {},
     #[route("/settings")]

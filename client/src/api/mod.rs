@@ -6,3 +6,4 @@ pub mod players;
 pub mod preferences;
 pub mod account;
 pub mod tactics;
+pub mod organization;

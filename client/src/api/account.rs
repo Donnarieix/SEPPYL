@@ -9,6 +9,7 @@ pub struct Account {
     pub id: String,
     pub username: String,
     pub provider: String,
+    pub role: String,
 }
 
 #[derive(Serialize)]

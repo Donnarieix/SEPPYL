@@ -39,7 +39,7 @@ pub fn Players() -> Element {
             Header{}
             main{class:"page",
                 div{class:"page-heading",
-                    div{h1{"Joueuses"} p{"Fiches accessibles : effectifs de vos équipes et fiches personnelles historiques."}}
+                    div{h1{"Joueuses"} p{"Retrouvez les joueuses de vos équipes et les fiches de votre espace personnel."}}
                     div{class:"heading-actions",
                         Link{to:Route::Organization{},class:"button outline","Effectifs par équipe"}
                         button{class:"button solid",onclick:move |_|adding.set(true),"+ Ajouter une joueuse"}

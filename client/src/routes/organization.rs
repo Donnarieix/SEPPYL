@@ -261,7 +261,7 @@ pub fn Organization()->Element{
                                                 on_saved:move |_|{roster.restart();own_players.restart();notice.set(Some("Joueuse créée dans l’équipe.".into()));},
                                                 on_error:move |error|notice.set(Some(error))}
                                         }else{
-                                            p{class:"workspace-hint","La liste ci-dessous inclut les joueuses de tes équipes accessibles et les anciennes fiches personnelles. Une fiche ne doit être créée qu’une seule fois."}
+                                            p{class:"workspace-hint","Sélectionnez une joueuse existante pour l'ajouter à cette équipe sans créer de doublon."}
                                         form{class:"workspace-form",
                                             onsubmit:{
                                                 let token=token.clone();

@@ -105,34 +105,50 @@ pub fn Organization()->Element{
                 if let Some(message)=notice.read().as_ref(){
                     div{class:"inline-notice",role:"status","{message}"}
                 }
-                div{class:"workspace-context",
-                    div{class:"field",
-                        label{"Club"}
-                        select{
-                            value:"{club_id}",
-                            onchange:move |e|{
-                                club_id.set(e.value());
-                                team_id.set(String::new());
-                                tab.set("overview".into());
-                            },
-                            option{value:"","Sélectionner un club"}
+                div{class:"club-layout",
+                    aside{class:"club-sidebar",
+                        div{class:"club-sidebar-heading",
+                            strong{"Mes clubs"}
+                            span{class:"club-sidebar-count","{clubs_list.len()}"}
+                        }
+                        nav{class:"club-sidebar-list","aria-label":"Choisir un club",
                             for club in &clubs_list{
-                                option{key:"{club.id}",value:"{club.id}","{club.name}"}
+                                button{
+                                    key:"{club.id}",
+                                    class:if *club_id.read()==club.id{"club-sidebar-item active"}else{"club-sidebar-item"},
+                                    "aria-current":if *club_id.read()==club.id{"page"}else{"false"},
+                                    onclick:{
+                                        let id=club.id.clone();
+                                        move |_|{
+                                            club_id.set(id.clone());
+                                            team_id.set(String::new());
+                                            tab.set("overview".into());
+                                            notice.set(None);
+                                        }
+                                    },
+                                    span{class:"club-sidebar-avatar","{club.name.chars().next().unwrap_or('C').to_uppercase()}"}
+                                    span{class:"club-sidebar-name","{club.name}"}
+                                }
                             }
                         }
-                    }
-                    div{class:"field",
-                        label{"Équipe"}
-                        select{
-                            value:"{team_id}",disabled:club_id.read().is_empty(),
-                            onchange:move |e|team_id.set(e.value()),
-                            option{value:"","Toutes les équipes"}
-                            for team in &teams_list{
-                                option{key:"{team.id}",value:"{team.id}","{team.name}"}
-                            }
+                        if clubs_list.is_empty(){
+                            p{class:"club-sidebar-empty","Aucun club associé à ce compte."}
                         }
                     }
-                }
+                    div{class:"club-main",
+                        div{class:"club-main-toolbar",
+                            div{class:"field",
+                                label{"Équipe"}
+                                select{
+                                    value:"{team_id}",disabled:club_id.read().is_empty(),
+                                    onchange:move |e|team_id.set(e.value()),
+                                    option{value:"","Toutes les équipes"}
+                                    for team in &teams_list{
+                                        option{key:"{team.id}",value:"{team.id}","{team.name}"}
+                                    }
+                                }
+                            }
+                        }
                 if club_id.read().is_empty(){
                     div{class:"workspace-empty",
                         h2{"Sélectionnez un club"}
@@ -221,6 +237,7 @@ pub fn Organization()->Element{
                                     }
                                 }
                             }else{
+                                div{class:"club-roster-grid",
                                 section{class:"panel",
                                     div{class:"panel-head",
                                         div{h2{"Joueuses de l'équipe"}p{"Effectif partagé entre les entraîneurs de cette équipe. Les présences et notes sont liées à ces joueuses."}}
@@ -315,6 +332,7 @@ pub fn Organization()->Element{
                                         }
                                     }
                                 }
+                                }
                             }
                         }else if *tab.read()=="teams" && can_manage{
                             section{class:"panel",
@@ -403,6 +421,8 @@ pub fn Organization()->Element{
                                 }
                             }
                         }
+                    }
+                }
                     }
                 }
             }

@@ -45,6 +45,7 @@ fn App() -> Element {
         document::Stylesheet { href: asset!("/assets/main.css") }
         document::Script { src: asset!("/assets/theme-transition.js") }
         document::Script { src: asset!("/assets/auth-guard.js") }
+        document::Script { src: asset!("/assets/rich-editor.js") }
         div {
             class: "site-root",
             "data-theme": initial_theme.as_str(),

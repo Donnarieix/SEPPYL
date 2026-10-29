@@ -10,6 +10,7 @@ mod trainings;
 mod players;
 mod activities;
 mod account;
+mod rich_editor;
 
 use home::Home;
 use login::Login;

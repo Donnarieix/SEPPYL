@@ -73,8 +73,11 @@ pub async fn get_matrix(
         .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let selected_ids: Vec<Uuid> = selection.iter().map(|s| s.activity_id).collect();
     let catalog_activities = if selected_ids.is_empty() { Vec::new() } else {
+        let accessible = crate::access::teams_for(&state,claims.sub,false).await?;
         entities::catalog_activity::Entity::find()
-            .filter(entities::catalog_activity::COLUMN.user_id.eq(claims.sub))
+            .filter(sea_orm::Condition::any()
+                .add(entities::catalog_activity::COLUMN.team_id.is_in(accessible))
+                .add(entities::catalog_activity::COLUMN.user_id.eq(claims.sub)))
             .filter(entities::catalog_activity::COLUMN.id.is_in(selected_ids))
             .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
@@ -126,11 +129,15 @@ pub async fn update_matrix_result(
     if !players.iter().any(|player| player.id == payload.player_id) {
         return Err(StatusCode::FORBIDDEN);
     }
+    crate::services::player::assert_writable_player(&claims,&state,payload.player_id).await?;
 
-    let catalog = entities::catalog_activity::Entity::find_by_id(payload.activity_id)
-        .filter(entities::catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if catalog.is_some() {
+    let catalog=entities::catalog_activity::Entity::find_by_id(payload.activity_id)
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    if catalog.is_some(){
+        // A selected team activity may be edited only by a coach/manager/admin
+        // who can write to the owning team (and to the selected player's team).
+        crate::routes::entities::catalog::writable(&claims,&state,payload.activity_id).await?;
+        crate::services::player::assert_writable_player(&claims,&state,payload.player_id).await?;
         let selected = entities::catalog_selection::Entity::find_by_id((claims.sub, payload.activity_id))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if selected.is_none() { return Err(StatusCode::FORBIDDEN); }

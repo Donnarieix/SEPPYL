@@ -1,15 +1,14 @@
 use axum::{
     extract::{Request, State},
-    http::{Method, StatusCode, header::AUTHORIZATION},
+    http::{Method, StatusCode, header::{AUTHORIZATION,CONTENT_LENGTH}},
+    body::{Body,to_bytes},
     middleware::Next,
     response::Response,
 };
 use jsonwebtoken::{DecodingKey, Validation};
-use sea_orm::{EntityTrait,ActiveModelTrait,ActiveValue::Set};
-use std::time::{SystemTime,UNIX_EPOCH};
-use uuid::Uuid;
+use sea_orm::EntityTrait;
 
-use crate::{entities::{user,audit_event}, routes::authentication::login::Claims, state::AppState};
+use crate::{audit,entities::user, routes::authentication::login::Claims, state::AppState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role { Visitor, User, Trainer, Manager, Administrator }
@@ -69,30 +68,29 @@ pub async fn auth(
     }
 
     let actor = data.claims.sub;
+    // Only inspect small JSON creations that do not expose their team ID in
+    // the URL. Restore the exact body for Axum's real handler afterwards.
+    let mut payload = None;
+    if mutation && (path == "/trainings" || path == "/catalog") {
+        let length = request.headers().get(CONTENT_LENGTH)
+            .and_then(|v|v.to_str().ok()).and_then(|v|v.parse::<usize>().ok());
+        if length.is_some_and(|n|n <= 512 * 1024) {
+            let original = std::mem::replace(request.body_mut(), Body::empty());
+            let bytes = to_bytes(original, 512 * 1024).await
+                .map_err(|_|StatusCode::PAYLOAD_TOO_LARGE)?;
+            payload = serde_json::from_slice(&bytes).ok();
+            *request.body_mut() = Body::from(bytes);
+        }
+    }
+    let context = if mutation {
+        Some(audit::capture(&state,&method,&path,payload.as_ref()).await)
+    }else{None};
     request.extensions_mut().insert(data.claims);
     request.extensions_mut().insert(CurrentRole(role));
     let response = next.run(request).await;
-    if mutation {
-        let action = match method {
-            Method::POST => "create", Method::PUT | Method::PATCH => "update",
-            Method::DELETE => "delete", _ => "other",
-        };
-        let status = response.status();
-        tracing::info!(%actor, %path, action, %status, "mutation");
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
-            .unwrap_or_default().as_secs() as i64;
-        let record = audit_event::ActiveModel {
-            id: Set(Uuid::new_v4()),
-            actor_id: Set(actor),
-            action: Set(action.to_string()),
-            path: Set(path),
-            status: Set(status.as_u16() as i32),
-            timestamp: Set(timestamp),
-            ..Default::default()
-        };
-        if let Err(error) = record.insert(&state.db).await {
-            tracing::error!(%error, "Could not persist audit log");
-        }
+    if let Some(context)=context{
+        tracing::info!(%actor,%path,status=%response.status(),"mutation");
+        audit::record(&state,actor,&method,&path,response.status(),context).await;
     }
     Ok(response)
 }

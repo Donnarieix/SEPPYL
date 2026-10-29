@@ -15,6 +15,14 @@ pub fn Organization()->Element{
         }
     });
     let mut club_id=use_signal(String::new);
+    // Open the first authorized club automatically; users can switch later.
+    use_effect(move ||{
+        let initial=if club_id.read().is_empty(){
+            clubs.read().clone().and_then(|v|v.ok())
+                .and_then(|items|items.first().map(|item|item.id.clone()))
+        }else{None};
+        if let Some(id)=initial{club_id.set(id);}
+    });
     let team_token=token.clone();
     let mut teams=use_resource(move ||{
         let token=team_token.clone();

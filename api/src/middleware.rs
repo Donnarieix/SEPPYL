@@ -5,9 +5,11 @@ use axum::{
     response::Response,
 };
 use jsonwebtoken::{DecodingKey, Validation};
-use sea_orm::EntityTrait;
+use sea_orm::{EntityTrait,ActiveModelTrait,ActiveValue::Set};
+use std::time::{SystemTime,UNIX_EPOCH};
+use uuid::Uuid;
 
-use crate::{entities::user, routes::authentication::login::Claims, state::AppState};
+use crate::{entities::{user,audit_event}, routes::authentication::login::Claims, state::AppState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role { Visitor, User, Trainer, Manager, Administrator }
@@ -75,7 +77,22 @@ pub async fn auth(
             Method::POST => "create", Method::PUT | Method::PATCH => "update",
             Method::DELETE => "delete", _ => "other",
         };
-        tracing::info!(%actor, %path, action, status=%response.status(), "mutation");
+        let status = response.status();
+        tracing::info!(%actor, %path, action, %status, "mutation");
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default().as_secs() as i64;
+        let record = audit_event::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            actor_id: Set(actor),
+            action: Set(action.to_string()),
+            path: Set(path),
+            status: Set(status.as_u16() as i32),
+            timestamp: Set(timestamp),
+            ..Default::default()
+        };
+        if let Err(error) = record.insert(&state.db).await {
+            tracing::error!(%error, "Could not persist audit log");
+        }
     }
     Ok(response)
 }

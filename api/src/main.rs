@@ -26,7 +26,7 @@ use crate::{
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account},
+        miscellaneous::{health::health, me::me, preferences, account, audit},
     },
     state::AppState,
 };
@@ -62,6 +62,7 @@ async fn main() {
         .route("/clubs/{id}/members/{user_id}", put(organization::grant_club_membership))
         .route("/teams/{id}/members/{user_id}", put(organization::grant_team_membership))
         .route("/admin/users/{user_id}/role", put(organization::grant_global_role))
+        .route("/admin/audit", get(audit::list))
         .route("/me", get(me))
         .route("/preferences", get(preferences::get).put(preferences::update))
         .route("/account", get(account::get))

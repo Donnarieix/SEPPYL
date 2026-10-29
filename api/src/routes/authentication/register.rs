@@ -53,8 +53,9 @@ pub async fn register(
         role: sea_orm::ActiveValue::Set(Some("user".into())),
         ..Default::default()
     };
-    user.insert(&state.db).await
+    let created=user.insert(&state.db).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!(action="account.register", account=%created.id, "New registration");
 
     Ok(())
 }

@@ -81,7 +81,8 @@ pub async fn create_club(
     if role.0 != Role::Administrator { return Err(StatusCode::FORBIDDEN); }
     if !valid_name(&body.name) { return Err(StatusCode::BAD_REQUEST); }
     let saved = club::ActiveModel {
-        id: Set(Uuid::new_v4()), name: Set(body.name.trim().into()), ..Default::default()
+        id: Set(Uuid::new_v4()), name: Set(body.name.trim().into()),
+        is_public: Set(Some(false)), ..Default::default()
     }.insert(&state.db).await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub, club=%saved.id, action="club.create");
     Ok((StatusCode::CREATED, Json(saved)))
@@ -393,4 +394,36 @@ pub async fn list_team_players_internal(state:&AppState,id:Uuid)->ApiResult<Vec<
         .into_iter().map(|m|m.player_id).collect::<Vec<_>>();
     player::Entity::find().filter(player::COLUMN.id.is_in(ids))
         .all(&state.db).await.map_err(db_error)
+}
+
+#[derive(Deserialize)]
+pub struct SetPublic {pub is_public:bool}
+pub async fn update_public_visibility(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,Json(body):Json<SetPublic>,
+)->ApiResult<StatusCode>{
+    if !can_manage_club(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let club=club::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut active:club::ActiveModel=club.into();
+    active.is_public=Set(Some(body.is_public));
+    active.update(&state.db).await.map_err(db_error)?;
+    tracing::warn!(actor=%claims.sub,club=%id,is_public=body.is_public,action="club.visibility.update");
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn public_clubs(State(state):State<AppState>)
+    ->ApiResult<Json<Vec<club::Model>>>{
+    let all=club::Entity::find().all(&state.db).await.map_err(db_error)?;
+    Ok(Json(all.into_iter().filter(|c|c.is_public==Some(true)).collect()))
+}
+pub async fn public_teams(State(state):State<AppState>,Path(id):Path<Uuid>)
+    ->ApiResult<Json<Vec<team::Model>>>{
+    let club=club::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if club.is_public!=Some(true){return Err(StatusCode::NOT_FOUND);}
+    let teams=team::Entity::find()
+        .filter(team::COLUMN.club_id.eq(id)).all(&state.db).await.map_err(db_error)?;
+    Ok(Json(teams))
 }

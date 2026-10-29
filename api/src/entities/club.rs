@@ -8,5 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
     pub name: String,
+    /// Public visibility is explicit, never enabled by default.
+    pub is_public: Option<bool>,
 }
 impl ActiveModelBehavior for ActiveModel {}

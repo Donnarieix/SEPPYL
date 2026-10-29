@@ -65,6 +65,7 @@ async fn main() {
         .route("/teams/{id}/players/{player_id}",
             put(organization::assign_team_player).delete(organization::remove_team_player))
         .route("/clubs/{id}/teams", get(organization::list_teams).post(organization::create_team))
+        .route("/clubs/{id}/visibility", put(organization::update_public_visibility))
         .route("/clubs/{id}/members/{user_id}", put(organization::grant_club_membership).delete(organization::remove_club_member))
         .route("/teams/{id}/members/{user_id}", put(organization::grant_team_membership).delete(organization::remove_team_member))
         .route("/admin/users/{user_id}/role", put(organization::grant_global_role))
@@ -110,6 +111,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/public/clubs", get(organization::public_clubs))
+        .route("/public/clubs/{id}/teams", get(organization::public_teams))
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))

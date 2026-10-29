@@ -57,7 +57,7 @@ pub fn TacticsPage()->Element{
                                 section { class:"panel",
                                     div { class:"panel-head",
                                         div { h2 { "Dossiers" } p { "Organisez vos exercices par thème." } }
-                                        button { class:"button outline small",onclick:move |_|adding_folder.set(!*adding_folder.read()),"+ Dossier" }
+                                        button { class:"button outline small",onclick:move |_|{let next=!*adding_folder.read();adding_folder.set(next);},"+ Dossier" }
                                     }
                                     if *adding_folder.read(){
                                         form { class:"folder-form",
@@ -195,7 +195,7 @@ pub fn TacticEditor(
             }
             p { class:"muted-small", "Cliquez sur le terrain pour placer des éléments. Avec l'outil Flèche, glissez du départ à l'arrivée. L'outil Déplacer permet de repositionner un élément." }
             div { class:"tactic-actions",
-                if let Some(ref id)=existing {
+                if existing.is_some() {
                     if *confirm.read() {
                         button { class:"button danger",disabled:*busy.read(),
                             onclick:{

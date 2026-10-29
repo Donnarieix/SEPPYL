@@ -31,6 +31,7 @@ pub struct Activity {
     pub training_id: String,
     pub name: String,
     pub description: String,
+    pub description_html: Option<String>,
     pub image_url: Option<String>,
     pub sort_order: i32,
 }

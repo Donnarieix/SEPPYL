@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::catalog::{self, Activity};
-use super::{Route,layout::Header};
+use super::{Route,layout::Header,rich_editor::RichTextEditor};
 
 #[component]
 pub fn Activities()->Element{
@@ -72,9 +72,13 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
             }
             div{class:"catalog-content",
                 h2{"{activity.name}"}
-                if !activity.description.is_empty(){
-                    p{class:"catalog-description","{activity.description}"}
-                }else{p{class:"catalog-description empty","Aucune description"}}
+                if let Some(html)=activity.description_html.as_deref() {
+                    div { class:"catalog-description rich-description", dangerous_inner_html: html }
+                } else if !activity.description.is_empty() {
+                    p { class:"catalog-description","{activity.description}" }
+                } else {
+                    p { class:"catalog-description empty","Aucune description" }
+                }
                 div{class:"catalog-equipment",
                     strong{"Matériel"}
                     if activity.materials.is_empty(){span{class:"muted-small","Aucun"}}
@@ -168,6 +172,7 @@ pub fn ActivityEditor(
 )->Element{
     let mut name=use_signal(||activity.as_ref().map(|a|a.name.clone()).unwrap_or_default());
     let mut description=use_signal(||activity.as_ref().map(|a|a.description.clone()).unwrap_or_default());
+    let mut description_html=use_signal(||activity.as_ref().and_then(|a|a.description_html.clone()));
     let mut image=use_signal(||activity.as_ref().and_then(|a|a.image_url.clone()).unwrap_or_default());
     let mut busy=use_signal(||false);
     let mut uploading=use_signal(||false);
@@ -189,12 +194,13 @@ pub fn ActivityEditor(
                         if *busy.read()||*uploading.read(){return;}
                         let n=name.read().trim().to_string();
                         let d=description.read().clone();
+                        let html=description_html.read().clone();
                         let i=image.read().trim().to_string();
                         if n.is_empty(){error.set(Some("Le nom de l'activité est obligatoire.".into()));return;}
                         let token=token_for_submit.clone();let id=id.clone();
                         busy.set(true);
                         spawn(async move{
-                            match catalog::upsert(&token,id.as_deref(),&n,&d,if i.is_empty(){None}else{Some(&i)}).await{
+                            match catalog::upsert(&token,id.as_deref(),&n,&d,html.as_deref(),if i.is_empty(){None}else{Some(&i)}).await{
                                 Ok(id)=>on_saved.call(id),
                                 Err(e)=>{error.set(Some(e.clone()));on_error.call(e);}
                             }
@@ -208,7 +214,13 @@ pub fn ActivityEditor(
                         }
                         div{class:"field",
                             label{"Description et consignes"}
-                            textarea{rows:"5",maxlength:"20000",value:"{description}",oninput:move |e|description.set(e.value())}
+                            RichTextEditor {
+                                initial_html: activity.as_ref().and_then(|a|a.description_html.clone()),
+                                initial_plain: activity.as_ref().map(|a|a.description.clone()).unwrap_or_default(),
+                                on_html: move |html: String| description_html.set(Some(html)),
+                                on_plain: move |text: String| description.set(text),
+                            }
+                            small { "Mise en forme directe : gras, italique, titres et listes." }
                         }
                         div{class:"field",
                             label{"Image de couverture"}

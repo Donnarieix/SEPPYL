@@ -211,6 +211,7 @@ pub async fn create_matrix_activity(
     let activity = catalog::insert(&claims, &state, catalog::ActivityPayload {
         name: payload.name,
         description: String::new(),
+        description_html: None,
         image_url: None,
     }).await?;
     entities::catalog_selection::ActiveModel {
@@ -314,6 +315,7 @@ mod shared_catalog_tests {
             Json(catalog::ActivityPayload {
                 name: "Circuit corrigé".into(),
                 description: "Nouvelle consigne".into(),
+                description_html: None,
                 image_url: None
             })
         ).await.unwrap();

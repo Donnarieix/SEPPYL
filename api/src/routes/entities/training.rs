@@ -193,6 +193,7 @@ pub async fn get(
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else { continue };
         activity.name = definition.name;
         activity.description = definition.description;
+        activity.description_html = definition.description_html;
         activity.image_url = definition.image_url;
         let equipment = catalog_material::Entity::find()
             .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
@@ -254,6 +255,7 @@ pub async fn add_activity(
         catalog_id: Set(Some(definition.id)),
         name: Set(definition.name),
         description: Set(definition.description),
+        description_html: Set(definition.description_html),
         image_url: Set(definition.image_url),
         sort_order: Set(count as i32),
         ..Default::default()
@@ -283,6 +285,7 @@ pub async fn attach_catalog(
         catalog_id: Set(Some(catalog_id)),
         name: Set(def.name),
         description: Set(def.description),
+        description_html: Set(def.description_html),
         image_url: Set(def.image_url),
         sort_order: Set(count as i32),
         ..Default::default()

@@ -1925,7 +1925,7 @@ button.grid-add-button:hover,
 .audit-table{min-width:760px}
 .audit-table th{text-align:left;white-space:nowrap}
 .audit-table td{vertical-align:middle}
-.audit-description{min-width:280px;line-height:1.5}
+.audit-table td.audit-description{min-width:280px;max-width:580px;white-space:normal;line-height:1.5}
 .audit-author{font-weight:600}
 .audit-action{display:inline-flex;padding:5px 9px;border:1px solid var(--line);
   border-radius:7px;font-size:12px;font-weight:700}

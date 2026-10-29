@@ -1885,3 +1885,72 @@ button.grid-add-button:hover,
 @media(max-width:700px){
   .club-flow-guide{grid-template-columns:1fr}
 }
+
+
+/* Club workspace: persistent club rail, context inside the content area. */
+.organization-page.workspace-page{max-width:1560px;width:100%}
+.club-layout{display:grid;grid-template-columns:minmax(192px,242px) minmax(0,1fr);gap:20px;align-items:start}
+.club-sidebar{position:sticky;top:80px;min-width:0;border:1px solid var(--line);
+  border-radius:12px;background:var(--surface);overflow:hidden;
+  box-shadow:0 4px 18px #0a19310a}
+.club-sidebar-heading{display:flex;align-items:center;justify-content:space-between;
+  padding:17px 17px 13px;border-bottom:1px solid var(--line);font-size:13px}
+.club-sidebar-count{min-width:25px;min-height:25px;display:grid;place-items:center;
+  border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:12px}
+.club-sidebar-list{display:flex;flex-direction:column;gap:5px;padding:8px}
+.club-sidebar-item{display:flex;gap:12px;align-items:center;width:100%;min-width:0;text-align:left;
+  border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text);
+  padding:11px 9px;transition:background-color .15s,border-color .15s}
+.club-sidebar-item:hover{background:var(--surface-hover)}
+.club-sidebar-item.active{background:var(--surface-soft);border-color:var(--accent);font-weight:700}
+.club-sidebar-avatar{display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;
+  border-radius:9px;background:var(--surface-soft);color:var(--accent);font-weight:750}
+.club-sidebar-item.active .club-sidebar-avatar{background:var(--surface);color:var(--accent)}
+.club-sidebar-name{font-size:13px;overflow-wrap:anywhere}
+.club-sidebar-empty{padding:13px 16px;font-size:12px;color:var(--muted)}
+.club-main{min-width:0}
+.club-main-toolbar{display:flex;justify-content:flex-end;align-items:center;margin:0 0 16px;min-height:42px}
+.club-main-toolbar .field{display:flex;align-items:center;gap:12px;margin:0;width:min(100%,400px)}
+.club-main-toolbar .field label{white-space:nowrap;font-size:12px;color:var(--muted)}
+.club-main-toolbar select{flex:1;min-width:0}
+.club-roster-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);
+  align-items:start;gap:18px}
+.club-roster-grid>.panel{min-width:0;margin:0}
+.club-roster-grid>.workspace-secondary{position:sticky;top:82px}
+.club-roster-grid .workspace-roster-list{max-height:min(65vh,720px);overflow-y:auto;
+  overscroll-behavior:contain;scrollbar-width:thin}
+.club-roster-grid .workspace-subtabs{margin-left:16px;margin-right:16px}
+.audit-page{max-width:1460px}
+.audit-table-wrap{overflow-x:auto}
+.audit-table{min-width:760px}
+.audit-table th{text-align:left;white-space:nowrap}
+.audit-table td{vertical-align:middle}
+.audit-description{min-width:280px;line-height:1.5}
+.audit-author{font-weight:600}
+.audit-action{display:inline-flex;padding:5px 9px;border:1px solid var(--line);
+  border-radius:7px;font-size:12px;font-weight:700}
+.audit-status{display:inline-flex;white-space:nowrap;align-items:center;gap:6px;
+  border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700}
+.audit-status::before{content:"";width:6px;height:6px;border-radius:100%;background:currentColor}
+.audit-status.success{color:#25784d;background:#e6f6eb}
+.audit-status.warning{color:#a45d19;background:#fff0de}
+.audit-status.error{color:#b23a42;background:#ffeaec}
+.site-root[data-theme="dark"] .audit-status.success{background:#1c3e31;color:#a5e0bc}
+.site-root[data-theme="dark"] .audit-status.warning{background:#4a331f;color:#ffd09a}
+.site-root[data-theme="dark"] .audit-status.error{background:#4d292f;color:#ffc0c8}
+.audit-datetime{white-space:nowrap;font-variant-numeric:tabular-nums}
+@media(max-width:1050px){
+  .club-roster-grid{grid-template-columns:minmax(0,1fr)}
+  .club-roster-grid>.workspace-secondary{position:static}
+  .club-roster-grid .workspace-roster-list{max-height:440px}
+}
+@media(max-width:760px){
+  .club-layout{grid-template-columns:minmax(0,1fr);gap:12px}
+  .club-sidebar{position:static}
+  .club-sidebar-heading{padding:11px 14px}
+  .club-sidebar-list{flex-direction:row;overflow-x:auto;scrollbar-width:thin;max-width:100%}
+  .club-sidebar-item{flex:0 0 auto;width:auto;max-width:220px;min-width:108px}
+  .club-main-toolbar{justify-content:stretch}
+  .club-main-toolbar .field{width:100%}
+  .club-roster-grid .workspace-roster-list{max-height:380px}
+}

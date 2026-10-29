@@ -1319,3 +1319,48 @@ button.grid-add-button:hover,
     .sortable-controls .sort-help { display: none; }
     .sortable-controls .sort-index { margin-right: auto; }
 }
+
+
+/* Inline rich-text activity editor: browser contentEditable + server sanitization. */
+.seppyl-rich-editor {
+    border:1px solid var(--line); border-radius:7px;
+    overflow:hidden; background:var(--surface);
+}
+.rich-toolbar {
+    display:flex; align-items:center; flex-wrap:wrap; gap:4px;
+    padding:8px; border-bottom:1px solid var(--line);
+    background:var(--surface-soft);
+}
+.rich-toolbar button {
+    border:1px solid transparent; border-radius:4px; background:transparent;
+    color:var(--text); padding:7px 10px; min-width:32px;
+    font-size:12px; line-height:1.2;
+}
+.rich-toolbar button:hover { background:var(--surface-hover); border-color:var(--line); }
+.rich-toolbar button:focus-visible { outline:2px solid var(--accent); }
+.rich-separator { width:1px; height:22px; margin-inline:5px; background:var(--line); }
+.rich-surface {
+    min-height:270px; max-height:550px; overflow-y:auto;
+    padding:20px 18px; line-height:1.65;
+    color:var(--text); white-space:pre-wrap;
+    outline:none; font-size:14px;
+}
+.rich-surface:empty:before { content:attr(data-placeholder); color:var(--muted); pointer-events:none; }
+.rich-surface:focus { box-shadow:inset 0 0 0 2px var(--accent); }
+.rich-surface p, .rich-description p { margin:0 0 .8em; }
+.rich-surface h3, .rich-description h3 { font-size:1.15em; font-weight:700; margin:1em 0 .4em; }
+.rich-surface ul, .rich-description ul { list-style:disc; padding-left:1.5em; margin:.6em 0; }
+.rich-surface ol, .rich-description ol { list-style:decimal; padding-left:1.5em; margin:.6em 0; }
+.rich-description { white-space:normal; }
+.rich-hidden-input {
+    position:absolute !important; opacity:0 !important;
+    width:1px !important; height:1px !important;
+    border:0 !important; padding:0 !important;
+    pointer-events:none; z-index:-1;
+}
+.activity-dialog .dialog-body textarea.rich-hidden-input { min-height:0 !important; }
+@media(max-width:600px) {
+    .rich-surface { min-height:230px; padding:15px; }
+    .rich-toolbar { gap:2px; }
+    .rich-toolbar button { padding:7px 8px; }
+}

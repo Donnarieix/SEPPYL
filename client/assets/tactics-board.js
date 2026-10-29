@@ -147,7 +147,7 @@
               x2:item.x+i*r*.35,y2:item.y+r*.6,stroke:fill,
               "stroke-width":1,"pointer-events":"none"});
         }else {
-          add(group,"circle",{cx:item.x,cy:item.y,r,fill:item.kind==="ball"?"#f9f9f6":fill,
+          add(group,"circle",{cx:item.x,cy:item.y,r,fill,
             stroke:active?"#ffe59a":"#253243","stroke-width":active?5:2});
           if(item.kind==="ball"){
             const pentagon=(x,y,radius)=>{

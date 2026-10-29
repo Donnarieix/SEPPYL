@@ -170,7 +170,7 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> Result<Json<TrainingDetail>, ApiError> {
     let training = owned_training(&claims, &state, id).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let players = services::player::get_players_for_team(&claims, &state,training.team_id).await?;
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.training_id.eq(id))
         .all(&state.db)
@@ -419,8 +419,8 @@ pub async fn set_attendance(
     Path(id): Path<Uuid>,
     Json(body): Json<AttendanceUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    writable_training(&claims, &state, id).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let training=writable_training(&claims, &state, id).await?;
+    let players = services::player::get_players_for_team(&claims, &state,training.team_id).await?;
     let allowed: HashSet<Uuid> = players.iter().map(|p| p.id).collect();
     let present: HashSet<Uuid> = body.player_ids.into_iter().collect();
 

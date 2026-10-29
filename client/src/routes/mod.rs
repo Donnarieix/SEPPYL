@@ -9,6 +9,7 @@ mod training_print;
 mod trainings;
 mod players;
 mod activities;
+mod rich_editor;
 mod account;
 
 use home::Home;

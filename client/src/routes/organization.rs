@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::{organization as org,players};
-use super::{Route,layout::Header,membership::MembershipPanel};
+use super::{Route,layout::Header,membership::MembershipPanel,team_management::{TeamManagerRow,CreateTeamPlayer}};
 
 #[component]
 pub fn Organization()->Element{
@@ -37,6 +37,7 @@ pub fn Organization()->Element{
     let mut team_id=use_signal(String::new);
     let mut tab=use_signal(||"overview".to_string());
     let mut new_team=use_signal(String::new);
+    let mut roster_action=use_signal(||"create".to_string());
     let mut player_id=use_signal(String::new);
     let mut busy=use_signal(||false);
     let mut notice=use_signal(||None::<String>);
@@ -80,7 +81,7 @@ pub fn Organization()->Element{
                 div{class:"page-heading",
                     div{
                         h1{"Mon club"}
-                        p{"Retrouvez vos équipes, leurs effectifs et les accès selon vos responsabilités."}
+                        p{"Les équipes regroupent les joueuses, les entraînements et les entraîneurs qui y ont accès."}
                     }
                 }
                 if let Some(message)=notice.read().as_ref(){
@@ -117,7 +118,7 @@ pub fn Organization()->Element{
                 if club_id.read().is_empty(){
                     div{class:"workspace-empty",
                         h2{"Sélectionnez un club"}
-                        p{"Vos clubs et équipes accessibles apparaîtront ici. Si rien ne s'affiche, demandez votre rattachement à un responsable."}
+                        p{"Choisissez un club pour retrouver ses équipes et les effectifs partagés. Si la liste est vide, demandez à un responsable de vous rattacher."}
                         if let Some(Err(message))=clubs.read().clone(){p{role:"alert","{message}"}}
                     }
                 }else{
@@ -167,7 +168,7 @@ pub fn Organization()->Element{
                             }else{
                                 section{class:"panel",
                                     div{class:"panel-head",
-                                        div{h2{"Joueuses de l'équipe"}p{"Effectif utilisé pour les présences et les évaluations."}}
+                                        div{h2{"Joueuses de l'équipe"}p{"Effectif partagé entre les entraîneurs de cette équipe. Les présences et notes sont liées à ces joueuses."}}
                                     }
                                     match roster.read().clone(){
                                         Some(Ok(items))=>rsx!{
@@ -207,7 +208,22 @@ pub fn Organization()->Element{
                                 }
                                 if can_write_team{
                                     section{class:"panel workspace-secondary",
-                                        div{class:"panel-head",div{h2{"Ajouter une joueuse"}p{"Choisissez une joueuse existante."}}}
+                                        div{class:"panel-head",div{
+                                            h2{"Compléter l’effectif"}
+                                            p{"Les joueuses créées ici sont immédiatement partagées avec les membres autorisés de l’équipe."}
+                                        }}
+                                        nav{class:"workspace-subtabs",
+                                            button{class:if *roster_action.read()=="create"{"selected"}else{""},
+                                                onclick:move |_|roster_action.set("create".into()),"Créer une joueuse"}
+                                            button{class:if *roster_action.read()=="existing"{"selected"}else{""},
+                                                onclick:move |_|roster_action.set("existing".into()),"Rattacher une fiche existante"}
+                                        }
+                                        if *roster_action.read()=="create"{
+                                            CreateTeamPlayer{token:token.clone(),team_id:team_id.read().clone(),
+                                                on_saved:move |_|{roster.restart();own_players.restart();notice.set(Some("Joueuse créée dans l’équipe.".into()));},
+                                                on_error:move |error|notice.set(Some(error))}
+                                        }else{
+                                            p{class:"workspace-hint","La liste ci-dessous inclut les joueuses de tes équipes accessibles et les anciennes fiches personnelles. Une fiche ne doit être créée qu’une seule fois."}
                                         form{class:"workspace-form",
                                             onsubmit:{
                                                 let token=token.clone();
@@ -239,20 +255,20 @@ pub fn Organization()->Element{
                                                     }
                                                 }
                                             }
-                                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Ajouter à l'équipe"}
+                                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Rattacher à l'équipe"}
+                                        }
                                         }
                                     }
                                 }
                             }
                         }else if *tab.read()=="teams" && can_manage{
                             section{class:"panel",
-                                div{class:"panel-head",div{h2{"Gestion des équipes"}p{"Chaque équipe est rattachée au club sélectionné."}}}
+                                div{class:"panel-head",div{h2{"Gestion des équipes"}p{"Renommez ou supprimez une équipe vide. Les équipes ayant un historique d’entraînements ou des activités ne peuvent pas être supprimées."}}}
                                 div{class:"workspace-roster-list",
                                     for team in &teams_list{
-                                        div{class:"workspace-roster-item",key:"{team.id}",
-                                            span{class:"workspace-team-icon","⚽"}
-                                            strong{"{team.name}"}
-                                        }
+                                        TeamManagerRow{key:"{team.id}",team:team.clone(),token:token.clone(),
+                                            on_saved:move |_|{teams.restart();team_id.set(String::new());notice.set(Some("Équipe actualisée.".into()));},
+                                            on_error:move |error|notice.set(Some(error))}
                                     }
                                 }
                                 form{class:"workspace-form",

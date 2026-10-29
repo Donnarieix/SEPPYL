@@ -15,6 +15,7 @@ mod tactics;
 mod organization;
 mod administration;
 mod membership;
+mod team_management;
 mod public_directory;
 mod audit;
 

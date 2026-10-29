@@ -46,13 +46,26 @@ pub async fn capture(
     let parts:Vec<&str>=path.trim_matches('/').split('/').collect();
     let generic=format!("{} de données",operation(method));
     match parts.as_slice(){
+        ["clubs"] if *method==Method::POST=>{
+            let name=payload.and_then(|v|v.get("name")).and_then(Value::as_str);
+            Context::admin(match name{
+                Some(name)=>format!("Création du club {}",quoted(name)),
+                None=>"Création d'un club".into(),
+            })
+        }
         ["clubs",id,tail @ ..]=>{
             let Ok(id)=Uuid::parse_str(id) else {return Context::admin(generic)};
             let Ok(Some(c))=club::Entity::find_by_id(id).one(&state.db).await
                 else{return Context::admin(generic)};
             let name=quoted(&c.name);
             let desc=match *tail {
-                ["teams"]=>format!("{} d'une équipe dans le club {name}",operation(method)),
+                ["teams"]=>{
+                    let new_name=payload.and_then(|v|v.get("name")).and_then(Value::as_str);
+                    match new_name{
+                        Some(new_name)=>format!("Création de l'équipe {} dans le club {name}",quoted(new_name)),
+                        None=>format!("Création d'une équipe dans le club {name}"),
+                    }
+                },
                 ["members",user_id]=>{
                     let person=Uuid::parse_str(user_id).ok();
                     let username=if let Some(uid)=person {
@@ -84,7 +97,16 @@ pub async fn capture(
                         .unwrap_or_else(||"une joueuse".into());
                     format!("{} de {who} dans l'équipe {name}",if *method==Method::DELETE{"Retrait"}else{"Ajout"})
                 },
-                ["players"]=>format!("Création d'une joueuse dans l'équipe {name}"),
+                ["players"]=>{
+                    let first=payload.and_then(|p|p.get("firstname")).and_then(Value::as_str);
+                    let last=payload.and_then(|p|p.get("lastname")).and_then(Value::as_str);
+                    match (first,last){
+                        (Some(first),Some(last))=>
+                            format!("Création de la joueuse {} dans l'équipe {name}",
+                                quoted(&format!("{first} {last}"))),
+                        _=>format!("Création d'une joueuse dans l'équipe {name}"),
+                    }
+                },
                 ["members",user_id]=>{
                     let username=if let Ok(uid)=Uuid::parse_str(user_id){
                         user::Entity::find_by_id(uid).one(&state.db).await.ok()

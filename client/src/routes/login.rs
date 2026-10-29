@@ -31,7 +31,8 @@ pub fn Login() -> Element {
 
                 match api.login(&username, &password).await {
                     Ok(response) => {
-                        println!("Login successful: {}", response.token);
+                        println!("Login successful");
+                        let _ = response;
                     }
                     Err(error) => {
                         println!("Login failed: {error}");

@@ -79,23 +79,13 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
                     strong{"Matériel"}
                     if activity.materials.is_empty(){span{class:"muted-small","Aucun"}}
                     for material in &activity.materials{
-                        div{class:"material-row",key:"{material.id}",
-                            span{"{material.quantity} × {material.name}"}
-                            button{class:"remove-link",disabled:*busy.read(),
-                                onclick:{
-                                    let token=token.clone();let id=activity.id.clone();let material_id=material.id.clone();
-                                    move |_|{
-                                        let token=token.clone();let id=id.clone();let material_id=material_id.clone();
-                                        busy.set(true);
-                                        spawn(async move{
-                                            match catalog::remove_material(&token,&id,&material_id).await{
-                                                Ok(())=>on_saved.call(()),Err(e)=>on_error.call(e),
-                                            }
-                                            busy.set(false);
-                                        });
-                                    }
-                                },
-                                "Retirer"}
+                        MaterialLine {
+                            key: "{material.id}",
+                            material: material.clone(),
+                            activity_id: activity.id.clone(),
+                            token: token.clone(),
+                            on_saved,
+                            on_error,
                         }
                     }
                     form{class:"add-material",
@@ -154,6 +144,84 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
                 on_cancel:move |_|editing.set(false),
                 on_saved:move |_id: String|{editing.set(false);on_saved.call(());},
                 on_error}
+        }
+    }
+}
+
+#[component]
+fn MaterialLine(
+    material:catalog::Material,
+    activity_id:String,
+    token:String,
+    on_saved:EventHandler<()>,
+    on_error:EventHandler<String>,
+)->Element{
+    let mut editing=use_signal(||false);
+    let mut name=use_signal(||material.name.clone());
+    let mut count=use_signal(||material.quantity.to_string());
+    let mut busy=use_signal(||false);
+    let token_for_edit=token.clone();
+    let token_for_delete=token.clone();
+    let id_for_edit=activity_id.clone();
+    let id_for_delete=activity_id.clone();
+    let material_id_for_edit=material.id.clone();
+    let material_id_for_delete=material.id.clone();
+    rsx!{
+        div { class:"material-row editable-material",
+            if *editing.read() {
+                form { class:"material-edit-form",
+                    onsubmit: move |e| {
+                        e.prevent_default();
+                        if *busy.read(){return;}
+                        let value=name.read().trim().to_string();
+                        let amount=count.read().parse::<i32>().unwrap_or_default();
+                        if value.is_empty() || amount<=0 {
+                            on_error.call("Nom et quantité valides obligatoires.".into());
+                            return;
+                        }
+                        let token=token_for_edit.clone();
+                        let id=id_for_edit.clone();
+                        let mid=material_id_for_edit.clone();
+                        busy.set(true);
+                        spawn(async move {
+                            match catalog::update_material(&token,&id,&mid,&value,amount).await {
+                                Ok(()) => {editing.set(false);on_saved.call(());}
+                                Err(e)=>on_error.call(e),
+                            }
+                            busy.set(false);
+                        });
+                    },
+                    input { "aria-label":"Intitulé du matériel", value:"{name}", required:true,
+                        oninput:move |e|name.set(e.value()) }
+                    input { "aria-label":"Quantité de matériel", r#type:"number", min:"1",
+                        value:"{count}",oninput:move |e|count.set(e.value()) }
+                    button { class:"button outline small",r#type:"submit",disabled:*busy.read(),"Enregistrer" }
+                    button { class:"button quiet small",r#type:"button",
+                        onclick:move |_|editing.set(false),"Annuler" }
+                }
+            } else {
+                span { "{material.quantity} × {material.name}" }
+                div { class:"material-edit-actions",
+                    button { class:"button quiet small",onclick:move |_|editing.set(true),"Modifier" }
+                    button { class:"remove-link",disabled:*busy.read(),
+                        onclick:move |_| {
+                            if *busy.read(){return;}
+                            let token=token_for_delete.clone();
+                            let id=id_for_delete.clone();
+                            let mid=material_id_for_delete.clone();
+                            busy.set(true);
+                            spawn(async move {
+                                match catalog::remove_material(&token,&id,&mid).await{
+                                    Ok(())=>on_saved.call(()),
+                                    Err(e)=>on_error.call(e),
+                                }
+                                busy.set(false);
+                            });
+                        },
+                        "Retirer"
+                    }
+                }
+            }
         }
     }
 }

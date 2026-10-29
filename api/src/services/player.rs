@@ -19,6 +19,10 @@ pub async fn get_players(
     let mut ids:std::collections::HashSet<Uuid>=
         players_users.into_iter().map(|pu|pu.player_id).collect();
     let role=organization::user_role(state,claims.sub).await?;
+    if role==crate::middleware::Role::Administrator {
+        return entities::player::Entity::find().all(&state.db)
+            .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR);
+    }
     let memberships=entities::team_player::Entity::find().all(&state.db)
         .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     for membership in memberships {

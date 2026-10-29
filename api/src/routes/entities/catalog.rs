@@ -48,12 +48,12 @@ pub async fn owned(
     let item=catalog_activity::Entity::find_by_id(id)
         .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    if item.user_id==claims.sub{return Ok(item);}
     let role=organization::user_role(state,claims.sub).await?;
-    if let Some(team_id)=item.team_id {
-        if organization::can_read_team(state,claims,role,team_id).await?{return Ok(item);}
-    }
-    Err(StatusCode::NOT_FOUND)
+    let allowed=match item.team_id {
+        Some(team_id)=>organization::can_read_team(state,claims,role,team_id).await?,
+        None=>item.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+    };
+    if allowed{Ok(item)}else{Err(StatusCode::NOT_FOUND)}
 }
 pub async fn writable(claims:&Claims,state:&AppState,id:Uuid)
     ->Result<catalog_activity::Model,StatusCode>{
@@ -100,10 +100,10 @@ pub async fn list(
     let role=organization::user_role(&state,claims.sub).await?;
     let mut activities=Vec::new();
     for activity in all {
-        let visible=if activity.user_id==claims.sub {true}
-        else if let Some(team_id)=activity.team_id {
-            organization::can_read_team(&state,&claims,role,team_id).await?
-        } else {false};
+        let visible=match activity.team_id {
+            Some(team_id)=>organization::can_read_team(&state,&claims,role,team_id).await?,
+            None=>activity.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+        };
         if visible {activities.push(activity);}
     }
     let ids: Vec<Uuid> = activities.iter().map(|a| a.id).collect();

@@ -236,3 +236,51 @@ mod tests {
         assert!(image_kind(b"<html>bad</html>").is_none());
     }
 }
+
+
+#[cfg(test)]
+mod richer_catalog_tests {
+    use super::*;
+    use crate::entities::user;
+    use sea_orm::Database;
+
+    #[test]
+    fn unsafe_html_is_sanitized_before_storage() {
+        let cleaned = ammonia::clean("<p onclick='alert(1)'><strong>Objectif</strong><script>alert(1)</script></p>");
+        assert!(cleaned.contains("<strong>Objectif</strong>"));
+        assert!(!cleaned.contains("onclick"));
+        assert!(!cleaned.contains("<script"));
+    }
+
+    #[tokio::test]
+    async fn equipment_name_and_quantity_can_be_changed() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state = AppState { db };
+        let uid=Uuid::new_v4();
+        user::ActiveModel {
+            id:Set(uid),username:Set("coach-test".into()),password:Set("test".into()),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let claims=Claims{sub:uid,exp:u64::MAX};
+        let (_,activity)=create(Extension(claims.clone()),State(state.clone()),
+            Json(ActivityPayload{
+                name:"Passes".into(),description:"Consignes".into(),
+                description_html:Some("<p><strong>Passes</strong></p>".into()),
+                image_url:None
+            })).await.unwrap();
+        assert_eq!(activity.0.description_html.as_deref(),Some("<p><strong>Passes</strong></p>"));
+        let id=activity.0.id;
+        let (_,material)=add_material(
+            Extension(claims.clone()),State(state.clone()),Path(id),
+            Json(MaterialPayload{name:"Ballons".into(),quantity:3})
+        ).await.unwrap();
+        update_material(
+            Extension(claims.clone()),State(state.clone()),Path((id,material.0.id)),
+            Json(UpdateMaterialPayload{name:"Chasubles".into(),quantity:8})
+        ).await.unwrap();
+        let rows=list(Extension(claims),State(state)).await.unwrap().0;
+        assert_eq!(rows[0].materials[0].name,"Chasubles");
+        assert_eq!(rows[0].materials[0].quantity,8);
+    }
+}

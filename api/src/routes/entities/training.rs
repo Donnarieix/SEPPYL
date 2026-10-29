@@ -656,3 +656,40 @@ mod integration_tests {
         assert!(matches!(invalid, Err(StatusCode::BAD_REQUEST)));
     }
 }
+
+
+#[cfg(test)]
+mod reorder_tests {
+    use super::*;
+    use crate::entities::user;
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn activity_order_is_persisted_and_must_be_a_permutation() {
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let uid=Uuid::new_v4();
+        user::ActiveModel{id:Set(uid),username:Set("trainer".into()),password:Set("test".into()),
+            ..Default::default()}.insert(&state.db).await.unwrap();
+        let claims=Claims{sub:uid,exp:u64::MAX};
+        let date=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
+        let (_,id)=create(Extension(claims.clone()),State(state.clone()),
+            Json(CreateTraining{name:"Training".into(),date})).await.unwrap();
+        let tid=Uuid::parse_str(&id).unwrap();
+        for name in ["Échauffement","Passes","Match"] {
+            add_activity(Extension(claims.clone()),State(state.clone()),Path(tid),
+                Json(CreateActivity{name:name.into(),description:String::new(),image_url:None}))
+            .await.unwrap();
+        }
+        let initial=get(Extension(claims.clone()),State(state.clone()),Path(tid)).await.unwrap().0;
+        let mut order:Vec<Uuid>=initial.activities.iter().map(|a|a.id).collect();
+        order.reverse();
+        reorder_activities(Extension(claims.clone()),State(state.clone()),Path(tid),
+            Json(ReorderActivities{activity_ids:order.clone()})).await.unwrap();
+        let updated=get(Extension(claims.clone()),State(state.clone()),Path(tid)).await.unwrap().0;
+        assert_eq!(updated.activities.iter().map(|a|a.id).collect::<Vec<_>>(),order);
+        let invalid=reorder_activities(Extension(claims),State(state),Path(tid),
+            Json(ReorderActivities{activity_ids:vec![order[0],order[0],order[1]]})).await;
+        assert!(matches!(invalid,Err(StatusCode::BAD_REQUEST)));
+    }
+}

@@ -49,3 +49,36 @@ mod tests{
   assert!(Role::Coach.can_write());assert!(Role::Manager.can_write());assert!(Role::Administrator.can_write());
  }
 }
+
+pub async fn teams_for(state:&AppState,subject:Uuid,write:bool)->Result<Vec<Uuid>,StatusCode>{
+    use crate::entities::team;
+    let role=effective_role(state,subject).await?;
+    if role==Role::Administrator{
+        return Ok(team::Entity::find().all(&state.db).await
+            .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter().map(|x|x.id).collect());
+    }
+    let memberships=team_member::Entity::find().filter(team_member::COLUMN.user_id.eq(subject))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let clubs=club_member::Entity::find().filter(club_member::COLUMN.user_id.eq(subject))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let allowed_clubs:std::collections::HashSet<Uuid>=clubs.into_iter()
+        .filter(|c|!write || c.role=="manager").map(|c|c.club_id).collect();
+    let club_teams=if allowed_clubs.is_empty(){Vec::new()}else{
+        team::Entity::find().filter(team::COLUMN.club_id.is_in(allowed_clubs))
+            .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter().map(|t|t.id).collect::<Vec<_>>()
+    };
+    let mut ids:std::collections::HashSet<Uuid>=club_teams.into_iter().collect();
+    ids.extend(memberships.into_iter().filter(|m|!write || m.role=="coach").map(|m|m.team_id));
+    Ok(ids.into_iter().collect())
+}
+pub async fn assert_team(state:&AppState,subject:Uuid,team_id:Uuid,write:bool)->Result<(),StatusCode>{
+    if teams_for(state,subject,write).await?.contains(&team_id){Ok(())}
+    else{Err(StatusCode::FORBIDDEN)}
+}
+pub async fn default_writable_team(state:&AppState,subject:Uuid)->Result<Uuid,StatusCode>{
+    let mut available=teams_for(state,subject,true).await?;
+    available.sort_unstable();
+    available.into_iter().next().ok_or(StatusCode::FORBIDDEN)
+}

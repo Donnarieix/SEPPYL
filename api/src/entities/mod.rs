@@ -17,3 +17,5 @@ pub mod team;
 pub mod club_member;
 pub mod team_member;
 pub mod audit_event;
+pub mod tactic_folder;
+pub mod tactic_board;

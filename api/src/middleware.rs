@@ -58,7 +58,9 @@ pub async fn auth(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let mutation = matches!(method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE);
-    let self_service = path.starts_with("/account/") || path == "/preferences";
+    let self_service = path.starts_with("/account/") || path == "/preferences"
+        || path.starts_with("/clubs") || path.starts_with("/teams")
+        || path.starts_with("/admin/");
     if mutation && !self_service && !role.can_write() {
         tracing::warn!(actor=%data.claims.sub, %path, "role denied mutation");
         return Err(StatusCode::FORBIDDEN);

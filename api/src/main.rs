@@ -22,6 +22,7 @@ use crate::{
             matrix::{create_matrix_activity, get_matrix, update_matrix_result, select_activity},
             catalog,
             training,
+            organization,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
         miscellaneous::{health::health, me::me, preferences, account},
@@ -55,6 +56,11 @@ async fn main() {
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
+        .route("/clubs", get(organization::list_clubs).post(organization::create_club))
+        .route("/clubs/{id}/teams", get(organization::list_teams).post(organization::create_team))
+        .route("/clubs/{id}/members/{user_id}", put(organization::grant_club_membership))
+        .route("/teams/{id}/members/{user_id}", put(organization::grant_team_membership))
+        .route("/admin/users/{user_id}/role", put(organization::grant_global_role))
         .route("/me", get(me))
         .route("/preferences", get(preferences::get).put(preferences::update))
         .route("/account", get(account::get))

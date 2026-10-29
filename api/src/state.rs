@@ -50,6 +50,23 @@ impl AppState {
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
 
+        if let Ok(admin_username) = std::env::var("SEPPYL_BOOTSTRAP_ADMIN_USERNAME") {
+            use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter};
+            if let Some(existing) = crate::entities::user::Entity::find()
+                .filter(crate::entities::user::COLUMN.username.eq(admin_username))
+                .one(&db).await.expect("Unable to load bootstrap admin")
+            {
+                if existing.role.as_deref() != Some("administrator") {
+                    let mut active:crate::entities::user::ActiveModel = existing.into();
+                    active.role = Set(Some("administrator".into()));
+                    active.update(&db).await.expect("Unable to bootstrap administrator");
+                    tracing::warn!("Elevated bootstrap account to administrator");
+                }
+            } else {
+                tracing::warn!("Bootstrap username was not found; no administrator elevated");
+            }
+        }
+
         Self { db }
     }
 }

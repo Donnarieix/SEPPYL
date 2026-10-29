@@ -20,6 +20,12 @@ pub struct DrawingObject {
     pub label:Option<String>,
     #[serde(default)]
     pub color:Option<String>,
+    #[serde(default)]
+    pub size:Option<f64>,
+    #[serde(default)]
+    pub control_x:Option<f64>,
+    #[serde(default)]
+    pub control_y:Option<f64>,
 }
 #[derive(Clone,Serialize,Deserialize)]
 pub struct DiagramPayload {
@@ -39,7 +45,7 @@ fn valid_color(value:&str)->bool{
         value.as_bytes()[1..].iter().all(|c|c.is_ascii_hexdigit())
 }
 fn validate(body:&DiagramPayload)->bool{
-    let kind_ok=|k:&str|matches!(k,"player"|"opponent"|"cone"|"ball"|"arrow");
+    let kind_ok=|k:&str|matches!(k,"player"|"opponent"|"cone"|"ball"|"arrow"|"curve"|"goal");
     !body.name.trim().is_empty() && body.name.len()<=150 &&
     matches!(body.layout.as_str(),"football"|"volleyball"|"blank") &&
     body.objects.len()<=250 &&
@@ -47,6 +53,9 @@ fn validate(body:&DiagramPayload)->bool{
         kind_ok(&o.kind) && !o.id.is_empty() && o.id.len()<=64 &&
         o.label.as_deref().is_none_or(|s|s.len()<=35) &&
         o.color.as_deref().is_none_or(valid_color) &&
+        o.size.is_none_or(|s|s.is_finite()&&(8.0..=65.0).contains(&s)) &&
+        o.control_x.is_none_or(|x|x.is_finite()&&(0.0..=800.0).contains(&x)) &&
+        o.control_y.is_none_or(|y|y.is_finite()&&(0.0..=500.0).contains(&y)) &&
         o.x.is_finite() && o.y.is_finite() &&
         (0.0..=800.0).contains(&o.x) && (0.0..=500.0).contains(&o.y) &&
         o.end_x.is_none_or(|x|x.is_finite()&&(0.0..=800.0).contains(&x)) &&
@@ -116,7 +125,7 @@ mod tests{
     fn rejects_untrusted_objects_and_invalid_positions(){
         let mut good=DiagramPayload{name:"Exercice".into(),layout:"football".into(),
             objects:vec![DrawingObject{id:"1".into(),kind:"player".into(),x:400.0,y:250.0,
-                end_x:None,end_y:None,label:Some("A1".into()),color:None}]};
+                end_x:None,end_y:None,label:Some("A1".into()),color:None,size:None,control_x:None,control_y:None}]};
         assert!(validate(&good));
         good.objects[0].color=Some("#123ABC".into());
         assert!(validate(&good));

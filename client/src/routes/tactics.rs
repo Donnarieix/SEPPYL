@@ -23,6 +23,7 @@ pub fn Tactics() -> Element {
     let mut busy = use_signal(|| false);
     let mut deletion_confirm = use_signal(|| false);
     let mut notice = use_signal(|| None::<String>);
+    let mut revision = use_signal(|| 0_u64);
 
     if token.is_none() {
         return rsx! {
@@ -37,7 +38,7 @@ pub fn Tactics() -> Element {
     let token_save = token.clone();
     let token_delete = token.clone();
     let draft_id = selected_id.read().clone().unwrap_or_else(|| "new".to_string());
-    let draft_key = format!("{}|{}",draft_id,selected_id.read().as_deref().unwrap_or("new"));
+    let draft_key = format!("{}:{}",draft_id,*revision.read());
     let initial_objects = objects_json.read().clone();
 
     rsx! {
@@ -47,13 +48,15 @@ pub fn Tactics() -> Element {
                 div { class: "page-heading",
                     div {
                         h1 { "Tableau tactique" }
-                        p { "Dessinez vos exercices avec des joueuses, adversaires, ballons, plots et déplacements." }
+                        p { "Construisez vos exercices sur un terrain, organisez les joueurs et tracez leurs déplacements." }
                     }
                     button { class: "button solid",
                         onclick: move |_| {
                             selected_id.set(None);
                             name.set("Nouveau schéma".into());
                             objects_json.set("[]".into());
+                            let next=*revision.read()+1;
+                            revision.set(next);
                             deletion_confirm.set(false);
                             notice.set(None);
                         },
@@ -89,6 +92,8 @@ pub fn Tactics() -> Element {
                                                 serde_json::to_string(&diagram.objects)
                                                     .unwrap_or_else(|_| "[]".into())
                                             );
+                                            let next=*revision.read()+1;
+                                            revision.set(next);
                                             deletion_confirm.set(false);
                                             notice.set(None);
                                         },
@@ -112,6 +117,7 @@ pub fn Tactics() -> Element {
                         div { class: "seppyl-tactics-board",
                             key: "{draft_key}",
                             "data-tactics-initial": "{initial_objects}",
+                            "data-tactics-revision": "{revision}",
 
                             div { class: "tactics-tools", role:"toolbar", "aria-label":"Outils de dessin",
                                 details { class:"tactic-category",open:true,
@@ -127,7 +133,7 @@ pub fn Tactics() -> Element {
                                     summary { "Joueurs" }
                                     div { class:"tactic-category-actions",
                                         button { r#type:"button", "data-tactic-tool":"player", "Joueuse" }
-                                        button { r#type:"button", "data-tactic-tool":"opponent", "Adversaire" }
+
                                     }
                                 }
                                 details { class:"tactic-category", open:true,
@@ -135,12 +141,14 @@ pub fn Tactics() -> Element {
                                     div { class:"tactic-category-actions",
                                         button { r#type:"button", "data-tactic-tool":"ball", "Ballon" }
                                         button { r#type:"button", "data-tactic-tool":"cone", "Plot" }
+                                        button { r#type:"button", "data-tactic-tool":"goal", "Mini-but" }
                                     }
                                 }
                                 details { class:"tactic-category", open:true,
                                     summary { "Trajets" }
                                     div { class:"tactic-category-actions",
-                                        button { r#type:"button", "data-tactic-tool":"arrow", "Flèche" }
+                                        button { r#type:"button", "data-tactic-tool":"arrow", "Flèche droite" }
+                                        button { r#type:"button", "data-tactic-tool":"curve", "Flèche courbe" }
                                     }
                                 }
                             }
@@ -161,6 +169,19 @@ pub fn Tactics() -> Element {
                                             "data-tactic-custom":"true","aria-label":"Couleur personnalisée" }
                                     }
                                 }
+                            }
+                            div { class:"tactic-sizes",
+                                div { class:"tactic-colors-heading",
+                                    strong { "Taille" }
+                                    span { "Modifier la sélection ou la taille des nouveaux objets." }
+                                }
+                                input { r#type:"range",min:"8",max:"65",value:"22",
+                                    "data-tactic-size":"true","aria-label":"Taille des objets" }
+                                output { "data-tactic-size-label":"true", "22" }
+                            }
+                            div { class:"tactic-editor-hint",
+                                span { "Sélectionnez plusieurs éléments avec Shift ou par encadrement." }
+                                span { "Une flèche courbe possède un point de contrôle déplaçable." }
                             }
                             svg { class:"tactics-canvas",
                                 "data-tactics-svg":"true",
@@ -225,6 +246,8 @@ pub fn Tactics() -> Element {
                                                             selected_id.set(None);
                                                             name.set("Nouveau schéma".into());
                                                             objects_json.set("[]".into());
+                                                            let next=*revision.read()+1;
+                                                            revision.set(next);
                                                             diagrams.restart();
                                                             notice.set(Some("Schéma supprimé.".into()));
                                                         }

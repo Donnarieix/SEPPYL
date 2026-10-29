@@ -47,6 +47,9 @@ impl AppState {
             user.insert(&db).await.unwrap();
         }
 
+        migrate_existing_accounts(&db).await
+            .expect("Unable to assign legacy local team memberships");
+
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
 
@@ -98,3 +101,43 @@ async fn import_previous_training_activities(
     Ok(())
 }
 
+
+// Existing installations own private players/activities. Give every existing
+// account an isolated default club and team, with coach permissions, before
+// enforcing the new role gate. New signups get read-only user rights.
+async fn migrate_existing_accounts(db:&DatabaseConnection)->Result<(),sea_orm::DbErr>{
+    use crate::entities::{user,club,team,club_member,team_member};
+    let accounts=user::Entity::find().all(db).await?;
+    for account in accounts{
+        if account.global_role.is_some(){continue} // already migrated or registered
+        let mut record:user::ActiveModel=account.clone().into();
+        // This is the local legacy bootstrap account. Rotate its known
+        // default password immediately; production must disable bootstrap.
+        if account.username=="admin"{
+            record.global_role=Set(Some("administrator".into()));
+            record.update(db).await?;
+            continue;
+        }
+        let transaction=db.begin().await?;
+        let private_club=club::ActiveModel{
+            id:Set(uuid::Uuid::new_v4()),
+            name:Set(format!("Espace de {}",account.username)),..Default::default()
+        }.insert(&transaction).await?;
+        let private_team=team::ActiveModel{
+            id:Set(uuid::Uuid::new_v4()),club_id:Set(private_club.id),
+            name:Set("Équipe principale".into()),..Default::default()
+        }.insert(&transaction).await?;
+        club_member::ActiveModel{
+            club_id:Set(private_club.id),user_id:Set(account.id),
+            role:Set("reader".into()),..Default::default()
+        }.insert(&transaction).await?;
+        team_member::ActiveModel{
+            team_id:Set(private_team.id),user_id:Set(account.id),
+            role:Set("coach".into()),..Default::default()
+        }.insert(&transaction).await?;
+        record.global_role=Set(Some("user".into()));
+        record.update(&transaction).await?;
+        transaction.commit().await?;
+    }
+    Ok(())
+}

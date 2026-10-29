@@ -13,6 +13,7 @@ mod account;
 mod rich_editor;
 mod tactics;
 mod organization;
+mod public_directory;
 
 use home::Home;
 use login::Login;
@@ -24,6 +25,7 @@ use activities::Activities;
 use account::AccountPage;
 use tactics::Tactics;
 use organization::Organization;
+use public_directory::PublicDirectory;
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {
@@ -41,6 +43,8 @@ pub enum Route {
     Organization {},
     #[route("/settings")]
     AccountPage {},
+    #[route("/public")]
+    PublicDirectory {},
     #[route("/login")]
     Login {},
     #[route("/trainings/:id")]

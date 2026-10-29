@@ -68,10 +68,11 @@ pub fn Login() -> Element {
                         let next = !*is_registration.read();
                         is_registration.set(next);
                     },
-                    if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
+                    Link { to: crate::routes::Route::PublicDirectory {}, class:"registration-toggle", "Explorer les clubs publics sans compte" }
+                if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
                 }
                 if *is_registration.read() {
-                    p { class: "registration-note", "Chaque compte possède pour l'instant ses propres joueuses et entraînements. Le partage entre entraîneurs sera ajouté ultérieurement." }
+                    p { class: "registration-note", "Après inscription, votre compte est en lecture seule jusqu’à son rattachement à un club ou une équipe et l’attribution des droits adaptés." }
                 }
             }
         }

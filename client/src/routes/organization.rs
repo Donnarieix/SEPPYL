@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::api::{account,organization as org};
+use crate::api::{account,organization as org,players};
 use super::{Route,layout::Header};
 
 #[component]
@@ -48,6 +48,24 @@ pub fn Organization() -> Element {
     let mut member_role=use_signal(||"trainer".to_string());
     let mut global_user_id=use_signal(String::new);
     let mut global_role=use_signal(||"user".to_string());
+    let roster_token=token.clone();
+    let mut roster=use_resource(move ||{
+        let token=roster_token.clone();
+        let id=member_team_id.read().clone();
+        async move{
+            if id.is_empty(){Ok(Vec::new())}else{
+                match token {Some(token)=>org::team_players(&token,&id).await,None=>Err("Connexion requise.".into())}
+            }
+        }
+    });
+    let owned_token=token.clone();
+    let own_players=use_resource(move ||{
+        let token=owned_token.clone();
+        async move{
+            match token{Some(token)=>players::list(&token).await,None=>Err("Connexion requise.".into())}
+        }
+    });
+    let mut selected_player=use_signal(String::new);
     let mut notice=use_signal(||None::<String>);
     let mut busy=use_signal(||false);
     if token.is_none(){
@@ -98,6 +116,36 @@ pub fn Organization() -> Element {
                             },
                             Some(Err(error))=>rsx!{p{class:"panel-empty","{error}"}},
                             None=>rsx!{p{class:"panel-empty","Chargement…"}},
+                        }
+                        if !selected_club.read().is_empty() {
+                            div { class:"organization-form",
+                                span { "Annuaire public : désactivé par défaut." }
+                                button { class:"button outline small", disabled:*busy.read(),
+                                    onclick:{
+                                        let token=token.clone();
+                                        move |_|{
+                                            let id=selected_club.read().clone();
+                                            if id.is_empty()||*busy.read(){return;}
+                                            let is_public=matches!(clubs.read().as_ref(),Some(Ok(items)) if items.iter().find(|c|c.id==id).and_then(|c|c.is_public)==Some(true));
+                                            let token=token.clone();
+                                            busy.set(true);
+                                            spawn(async move {
+                                                match org::set_public(&token,&id,!is_public).await {
+                                                    Ok(())=>{
+                                                        clubs.restart();
+                                                        notice.set(Some(if is_public{"Club rendu privé.".into()}else{"Club rendu public.".into()}));
+                                                    }
+                                                    Err(message)=>notice.set(Some(message)),
+                                                }
+                                                busy.set(false);
+                                            });
+                                        }
+                                    },
+                                    if matches!(clubs.read().as_ref(),Some(Ok(items)) if items.iter().any(|c|c.id==*selected_club.read() && c.is_public==Some(true))) {
+                                        "Rendre privé"
+                                    } else { "Rendre public" }
+                                }
+                            }
                         }
                         if is_admin{
                             form{class:"organization-form",
@@ -165,6 +213,81 @@ pub fn Organization() -> Element {
                                     placeholder:"Nom de l'équipe",oninput:move |e|new_team.set(e.value())}
                                 button{class:"button solid small",r#type:"submit",disabled:*busy.read(),"Ajouter"}
                             }
+                        }
+                    }
+                }
+                if !member_team_id.read().is_empty() {
+                    section { class:"panel organization-members",
+                        div { class:"panel-head",
+                            div { h2 { "Joueuses de l'équipe" }
+                                p { "Effectif partagé entre les entraîneurs rattachés à cette équipe." } }
+                        }
+                        match roster.read().clone() {
+                            Some(Ok(people)) => rsx! {
+                                if people.is_empty(){div{class:"panel-empty","Aucune joueuse rattachée."}}
+                                for player in people {
+                                    div { class:"organization-user", key:"{player.id}",
+                                        span { "{player.firstname} {player.lastname}" }
+                                        strong { "#{player.number}" }
+                                        button { class:"button quiet small", disabled:*busy.read(),
+                                            onclick:{
+                                                let player_id=player.id.clone();
+                                                let token=token.clone();
+                                                move |_|{
+                                                    let team=member_team_id.read().clone();
+                                                    let token=token.clone();
+                                                    let id=player_id.clone();
+                                                    busy.set(true);
+                                                    spawn(async move {
+                                                        match org::remove_team_player(&token,&team,&id).await {
+                                                            Ok(())=>{roster.restart();notice.set(Some("Joueuse retirée de l'équipe.".into()));},
+                                                            Err(message)=>notice.set(Some(message)),
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                }
+                                            },
+                                            "Retirer"
+                                        }
+                                    }
+                                }
+                            },
+                            Some(Err(message)) => rsx! { p { class:"panel-empty", "{message}" } },
+                            None => rsx! { p { class:"panel-empty", "Chargement…" } },
+                        }
+                        form { class:"organization-form",
+                            onsubmit:{
+                                let token=token.clone();
+                                move |event|{
+                                    event.prevent_default();
+                                    let player_id=selected_player.read().clone();
+                                    let team=member_team_id.read().clone();
+                                    if player_id.is_empty()||team.is_empty()||*busy.read(){return;}
+                                    let token=token.clone();
+                                    busy.set(true);
+                                    spawn(async move {
+                                        match org::add_team_player(&token,&team,&player_id).await {
+                                            Ok(())=>{
+                                                roster.restart();
+                                                selected_player.set(String::new());
+                                                notice.set(Some("Joueuse rattachée.".into()));
+                                            }
+                                            Err(message)=>notice.set(Some(message)),
+                                        }
+                                        busy.set(false);
+                                    });
+                                }
+                            },
+                            label { "Ajouter une de mes joueuses à l'équipe" }
+                            select { value:"{selected_player}",onchange:move |e|selected_player.set(e.value()),
+                                option { value:"", "Sélectionner…" }
+                                if let Some(Ok(people))=own_players.read().clone(){
+                                    for player in people {
+                                        option { value:"{player.id}", "{player.firstname} {player.lastname} · #{player.number}" }
+                                    }
+                                }
+                            }
+                            button { r#type:"submit", class:"button outline small", disabled:*busy.read(), "Rattacher" }
                         }
                     }
                 }

@@ -22,6 +22,7 @@ jobs:
           node --check client/assets/rich-editor.js
           node --check client/assets/tactics-board.js
           node --check client/assets/auth-guard.js
+          node --check client/assets/audit-dates.js
       - name: Resolve dependencies
         run: cargo generate-lockfile
       - name: Check API

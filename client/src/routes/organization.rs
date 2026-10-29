@@ -162,6 +162,23 @@ pub fn Organization()->Element{
                                 div{class:"panel-head",
                                     div{h2{"Équipes du club"}p{"Choisissez une équipe pour consulter son effectif."}}
                                 }
+                                div{class:"club-flow-guide",
+                                    div{
+                                        span{class:"club-flow-number","1"}
+                                        strong{"Équipe"}
+                                        small{"Sélectionnez le groupe concerné."}
+                                    }
+                                    div{
+                                        span{class:"club-flow-number","2"}
+                                        strong{"Effectif"}
+                                        small{"Les joueuses sont partagées dans l'équipe."}
+                                    }
+                                    div{
+                                        span{class:"club-flow-number","3"}
+                                        strong{"Entraînement"}
+                                        small{"Préparez une séance et évaluez les présences."}
+                                    }
+                                }
                                 div{class:"workspace-card-grid",
                                     for team in &teams_list{
                                         button{class:"workspace-team-card",key:"{team.id}",

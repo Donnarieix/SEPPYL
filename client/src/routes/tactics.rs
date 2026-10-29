@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::api::tactics::{self, Diagram, DrawingObject};
+use crate::api::tactics::{self, DrawingObject};
 use super::{Route, layout::Header};
 
 #[component]
@@ -19,7 +19,6 @@ pub fn Tactics() -> Element {
     });
     let mut selected_id = use_signal(|| None::<String>);
     let mut name = use_signal(|| "Nouveau schéma".to_string());
-    let mut layout = use_signal(|| "football".to_string());
     let mut objects_json = use_signal(|| "[]".to_string());
     let mut busy = use_signal(|| false);
     let mut deletion_confirm = use_signal(|| false);
@@ -38,7 +37,7 @@ pub fn Tactics() -> Element {
     let token_save = token.clone();
     let token_delete = token.clone();
     let draft_id = selected_id.read().clone().unwrap_or_else(|| "new".to_string());
-    let draft_key = format!("{}|{}", draft_id, layout.read());
+    let draft_key = format!("{}|{}",draft_id,selected_id.read().as_deref().unwrap_or("new"));
     let initial_objects = objects_json.read().clone();
 
     rsx! {
@@ -54,7 +53,6 @@ pub fn Tactics() -> Element {
                         onclick: move |_| {
                             selected_id.set(None);
                             name.set("Nouveau schéma".into());
-                            layout.set("football".into());
                             objects_json.set("[]".into());
                             deletion_confirm.set(false);
                             notice.set(None);
@@ -87,7 +85,6 @@ pub fn Tactics() -> Element {
                                         onclick: move |_| {
                                             selected_id.set(Some(diagram.id.clone()));
                                             name.set(diagram.name.clone());
-                                            layout.set(diagram.layout.clone());
                                             objects_json.set(
                                                 serde_json::to_string(&diagram.objects)
                                                     .unwrap_or_else(|_| "[]".into())
@@ -110,28 +107,59 @@ pub fn Tactics() -> Element {
                                 input { value:"{name}", maxlength:"150",
                                     oninput:move |e|name.set(e.value()) }
                             }
-                            div { class: "field",
-                                label { "Terrain" }
-                                select { value:"{layout}",
-                                    onchange:move |e|layout.set(e.value()),
-                                    option { value:"football", "Football" }
-                                    option { value:"volleyball", "Volleyball" }
-                                    option { value:"blank", "Terrain neutre" }
-                                }
-                            }
+
                         }
                         div { class: "seppyl-tactics-board",
                             key: "{draft_key}",
                             "data-tactics-initial": "{initial_objects}",
-                            "data-tactics-layout": "{layout}",
+
                             div { class: "tactics-tools", role:"toolbar", "aria-label":"Outils de dessin",
-                                button { class:"selected", r#type:"button", "data-tactic-tool":"player", "Joueuse" }
-                                button { r#type:"button", "data-tactic-tool":"opponent", "Adversaire" }
-                                button { r#type:"button", "data-tactic-tool":"ball", "Ballon" }
-                                button { r#type:"button", "data-tactic-tool":"cone", "Plot" }
-                                button { r#type:"button", "data-tactic-tool":"arrow", "Flèche" }
-                                button { r#type:"button", "data-tactic-tool":"erase", "Effacer" }
-                                button { r#type:"button", "data-tactic-remove":"true", "Supprimer la sélection" }
+                                details { class:"tactic-category",open:true,
+                                    summary { "Sélection" }
+                                    div { class:"tactic-category-actions",
+                                        button { class:"selected", r#type:"button", "data-tactic-tool":"select", "↖ Sélectionner" }
+                                        button { r#type:"button", "data-tactic-tool":"erase", "Effacer" }
+                                        button { r#type:"button", "data-tactic-remove":"true", "Supprimer la sélection" }
+                                    }
+                                }
+                                details { class:"tactic-category", open:true,
+                                    summary { "Joueurs" }
+                                    div { class:"tactic-category-actions",
+                                        button { r#type:"button", "data-tactic-tool":"player", "Joueuse" }
+                                        button { r#type:"button", "data-tactic-tool":"opponent", "Adversaire" }
+                                    }
+                                }
+                                details { class:"tactic-category", open:true,
+                                    summary { "Matériel" }
+                                    div { class:"tactic-category-actions",
+                                        button { r#type:"button", "data-tactic-tool":"ball", "Ballon" }
+                                        button { r#type:"button", "data-tactic-tool":"cone", "Plot" }
+                                    }
+                                }
+                                details { class:"tactic-category", open:true,
+                                    summary { "Trajets" }
+                                    div { class:"tactic-category-actions",
+                                        button { r#type:"button", "data-tactic-tool":"arrow", "Flèche" }
+                                    }
+                                }
+                            }
+                            div { class:"tactic-colors",
+                                div { class:"tactic-colors-heading",
+                                    strong { "Couleur des objets" }
+                                    span { "S'applique à la sélection ou aux prochains objets." }
+                                }
+                                div { class:"tactic-palette",
+                                    for color in ["#2455b6","#c6403c","#f8f8f5","#ee9228","#21a179","#7d4cc2","#f2c94c","#202f43"] {
+                                        button { key:"{color}",class:"tactic-swatch",r#type:"button",
+                                            "data-tactic-color":"{color}",style:"--swatch:{color}",
+                                            title:"Couleur {color}","aria-label":"Couleur {color}" }
+                                    }
+                                    label { class:"tactic-custom-color",
+                                        span { "Personnalisée" }
+                                        input { r#type:"color",value:"#2455b6",
+                                            "data-tactic-custom":"true","aria-label":"Couleur personnalisée" }
+                                    }
+                                }
                             }
                             svg { class:"tactics-canvas",
                                 "data-tactics-svg":"true",
@@ -143,7 +171,7 @@ pub fn Tactics() -> Element {
                                 oninput:move |event|objects_json.set(event.value()) }
                         }
                         div { class: "tactics-actions",
-                            p { class:"muted-small", "Cliquez pour placer un symbole. Glissez-le pour le déplacer. Pour une flèche, cliquez le départ puis l’arrivée." }
+                            p { class:"muted-small", "Sélection : cliquez, Shift+clic ou encadrez plusieurs éléments. Glissez pour déplacer le groupe. Les couleurs se modifient sur la sélection." }
                             button { class:"button solid", disabled:*busy.read(),
                                 onclick:move |_|{
                                     if *busy.read(){return;}
@@ -158,7 +186,7 @@ pub fn Tactics() -> Element {
                                         notice.set(Some("Donnez un nom au schéma.".into()));
                                         return;
                                     }
-                                    let layout_value=layout.read().clone();
+                                    let layout_value="football".to_string();
                                     let id=selected_id.read().clone();
                                     let token=token_save.clone();
                                     busy.set(true);
@@ -196,7 +224,6 @@ pub fn Tactics() -> Element {
                                                             selected_id.set(None);
                                                             name.set("Nouveau schéma".into());
                                                             objects_json.set("[]".into());
-                                                            layout.set("football".into());
                                                             diagrams.restart();
                                                             notice.set(Some("Schéma supprimé.".into()));
                                                         }

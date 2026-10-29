@@ -98,23 +98,31 @@
       add(svg, "rect", { x: 655, y: 140, width: 110, height: 220, ...line });
     };
     const drawArrow = (group, item, fill, active) => {
-      const x1 = item.x, y1 = item.y, x2 = item.end_x ?? item.x, y2 = item.end_y ?? item.y;
-      const dx = x2 - x1, dy = y2 - y1;
-      const length = Math.hypot(dx, dy) || 1;
-      const ux = dx / length, uy = dy / length;
-      const xBase = x2 - ux * 15, yBase = y2 - uy * 15;
-      add(group, "line", {
-        x1, y1, x2: xBase, y2: yBase, stroke: fill,
-        "stroke-width": active ? 7 : 5, "stroke-linecap": "round",
-        "pointer-events": "stroke"
-      });
-      add(group, "polygon", {
-        points: [
-          [x2, y2], [xBase - uy * 9, yBase + ux * 9],
-          [xBase + uy * 9, yBase - ux * 9]
-        ].map(p => p.join(",")).join(" "),
-        fill, stroke: active ? "#fff6b0" : fill, "stroke-width": active ? 2 : 0
-      });
+      const x1=item.x,y1=item.y,x2=item.end_x??x1,y2=item.end_y??y1;
+      const curve=item.kind==="curve";
+      const cx=item.control_x??(x1+x2)/2,cy=item.control_y??(y1+y2)/2;
+      const dx=curve?x2-cx:x2-x1,dy=curve?y2-cy:y2-y1;
+      const length=Math.hypot(dx,dy)||1,ux=dx/length,uy=dy/length;
+      const head=Math.min(27,Math.max(11,(item.size??20)*.7));
+      const bx=x2-ux*head*.65,by=y2-uy*head*.65;
+      const path=curve
+        ?"M"+x1+" "+y1+" Q"+cx+" "+cy+" "+bx+" "+by
+        :"M"+x1+" "+y1+" L"+bx+" "+by;
+      add(group,"path",{d:path,stroke:fill,fill:"none",
+        "stroke-width":Math.max(3,(item.size??20)*.23),"stroke-linecap":"round",
+        "pointer-events":"stroke"});
+      add(group,"polygon",{points:[
+        [x2,y2],[x2-ux*head-uy*head*.5,y2-uy*head+ux*head*.5],
+        [x2-ux*head+uy*head*.5,y2-uy*head-ux*head*.5]
+      ].map(p=>p.join(",")).join(" "),fill,
+        stroke:active?"#ffe59a":fill,"stroke-width":active?2:0});
+      if(curve&&active){
+        add(group,"line",{x1:(x1+x2)/2,y1:(y1+y2)/2,x2:cx,y2:cy,
+          stroke:"#ffffff99","stroke-width":2,"stroke-dasharray":"5 4",
+          "pointer-events":"none"});
+        add(group,"circle",{cx,cy,r:10,fill:"#ffefaf",stroke:"#253243",
+          "stroke-width":2,cursor:"move","data-curve-handle":item.id});
+      }
     };
     function render() {
       svg.replaceChildren();
@@ -123,24 +131,43 @@
         const active = selected.has(item.id);
         const group = add(svg, "g", { "data-marker-id": item.id, cursor: "grab" });
         const fill = validColor(item.color) ? item.color : DEFAULTS[item.kind] || "#2455b6";
-        if (item.kind === "arrow") {
-          drawArrow(group, item, fill, active);
-          continue;
+        const r=item.size??(item.kind==="ball"?16:22);
+        if (item.kind==="arrow"||item.kind==="curve") {
+          drawArrow(group,item,fill,active);continue;
         }
-        if (item.kind === "cone") {
-          add(group, "polygon", {
-            points: item.x + "," + (item.y - 15) + " " +
-              (item.x - 14) + "," + (item.y + 12) + " " +
-              (item.x + 14) + "," + (item.y + 12),
-            fill, stroke: active ? "#fff6b0" : "#433f35",
-            "stroke-width": active ? 5 : 2
-          });
-        } else {
-          add(group, "circle", {
-            cx: item.x, cy: item.y, r: item.kind === "ball" ? 12 : 20,
-            fill, stroke: active ? "#fff6b0" : "#253243",
-            "stroke-width": active ? 5 : 2
-          });
+        if (item.kind==="cone") {
+          add(group,"polygon",{points:item.x+","+(item.y-r)+" "+
+            (item.x-r*.8)+","+(item.y+r*.75)+" "+(item.x+r*.8)+","+(item.y+r*.75),
+            fill,stroke:active?"#ffe59a":"#433f28","stroke-width":active?4:2});
+        }else if(item.kind==="goal"){
+          add(group,"rect",{x:item.x-r,y:item.y-r*.6,width:2*r,height:r*1.2,
+            rx:2,fill:"#ffffff22",stroke:fill,"stroke-width":active?5:3});
+          for(let i=-2;i<=2;i++)
+            add(group,"line",{x1:item.x+i*r*.35,y1:item.y-r*.6,
+              x2:item.x+i*r*.35,y2:item.y+r*.6,stroke:fill,
+              "stroke-width":1,"pointer-events":"none"});
+        }else {
+          add(group,"circle",{cx:item.x,cy:item.y,r,fill:item.kind==="ball"?"#f9f9f6":fill,
+            stroke:active?"#ffe59a":"#253243","stroke-width":active?5:2});
+          if(item.kind==="ball"){
+            const pentagon=(x,y,radius)=>{
+              const coords=[];
+              for(let i=0;i<5;i++){
+                const a=-Math.PI/2+i*2*Math.PI/5;
+                coords.push((x+Math.cos(a)*radius)+","+(y+Math.sin(a)*radius));
+              }
+              add(group,"polygon",{points:coords.join(" "),fill:"#24303a","pointer-events":"none"});
+            };
+            pentagon(item.x,item.y,r*.42);
+            for(let i=0;i<5;i++){
+              const a=-Math.PI/2+i*2*Math.PI/5;
+              const x=item.x+Math.cos(a)*r*.76,y=item.y+Math.sin(a)*r*.76;
+              pentagon(x,y,r*.21);
+              add(group,"line",{x1:item.x+Math.cos(a)*r*.4,y1:item.y+Math.sin(a)*r*.4,
+                x2:x,y2:y,stroke:"#24303a","stroke-width":1,
+                "pointer-events":"none"});
+            }
+          }
         }
         if (item.label) {
           const text = add(group, "text", {
@@ -196,6 +223,18 @@
     );
     root.querySelector("[data-tactic-custom]")?.addEventListener("input", event => paint(event.target.value));
     root.querySelector("[data-tactic-remove]")?.addEventListener("click", dropSelection);
+    const resize = value => {
+      const n=Number(value);
+      if(!Number.isFinite(n))return;
+      brushSize=Math.min(65,Math.max(8,n));
+      for(const item of objects)if(selected.has(item.id))item.size=brushSize;
+      const label=root.querySelector("[data-tactic-size-label]");
+      if(label)label.textContent=String(Math.round(brushSize));
+      if(selected.size)sync();
+      render();
+    };
+    root.querySelector("[data-tactic-size]")?.addEventListener("input",event=>resize(event.target.value));
+
     root.addEventListener("keydown", event => {
       if (event.target.matches("input, textarea, select")) return;
       if (event.key === "Escape") {
@@ -208,6 +247,10 @@
       if (event.button !== 0) return;
       const p = position(event);
       if (!p) return;
+      const handle=event.target.closest("[data-curve-handle]");
+      if(handle&&tool==="select"){
+        draggingCurve=handle.getAttribute("data-curve-handle");return;
+      }
       const marked = event.target.closest("[data-marker-id]");
       const hitId = marked?.getAttribute("data-marker-id");
       svg.setPointerCapture(event.pointerId);
@@ -235,15 +278,18 @@
         return;
       }
       if (!TOOLS.has(tool) || tool === "erase" || objects.length >= 250) return;
-      if (tool === "arrow" && !arrowStart) {
+      if ((tool === "arrow"||tool === "curve") && !arrowStart) {
         arrowStart = p; render(); return;
       }
       const next = {
         id: "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
-        kind: tool, x: tool === "arrow" ? arrowStart.x : p.x,
-        y: tool === "arrow" ? arrowStart.y : p.y,
-        end_x: tool === "arrow" ? p.x : null,
-        end_y: tool === "arrow" ? p.y : null,
+        kind: tool, x: (tool === "arrow"||tool === "curve") ? arrowStart.x : p.x,
+        y: (tool === "arrow"||tool === "curve") ? arrowStart.y : p.y,
+        end_x: (tool === "arrow"||tool === "curve") ? p.x : null,
+        end_y: (tool === "arrow"||tool === "curve") ? p.y : null,
+        size:brushSize,
+        control_x:tool==="curve"?clamp((arrowStart.x+p.x)/2-(p.y-arrowStart.y)*.3,800):null,
+        control_y:tool==="curve"?clamp((arrowStart.y+p.y)/2+(p.x-arrowStart.x)*.3,500):null,
         label: null, color
       };
       objects.push(next);
@@ -252,6 +298,12 @@
       render(); sync();
     });
     svg.addEventListener("pointermove", event => {
+      if(draggingCurve){
+        const p=position(event);
+        const obj=objects.find(o=>o.id===draggingCurve);
+        if(p&&obj){obj.control_x=p.x;obj.control_y=p.y;render();}
+        return;
+      }
       if (dragging) {
         const p = position(event);
         if (!p) return;
@@ -261,9 +313,13 @@
           if (!item) continue;
           item.x = clamp(original.x + dx, 800);
           item.y = clamp(original.y + dy, 500);
-          if (item.kind === "arrow") {
+          if (item.kind === "arrow"||item.kind === "curve") {
             item.end_x = clamp((original.end_x ?? original.x) + dx, 800);
             item.end_y = clamp((original.end_y ?? original.y) + dy, 500);
+            if(item.kind==="curve"){
+              item.control_x=clamp((original.control_x??original.x)+dx,800);
+              item.control_y=clamp((original.control_y??original.y)+dy,500);
+            }
           }
         }
         render();
@@ -275,7 +331,7 @@
         selected = new Set(marquee.addTo);
         for (const item of objects) {
           if (inRect({ x: item.x, y: item.y }, box) ||
-              (item.kind === "arrow" && inRect({
+              ((item.kind === "arrow"||item.kind === "curve") && inRect({
                 x: item.end_x ?? item.x, y: item.end_y ?? item.y
               }, box))) selected.add(item.id);
         }
@@ -283,12 +339,12 @@
       }
     });
     const finish = () => {
-      if (dragging) { dragging = null; sync(); }
+      if (dragging||draggingCurve) { dragging = null;draggingCurve=null;sync(); }
       if (marquee) { marquee = null; render(); }
     };
     svg.addEventListener("pointerup", finish);
     svg.addEventListener("pointercancel", finish);
-    paint(color); render();
+    paint(color); loadDiagram();
   }
   const scan = () => document.querySelectorAll(".seppyl-tactics-board").forEach(setup);
   scan();

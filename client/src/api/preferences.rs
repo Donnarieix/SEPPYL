@@ -3,7 +3,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 fn api_url() -> &'static str {
-    option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000")
+    option_env!("SEPPYL_API_URL").unwrap_or(if cfg!(debug_assertions) {
+        "http://127.0.0.1:3000"
+    } else {
+        "/api"
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -46,20 +46,32 @@ pub fn Administration()->Element{
             button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{});},"Connexion"}}
         };
     }
-    let is_admin=matches!(identity.read().as_ref(),Some(Ok(value)) if value.role=="administrator");
-    if let Some(Ok(_))=identity.read().as_ref(){
-        if !is_admin{
-            return rsx!{
-                div{class:"app",Header{}
-                    main{class:"page",
-                        div{class:"workspace-empty",h2{"Accès réservé"},
-                            p{"Seuls les administrateurs peuvent gérer tous les comptes et leurs rattachements."}
-                            Link{to:Route::Organization{},class:"button outline","Retour à mon club"}
-                        }
-                    }
-                }
-            };
-        }
+    match identity.read().clone(){
+        Some(Ok(value)) if value.role=="administrator"=>{},
+        Some(Ok(_))=>return rsx!{
+            div{class:"app",Header{}
+                main{class:"page",div{class:"workspace-empty",
+                    h2{"Accès réservé"}
+                    p{"Seuls les administrateurs peuvent gérer tous les comptes et leurs rattachements."}
+                    Link{to:Route::Organization{},class:"button outline","Retour à mon club"}
+                }}
+            }
+        },
+        Some(Err(error))=>return rsx!{
+            div{class:"app",Header{}
+                main{class:"page",div{class:"workspace-empty",
+                    h2{"Informations indisponibles"}
+                    p{role:"alert","{error}"}
+                }}
+            }
+        },
+        None=>return rsx!{
+            div{class:"app",Header{}
+                main{class:"page",div{class:"workspace-empty",
+                    p{"Vérification des autorisations…"}
+                }}
+            }
+        },
     }
     let token=token.unwrap_or_default();
     let directory=users.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();

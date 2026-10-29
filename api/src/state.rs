@@ -3,6 +3,9 @@ use sea_orm::{
 };
 
 use crate::entities;
+use argon2::{Argon2,PasswordHasher};
+
+pub const LEGACY_ADMIN_HASH:&str="$argon2id$v=19$m=19456,t=2,p=1$ko1RJ3LS7gXHMPZ8wI31QA$bEB7xXacYbfJzHuchGcSLK62pxQ7QOvgy7ikRaLgvO4";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -31,20 +34,41 @@ impl AppState {
             .await
             .unwrap();
 
-        let user = entities::user::Entity::find()
-            .filter(entities::user::COLUMN.username.eq("admin".to_string()))
-            .one(&db)
-            .await
-            .unwrap();
-
-        if user.is_none() {
-            let user = entities::user::ActiveModel {
-                id: Set(uuid::Uuid::new_v4()),
-                username: Set("admin".into()),
-                password: Set("$argon2id$v=19$m=19456,t=2,p=1$ko1RJ3LS7gXHMPZ8wI31QA$bEB7xXacYbfJzHuchGcSLK62pxQ7QOvgy7ikRaLgvO4".into()),
-                ..Default::default()
-            };
-            user.insert(&db).await.unwrap();
+        // No static admin/admin password is provisioned anymore. A fresh
+        // installation can bootstrap an administrator explicitly through an
+        // environment variable. On old databases the known default password
+        // must be rotated before the admin account may log in.
+        if let Ok(password)=std::env::var("SEPPYL_BOOTSTRAP_ADMIN_PASSWORD"){
+            if password.len()<16{panic!("SEPPYL_BOOTSTRAP_ADMIN_PASSWORD must contain at least 16 characters");}
+            let hash=Argon2::default().hash_password(password.as_bytes())
+                .expect("Unable to hash bootstrap admin password").to_string();
+            let existing=entities::user::Entity::find()
+                .filter(entities::user::COLUMN.username.eq("admin"))
+                .one(&db).await.expect("Unable to query admin account");
+            match existing{
+                Some(admin) if admin.password==LEGACY_ADMIN_HASH=>{
+                    let mut active:entities::user::ActiveModel=admin.into();
+                    active.password=Set(hash);
+                    active.global_role=Set(Some("administrator".into()));
+                    active.update(&db).await.expect("Unable to rotate legacy admin password");
+                }
+                None=>{
+                    entities::user::ActiveModel{
+                        id:Set(uuid::Uuid::new_v4()),
+                        username:Set("admin".into()),
+                        password:Set(hash),
+                        global_role:Set(Some("administrator".into())),
+                        ..Default::default()
+                    }.insert(&db).await.expect("Unable to bootstrap administrator");
+                }
+                _=>{}
+            }
+        }
+        let legacy=entities::user::Entity::find()
+            .filter(entities::user::COLUMN.username.eq("admin"))
+            .one(&db).await.expect("Unable to query admin");
+        if legacy.as_ref().is_some_and(|a|a.password==LEGACY_ADMIN_HASH){
+            eprintln!("SECURITY: legacy admin password detected. Set SEPPYL_BOOTSTRAP_ADMIN_PASSWORD to rotate it. The known password cannot be used to log in.");
         }
 
         migrate_existing_accounts(&db).await

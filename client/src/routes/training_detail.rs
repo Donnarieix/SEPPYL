@@ -554,6 +554,7 @@ fn Preparation(
                     {
                         let item_id=activity.id.clone();
                         let order:Vec<String>=detail.activities.iter().map(|a|a.id.clone()).collect();
+                        let drop_order=order.clone();
                         let token_for_drag=token.clone();
                         let training_for_drag=training_id.clone();
                         let token_for_move=token.clone();
@@ -575,7 +576,7 @@ fn Preparation(
                                     event.prevent_default();
                                     let Some(from)=dragged.read().clone() else {return;};
                                     dragged.set(None);
-                                    let Some(reordered)=reorder_before(&order,&from,&target_id) else {return;};
+                                    let Some(reordered)=reorder_before(&drop_order,&from,&target_id) else {return;};
                                     let token=token_for_drag.clone();
                                     let training_id=training_for_drag.clone();
                                     spawn(async move {

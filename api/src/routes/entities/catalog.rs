@@ -78,9 +78,11 @@ pub async fn list(
             .filter(catalog_material::COLUMN.activity_id.is_in(ids))
             .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
-    Ok(Json(activities.into_iter().map(|mut a| CatalogEntry {
-        activity: { a.description=sanitize_description(&a.description); a },
-        materials: materials.iter().filter(|m| m.activity_id == a.id).cloned().collect(),
+    Ok(Json(activities.into_iter().map(|mut a| {
+        let id=a.id;
+        a.description=sanitize_description(&a.description);
+        CatalogEntry { activity:a,
+            materials:materials.iter().filter(|m| m.activity_id==id).cloned().collect() }
     }).collect()))
 }
 

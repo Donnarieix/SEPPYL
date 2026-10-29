@@ -1705,3 +1705,5 @@ button.grid-add-button:hover,
   .workspace-tabs,.workspace-context,.tactic-colors,.tactics-tools{display:none!important}
   .print-activity{break-inside:avoid-page}
 }
+
+.tactic-selection-count { align-self:center; color:var(--muted); font-size:11px; padding:7px 4px; white-space:nowrap; }

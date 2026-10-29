@@ -47,7 +47,7 @@ pub fn TrainingPrint(id: String) -> Element {
                             article { class: "print-activity", key: "{activity.id}",
                                 h3 { "{index + 1}. {activity.name}" }
                                 if !activity.description.trim().is_empty() {
-                                    p { class: "preformatted", "{activity.description}" }
+                                    div { class: "preformatted rich-render", dangerous_inner_html: "{activity.description}" }
                                 }
                                 if let Some(url) = activity.image_url.as_ref() {
                                     img { class: "print-picture", src: "{catalog::image_src(url)}", alt: "Illustration de {activity.name}" }

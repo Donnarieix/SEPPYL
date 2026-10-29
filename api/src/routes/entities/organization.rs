@@ -18,6 +18,7 @@ fn db_error(_: sea_orm::DbErr) -> StatusCode { StatusCode::INTERNAL_SERVER_ERROR
 
 pub async fn can_manage_club(state: &AppState, claims: &Claims, role: Role, id: Uuid) -> ApiResult<bool> {
     if role == Role::Administrator { return Ok(true); }
+    if !role.can_write(){return Ok(false);}
     let membership = club_membership::Entity::find_by_id((claims.sub, id))
         .one(&state.db).await.map_err(db_error)?;
     Ok(membership.is_some_and(|m| m.role == "manager"))
@@ -36,6 +37,7 @@ pub async fn can_access_club(state: &AppState, claims: &Claims, role: Role, id: 
 }
 pub async fn can_write_team(state: &AppState, claims: &Claims, role: Role, id: Uuid) -> ApiResult<bool> {
     if role == Role::Administrator { return Ok(true); }
+    if !role.can_write(){return Ok(false);}
     let Some(team) = team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)? else {
         return Ok(false);
     };
@@ -94,7 +96,9 @@ pub async fn list_teams(
     if !can_access_club(&state,&claims,role.0,id).await? { return Err(StatusCode::NOT_FOUND); }
     let all = team::Entity::find().filter(team::COLUMN.club_id.eq(id))
         .all(&state.db).await.map_err(db_error)?;
-    if role.0 == Role::Administrator || can_manage_club(&state,&claims,role.0,id).await? {
+    let direct_club_membership=club_membership::Entity::find_by_id((claims.sub,id))
+        .one(&state.db).await.map_err(db_error)?.is_some();
+    if role.0 == Role::Administrator || direct_club_membership {
         return Ok(Json(all));
     }
     let assigned:HashSet<Uuid> = team_membership::Entity::find()
@@ -230,7 +234,7 @@ mod integration_tests {
             Path((team_id,trainer_id)),Json(GrantMembership{role:"trainer".into()})
         ).await.unwrap();
         assert!(can_access_club(&state,&coach,Role::User,club_id).await.unwrap());
-        assert!(can_write_team(&state,&coach,Role::User,team_id).await.unwrap());
+        assert!(!can_write_team(&state,&coach,Role::User,team_id).await.unwrap());
         assert!(!can_write_team(&state,&stranger,Role::User,team_id).await.unwrap());
         let visible=list_clubs(Extension(coach),Extension(CurrentRole(Role::User)),State(state)).await.unwrap().0;
         assert_eq!(visible.len(),1);
@@ -326,7 +330,8 @@ pub async fn can_read_team(
     if role==Role::Administrator {return Ok(true);}
     let Some(team)=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
     else {return Ok(false)};
-    if can_manage_club(state,claims,role,team.club_id).await? {return Ok(true);}
+    if club_membership::Entity::find_by_id((claims.sub,team.club_id))
+        .one(&state.db).await.map_err(db_error)?.is_some(){return Ok(true);}
     Ok(team_membership::Entity::find_by_id((claims.sub,id))
         .one(&state.db).await.map_err(db_error)?.is_some())
 }

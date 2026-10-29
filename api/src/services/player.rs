@@ -44,7 +44,7 @@ pub async fn get_players_for_team(
         .filter(entities::player::COLUMN.id.is_in(links.into_iter().map(|r|r.player_id)))
         .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)
 }
-async fn assert_can_write_player(
+pub async fn assert_writable_player(
     claims:&Claims,state:&AppState,player_id:Uuid
 )->Result<(),StatusCode>{
     let memberships=entities::team_player::Entity::find()
@@ -120,7 +120,7 @@ pub async fn update_player(
     let Some(player) = get_player(claims, state, payload.id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
-    assert_can_write_player(claims,state,payload.id).await?;
+    assert_writable_player(claims,state,payload.id).await?;
     let mut player: entities::player::ActiveModel = player.into();
     if let Some(firstname) = payload.firstname {
         if firstname.trim().is_empty() { return Err(StatusCode::BAD_REQUEST); }
@@ -146,7 +146,7 @@ pub async fn delete_player(
     let Some(player) = get_player(claims, state, player_id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
-    assert_can_write_player(claims,state,player_id).await?;
+    assert_writable_player(claims,state,player_id).await?;
     // Preserve history instead of deleting recorded evaluations.
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.player_id.eq(player_id))

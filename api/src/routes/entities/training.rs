@@ -176,7 +176,11 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> Result<Json<TrainingDetail>, ApiError> {
     let training = access_training(&claims, &state, id, false).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let players = if let Some(team_id)=training.team_id {
+        organization::list_team_players_internal(&state,team_id).await?
+    } else {
+        services::player::get_players(&claims,&state).await?
+    };
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.training_id.eq(id))
         .all(&state.db)

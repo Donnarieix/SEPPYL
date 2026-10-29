@@ -7,7 +7,7 @@ use serde::{Deserialize,Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
 use crate::{
-    entities::{club, team, club_membership, team_membership, user},
+    entities::{club, team, club_membership, team_membership, team_player, player, player_user, user},
     middleware::{CurrentRole, Role},
     routes::authentication::login::Claims,
     state::AppState,
@@ -328,4 +328,69 @@ pub async fn can_read_team(
     if can_manage_club(state,claims,role,team.club_id).await? {return Ok(true);}
     Ok(team_membership::Entity::find_by_id((claims.sub,id))
         .one(&state.db).await.map_err(db_error)?.is_some())
+}
+
+pub async fn list_team_players(
+    Extension(claims):Extension<Claims>,
+    Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,
+)->ApiResult<Json<Vec<player::Model>>>{
+    if !can_read_team(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let ids=team_player::Entity::find()
+        .filter(team_player::COLUMN.team_id.eq(id))
+        .all(&state.db).await.map_err(db_error)?
+        .into_iter().map(|entry|entry.player_id).collect::<Vec<_>>();
+    let result=player::Entity::find()
+        .filter(player::COLUMN.id.is_in(ids))
+        .all(&state.db).await.map_err(db_error)?;
+    Ok(Json(result))
+}
+pub async fn assign_team_player(
+    Extension(claims):Extension<Claims>,
+    Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((id,player_id)):Path<(Uuid,Uuid)>,
+)->ApiResult<StatusCode>{
+    if !role.0.can_write() || !can_write_team(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let owner=player_user::Entity::find_by_id((claims.sub,player_id))
+        .one(&state.db).await.map_err(db_error)?.is_some();
+    // An administrator may migrate an existing player; ordinary coaches
+    // can only attach their own players or already-linked team players.
+    if !owner && role.0!=Role::Administrator{return Err(StatusCode::NOT_FOUND);}
+    if player::Entity::find_by_id(player_id).one(&state.db).await.map_err(db_error)?.is_none(){
+        return Err(StatusCode::NOT_FOUND);
+    }
+    if team_player::Entity::find_by_id((id,player_id)).one(&state.db).await.map_err(db_error)?.is_none(){
+        team_player::ActiveModel{team_id:Set(id),player_id:Set(player_id),..Default::default()}
+            .insert(&state.db).await.map_err(db_error)?;
+    }
+    tracing::info!(actor=%claims.sub,team=%id,player=%player_id,action="team.player.add");
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn remove_team_player(
+    Extension(claims):Extension<Claims>,
+    Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((id,player_id)):Path<(Uuid,Uuid)>,
+)->ApiResult<StatusCode>{
+    if !role.0.can_write() || !can_write_team(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if let Some(row)=team_player::Entity::find_by_id((id,player_id))
+        .one(&state.db).await.map_err(db_error)?{
+        let active:team_player::ActiveModel=row.into();
+        active.delete(&state.db).await.map_err(db_error)?;
+    }
+    tracing::info!(actor=%claims.sub,team=%id,player=%player_id,action="team.player.remove");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn list_team_players_internal(state:&AppState,id:Uuid)->ApiResult<Vec<player::Model>>{
+    let ids=team_player::Entity::find().filter(team_player::COLUMN.team_id.eq(id))
+        .all(&state.db).await.map_err(db_error)?
+        .into_iter().map(|m|m.player_id).collect::<Vec<_>>();
+    player::Entity::find().filter(player::COLUMN.id.is_in(ids))
+        .all(&state.db).await.map_err(db_error)
 }

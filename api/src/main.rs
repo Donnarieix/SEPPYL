@@ -61,6 +61,9 @@ async fn main() {
         .route("/clubs", get(organization::list_clubs).post(organization::create_club))
         .route("/clubs/{id}/members", get(organization::list_club_members))
         .route("/teams/{id}/members", get(organization::list_team_members))
+        .route("/teams/{id}/players", get(organization::list_team_players))
+        .route("/teams/{id}/players/{player_id}",
+            put(organization::assign_team_player).delete(organization::remove_team_player))
         .route("/clubs/{id}/teams", get(organization::list_teams).post(organization::create_team))
         .route("/clubs/{id}/members/{user_id}", put(organization::grant_club_membership).delete(organization::remove_club_member))
         .route("/teams/{id}/members/{user_id}", put(organization::grant_team_membership).delete(organization::remove_team_member))

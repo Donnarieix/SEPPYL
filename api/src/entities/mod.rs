@@ -19,3 +19,4 @@ pub mod club_membership;
 pub mod team_membership;
 pub mod tactical_diagram;
 pub mod audit_event;
+pub mod team_player;

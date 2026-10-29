@@ -47,7 +47,7 @@ pub fn MembershipPanel(
             div{class:"panel-head",
                 div{
                     h2{if is_club{"Accès au club"}else{"Accès à l'équipe"}}
-                    p{"Attribuez un rôle depuis la liste des comptes existants."}
+                    p{"Gérez les membres et leurs autorisations."}
                 }
             }
             if let Some(message)=notice.read().as_ref(){
@@ -111,7 +111,7 @@ pub fn MembershipPanel(
                 div{class:"permission-editor",
                     div{class:"permission-editor-title",
                         h3{"Ajouter ou modifier un accès"}
-                        p{"Choisis un compte par son nom ; aucun identifiant technique à saisir."}
+                        p{"Sélectionnez un utilisateur et définissez ses droits."}
                     }
                     form{
                         onsubmit:{

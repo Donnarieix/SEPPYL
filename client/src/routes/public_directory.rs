@@ -9,7 +9,7 @@ pub fn PublicDirectory()->Element{
         main { class:"page public-directory",
             div{class:"page-heading",
                 div {h1{"SEPPYL · Annuaire public"}p{"Les clubs ayant choisi d'être visibles publiquement."}}
-                Link{to:Route::Login{},class:"button solid","Connexion"}
+                Link{to:Route::Login{},class:"button solid public-login-action","Connexion"}
             }
             match clubs.read().clone(){
                 Some(Ok(items))=>rsx!{

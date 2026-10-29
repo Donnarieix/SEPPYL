@@ -109,7 +109,7 @@ pub fn Administration()->Element{
                             div{class:"panel-head",
                                 div{
                                     h2{"Comptes"}
-                                    p{"Recherchez un utilisateur et sélectionnez-le pour gérer son rôle global."}
+                                    p{"Recherchez un compte pour gérer son rôle et ses rattachements."}
                                 }
                             }
                             div{class:"workspace-search",

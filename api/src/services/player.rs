@@ -80,21 +80,19 @@ pub async fn update_player(
     state: &AppState,
     payload: UpdatePlayerRequest,
 ) -> Result<Uuid, StatusCode> {
-    let Some(mut player) = get_player(claims, state, payload.id).await? else {
+    let Some(player) = get_player(claims, state, payload.id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
-
+    let mut player: entities::player::ActiveModel = player.into();
     if let Some(firstname) = payload.firstname {
-        player.firstname = firstname;
+        if firstname.trim().is_empty() { return Err(StatusCode::BAD_REQUEST); }
+        player.firstname = Set(firstname.trim().to_string());
     }
     if let Some(lastname) = payload.lastname {
-        player.lastname = lastname;
+        if lastname.trim().is_empty() { return Err(StatusCode::BAD_REQUEST); }
+        player.lastname = Set(lastname.trim().to_string());
     }
-    if let Some(number) = payload.number {
-        player.number = number;
-    }
-
-    let player: entities::player::ActiveModel = player.into();
+    if let Some(number) = payload.number { player.number = Set(number); }
     
     let player = player.update(&state.db)
         .await
@@ -104,19 +102,34 @@ pub async fn update_player(
 }
 
 pub async fn delete_player(
-    claims: &Claims,
-    state: &AppState,
-    player_id: Uuid,
+    claims: &Claims, state: &AppState, player_id: Uuid,
 ) -> Result<(), StatusCode> {
+    use crate::entities::{training_attendance, training_score, activity_player, catalog_result};
     let Some(player) = get_player(claims, state, player_id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
-
-    let player: entities::player::ActiveModel = player.into();
-    
-    player.delete(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
+    // Preserve history instead of deleting recorded evaluations.
+    let attendance = training_attendance::Entity::find()
+        .filter(training_attendance::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let scores = training_score::Entity::find()
+        .filter(training_score::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let legacy = activity_player::Entity::find()
+        .filter(activity_player::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let results = catalog_result::Entity::find()
+        .filter(catalog_result::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if attendance.is_some() || scores.is_some() || legacy.is_some() || results.is_some() {
+        return Err(StatusCode::CONFLICT);
+    }
+    let txn = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    entities::player_user::Entity::delete_many()
+        .filter(entities::player_user::COLUMN.player_id.eq(player_id))
+        .exec(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let active: entities::player::ActiveModel = player.into();
+    active.delete(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(())
 }

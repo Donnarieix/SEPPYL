@@ -11,6 +11,8 @@
         crate::routes::entities::activity::update_activity_player,
         crate::routes::entities::activity::delete_activity,
 
+        crate::routes::entities::matrix::create_matrix_activity,
+
         crate::routes::entities::player::get_players,
         crate::routes::entities::player::get_player,
         crate::routes::entities::player::create_player,

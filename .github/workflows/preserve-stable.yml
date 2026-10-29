@@ -1,0 +1,34 @@
+name: Preserve last working SEPPYL snapshot
+
+on:
+  push:
+    branches:
+      - feature/club-roles-audit-editor
+    paths:
+      - .github/workflows/preserve-stable.yml
+
+permissions:
+  contents: write
+
+jobs:
+  tag-last-working-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create immutable backup tag
+        env:
+          STABLE_SHA: e8decff50e92f8dcb68f824a3aa9fae95a803580
+          TAG_NAME: seppyl-stable-2026-10-29
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$STABLE_SHA"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag already exists; no mutation attempted."
+            exit 0
+          fi
+          git tag -a "$TAG_NAME" "$STABLE_SHA" -m "Last verified ui-tableur baseline before club, RBAC and tactical editor changes"
+          git push origin "refs/tags/$TAG_NAME"
+          echo "Tagged $STABLE_SHA as $TAG_NAME"

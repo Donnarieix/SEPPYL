@@ -120,6 +120,7 @@ pub fn Tactics() -> Element {
                                         button { class:"selected", r#type:"button", "data-tactic-tool":"select", "↖ Sélectionner" }
                                         button { r#type:"button", "data-tactic-tool":"erase", "Effacer" }
                                         button { r#type:"button", "data-tactic-remove":"true", "Supprimer la sélection" }
+                                        span { class:"tactic-selection-count", "data-selection-count":"true", "0 sélectionné(s)" }
                                     }
                                 }
                                 details { class:"tactic-category", open:true,

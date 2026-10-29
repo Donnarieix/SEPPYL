@@ -50,6 +50,7 @@ pub async fn register(
         id: sea_orm::ActiveValue::Set(Uuid::new_v4()),
         username: sea_orm::ActiveValue::Set(username),
         password: sea_orm::ActiveValue::Set(hash.to_string()),
+        role: sea_orm::ActiveValue::Set(Some("user".into())),
         ..Default::default()
     };
     user.insert(&state.db).await

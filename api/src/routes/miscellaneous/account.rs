@@ -12,6 +12,7 @@ pub struct AccountInfo {
     pub id: String,
     pub username: String,
     pub provider: &'static str,
+    pub role: String,
 }
 #[derive(Deserialize)]
 pub struct UpdateProfile { pub username: String }
@@ -33,6 +34,7 @@ pub async fn get(
         id: user.id.to_string(),
         username: user.username,
         provider: "local",
+        role: user.role.unwrap_or_else(|| "trainer".into()),
     }))
 }
 
@@ -55,7 +57,7 @@ pub async fn update_profile(
         active.username = Set(username.to_owned());
         active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
-    Ok(Json(AccountInfo { id: user.id.to_string(), username: username.into(), provider: "local" }))
+    Ok(Json(AccountInfo { id: user.id.to_string(), username: username.into(), provider: "local", role: user.role.unwrap_or_else(|| "trainer".into()) }))
 }
 
 pub async fn change_password(

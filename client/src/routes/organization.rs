@@ -52,7 +52,7 @@ pub fn Organization()->Element{
         }
     });
     let player_token=token.clone();
-    let own_players=use_resource(move ||{
+    let mut own_players=use_resource(move ||{
         let token=player_token.clone();
         async move{
             match token{Some(token)=>players::list(&token).await,None=>Err("Connexion requise.".into())}

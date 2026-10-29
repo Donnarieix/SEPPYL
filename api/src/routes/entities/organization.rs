@@ -427,3 +427,35 @@ pub async fn public_teams(State(state):State<AppState>,Path(id):Path<Uuid>)
         .filter(team::COLUMN.club_id.eq(id)).all(&state.db).await.map_err(db_error)?;
     Ok(Json(teams))
 }
+
+
+#[cfg(test)]
+mod public_visibility_tests {
+    use super::*;
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn clubs_are_private_by_default_and_publication_is_explicit() {
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let admin=Uuid::new_v4();
+        user::ActiveModel {
+            id:Set(admin),username:Set("admin".into()),password:Set("test".into()),
+            role:Set(Some("administrator".into())),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let claims=Claims{sub:admin,exp:u64::MAX};
+        let (_,club)=create_club(
+            Extension(claims.clone()),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Json(CreateNamed{name:"Example".into()})
+        ).await.unwrap();
+        let id=club.0.id;
+        assert!(public_clubs(State(state.clone())).await.unwrap().0.is_empty());
+        update_public_visibility(
+            Extension(claims),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Path(id),Json(SetPublic{is_public:true})
+        ).await.unwrap();
+        let visible=public_clubs(State(state)).await.unwrap().0;
+        assert_eq!(visible.len(),1);
+        assert_eq!(visible[0].id,id);
+    }
+}

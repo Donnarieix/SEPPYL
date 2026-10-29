@@ -164,7 +164,13 @@ pub fn Administration()->Element{
                                     }
                                     button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Enregistrer"}
                                 }
-                                p{class:"organization-note","Pour rattacher ce compte à un club ou une équipe, ouvrez l'onglet Rattachements."}
+                                div{class:"account-quick-links",
+                                    button{class:"button outline",
+                                        onclick:move |_|tab.set("memberships".into()),
+                                        "Gérer ses rattachements"
+                                    }
+                                }
+                                p{class:"organization-note","Choisissez ensuite le club ou l'équipe à laquelle rattacher ce compte."}
                             }
                         }
                     }else if *tab.read()=="memberships"{
@@ -195,7 +201,7 @@ pub fn Administration()->Element{
                                 key:"{group_id}",
                                 token:token.clone(),club_id:club.read().clone(),
                                 scope:scope.to_string(),id:group_id,
-                                can_manage:true,
+                                can_manage:true,default_user:Some(selected_user.read().clone()),
                             }
                         }
                     }else if *tab.read()=="clubs"{

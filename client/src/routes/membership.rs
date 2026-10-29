@@ -7,6 +7,7 @@ use crate::api::organization as org;
 pub fn MembershipPanel(
     token:String, club_id:String, scope:String, id:String,
     can_manage:bool,
+    default_user:Option<String>,
 ) -> Element {
     let directory_token=token.clone();
     let directory_club=club_id.clone();
@@ -32,7 +33,7 @@ pub fn MembershipPanel(
             }
         }
     });
-    let mut selected=use_signal(String::new);
+    let mut selected=use_signal(||default_user.unwrap_or_default());
     let mut role=use_signal(||if scope=="club"{"user".to_string()}else{"trainer".to_string()});
     let mut search=use_signal(String::new);
     let mut notice=use_signal(||None::<String>);

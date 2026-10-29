@@ -297,7 +297,7 @@ pub fn Organization()->Element{
                                 token:token.clone(),club_id:club_for_members.clone(),
                                 id:if team_for_members.is_empty(){club_for_members.clone()}else{team_for_members.clone()},
                                 scope:if team_for_members.is_empty(){"club".to_string()}else{"team".to_string()},
-                                can_manage:true,
+                                can_manage:true,default_user:None,
                             }
                         }else if *tab.read()=="settings" && can_manage{
                             section{class:"panel",

@@ -127,3 +127,73 @@ pub async fn assign_team(
     };
     Ok(StatusCode::NO_CONTENT)
 }
+
+
+#[derive(Serialize)]
+pub struct AccountSummary {pub id:Uuid,pub username:String}
+#[derive(Serialize)]
+pub struct MembershipView{
+    pub user_id:Uuid,
+    pub username:String,
+    pub scope:String,
+    pub scope_id:Uuid,
+    pub role:String,
+}
+async fn can_manage(state:&AppState,subject:Uuid,club_id:Uuid)->Result<(),StatusCode>{
+    if matches!(club_visible(state,subject,club_id).await?,Role::Administrator|Role::Manager){
+        Ok(())
+    }else{Err(StatusCode::FORBIDDEN)}
+}
+
+/// Exact username lookup only, available solely to managers of this club.
+pub async fn find_user(
+    Extension(claims):Extension<Claims>,State(state):State<AppState>,
+    Path((club_id,username)):Path<(Uuid,String)>,
+)->Result<Json<AccountSummary>,StatusCode>{
+    can_manage(&state,claims.sub,club_id).await?;
+    if username.len()>80 || username.is_empty(){return Err(StatusCode::BAD_REQUEST)}
+    let user=user::Entity::find().filter(user::COLUMN.username.eq(username))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(AccountSummary{id:user.id,username:user.username}))
+}
+
+/// Show current club/team memberships, without exposing password hashes.
+pub async fn memberships(
+    Extension(claims):Extension<Claims>,State(state):State<AppState>,Path(club_id):Path<Uuid>,
+)->Result<Json<Vec<MembershipView>>,StatusCode>{
+    can_manage(&state,claims.sub,club_id).await?;
+    let club_rows=club_member::Entity::find()
+        .filter(club_member::COLUMN.club_id.eq(club_id))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let teams=team::Entity::find().filter(team::COLUMN.club_id.eq(club_id))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut team_rows=Vec::new();
+    for team in teams {
+        team_rows.extend(team_member::Entity::find()
+            .filter(team_member::COLUMN.team_id.eq(team.id))
+            .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?);
+    }
+    let ids:std::collections::HashSet<Uuid>=club_rows.iter().map(|m|m.user_id)
+        .chain(team_rows.iter().map(|m|m.user_id)).collect();
+    if ids.is_empty(){return Ok(Json(Vec::new()))}
+    let users=user::Entity::find().filter(user::COLUMN.id.is_in(ids))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let names:std::collections::HashMap<Uuid,String>=users.into_iter().map(|u|(u.id,u.username)).collect();
+    let mut result=Vec::new();
+    for m in club_rows {
+        result.push(MembershipView{
+            user_id:m.user_id,
+            username:names.get(&m.user_id).cloned().unwrap_or_default(),
+            scope:"club".into(),scope_id:m.club_id,role:m.role,
+        });
+    }
+    for m in team_rows {
+        result.push(MembershipView{
+            user_id:m.user_id,
+            username:names.get(&m.user_id).cloned().unwrap_or_default(),
+            scope:"team".into(),scope_id:m.team_id,role:m.role,
+        });
+    }
+    Ok(Json(result))
+}

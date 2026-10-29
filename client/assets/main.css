@@ -1863,3 +1863,25 @@ button.grid-add-button:hover,
   .seppyl-tactics-board>.tactic-editor-hint{border-right:0}
   .seppyl-tactics-board .tactic-category{flex:1 1 150px}
 }
+
+
+.club-flow-guide{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;padding:18px 18px 0;
+}
+.club-flow-guide>div{
+  display:grid;grid-template-columns:32px 1fr;column-gap:10px;
+  align-content:center;background:var(--surface-soft);
+  border:1px solid var(--line);border-radius:9px;padding:13px;
+}
+.club-flow-number{
+  display:grid;place-items:center;grid-row:span 2;
+  width:32px;height:32px;border-radius:50%;
+  background:var(--surface);color:var(--accent);
+  border:1px solid var(--line);font-size:12px;font-weight:800;
+}
+.club-flow-guide strong{font-size:12px}
+.club-flow-guide small{font-size:11px;color:var(--muted);line-height:1.5}
+@media(max-width:700px){
+  .club-flow-guide{grid-template-columns:1fr}
+}

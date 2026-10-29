@@ -29,6 +29,8 @@ jobs:
             echo "Tag already exists; no mutation attempted."
             exit 0
           fi
+          git config user.name "SEPPYL Release Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG_NAME" "$STABLE_SHA" -m "Last verified ui-tableur baseline before club, RBAC and tactical editor changes"
           git push origin "refs/tags/$TAG_NAME"
           echo "Tagged $STABLE_SHA as $TAG_NAME"

@@ -1348,3 +1348,47 @@ button.grid-add-button:hover,
 .material-edit-form { display:flex; flex:1; flex-wrap:wrap; gap:8px; align-items:center; }
 .material-edit-form input { min-width:110px; flex:1; border:1px solid var(--line); padding:9px; background:var(--surface); }
 .material-edit-form input[type=number]{ flex:0 0 80px; min-width:70px; }
+
+
+/* Built-in tactics workspace. */
+.tactics-page { max-width:1480px; }
+.tactics-library { display:grid; grid-template-columns:minmax(200px,270px) minmax(0,1fr); gap:18px; align-items:start; }
+.tactics-folders { display:grid; padding:14px; gap:8px; }
+.tactics-folder { display:flex;gap:11px;align-items:center;padding:12px;border-radius:7px;background:var(--surface-soft); }
+.tactics-folder strong { font-size:13px; }
+.folder-form { display:flex;gap:8px;padding:14px;flex-wrap:wrap; }
+.folder-form input { flex:1;min-width:110px;padding:10px;border:1px solid var(--line);border-radius:5px; }
+.tactics-cards { display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:13px;padding:17px; }
+.tactics-card {
+    display:flex;flex-direction:column;text-align:left;gap:8px;
+    border:1px solid var(--line);background:var(--surface);color:var(--text);
+    padding:18px;border-radius:8px;min-height:125px;
+    transition:transform 170ms ease,border-color 170ms ease,box-shadow 170ms ease;
+}
+.tactics-card:hover { transform:translateY(-2px);border-color:var(--accent);box-shadow:0 8px 23px #00000017; }
+.tactics-card-icon { font-size:31px;color:var(--accent); }
+.tactics-card strong { font-size:14px; }
+.tactic-edit-page { display:flex;flex-direction:column;gap:15px;background:var(--surface);padding:18px;border:1px solid var(--line);border-radius:8px; }
+.tactic-edit-header { display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end; }
+.tactic-edit-header .field { flex:1 1 220px; }
+.tactic-edit-header .field input,.tactic-edit-header .field select { width:100%; }
+.tactic-public-check { display:flex;gap:8px;align-items:center;font-size:13px;min-height:40px; }
+.tactic-toolbar { display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:9px;border:1px solid var(--line);background:var(--surface-soft);border-radius:7px; }
+.tactic-toolbar button { border:1px solid var(--line);border-radius:5px;padding:9px 12px;background:var(--surface);color:var(--text);font-size:12px;min-height:38px; }
+.tactic-toolbar button.active { background:var(--accent);color:var(--surface); }
+.tactic-toolbar select { margin-left:auto;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--text); }
+.tactic-canvas-shell { width:100%;max-width:1080px;margin-inline:auto; }
+.tactic-canvas-shell canvas { display:block;width:100%;height:auto;aspect-ratio:8/5;touch-action:none;cursor:crosshair;border-radius:7px;box-shadow:0 8px 24px #00000020; }
+.tactic-actions { display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center; }
+@media(max-width:900px){.tactics-library { grid-template-columns:minmax(0,1fr); }}
+@media(max-width:650px){
+  .tactic-edit-page{padding:11px;}
+  .tactic-toolbar{gap:4px;padding:7px;}
+  .tactic-toolbar button{padding:8px;font-size:11px;min-height:37px;}
+  .tactic-toolbar select{margin-left:0;width:100%;}
+  .tactic-edit-header .field{flex:1 1 100%;}
+  .tactic-actions .button{flex:1;}
+  .mobile-nav { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .mobile-nav-link { font-size:9px; }
+}
+@media(min-width:651px) and (max-width:800px){.mobile-nav{grid-template-columns:repeat(6,minmax(0,1fr));}}

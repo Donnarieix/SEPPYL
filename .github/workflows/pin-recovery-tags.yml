@@ -1,9 +1,7 @@
 name: Pin recovery tags
 
 on:
-  push:
-    branches:
-      - feat/clubs-roles-editor
+  workflow_dispatch:
 
 permissions:
   contents: write

@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{Method, StatusCode, header::{AUTHORIZATION,CONTENT_LENGTH}},
+    http::{Method, StatusCode, header::{AUTHORIZATION,CONTENT_LENGTH,CONTENT_TYPE}},
     body::{Body,to_bytes},
     middleware::Next,
     response::Response,
@@ -71,7 +71,9 @@ pub async fn auth(
     // Only inspect small JSON creations that do not expose their team ID in
     // the URL. Restore the exact body for Axum's real handler afterwards.
     let mut payload = None;
-    if mutation && (path == "/trainings" || path == "/catalog") {
+    if mutation && path != "/catalog/upload"
+        && request.headers().get(CONTENT_TYPE)
+            .and_then(|v|v.to_str().ok()).is_some_and(|v|v.starts_with("application/json")) {
         let length = request.headers().get(CONTENT_LENGTH)
             .and_then(|v|v.to_str().ok()).and_then(|v|v.parse::<usize>().ok());
         if length.is_some_and(|n|n <= 512 * 1024) {

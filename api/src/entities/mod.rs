@@ -19,3 +19,4 @@ pub mod team_member;
 pub mod audit_event;
 pub mod tactic_folder;
 pub mod tactic_board;
+pub mod team_player;

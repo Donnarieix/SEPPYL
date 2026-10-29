@@ -1284,3 +1284,38 @@ button.grid-add-button:hover,
         animation: none !important;
     }
 }
+
+
+/* Ordered exercises, usable with mouse drag or mobile ↑/↓ buttons. */
+.sortable-exercise { border-bottom: 1px solid var(--line); }
+.sortable-exercise:active { cursor: grabbing; }
+.sortable-controls {
+    display: flex; align-items: center; gap: 9px;
+    min-height: 44px; padding: 6px 19px;
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--line);
+}
+.sortable-controls .sort-grip {
+    font-size: 20px; letter-spacing: -5px; width: 24px;
+    cursor: grab; color: var(--muted);
+}
+.sortable-controls .sort-index { font-weight: 700; font-size: 12px; color: var(--text); }
+.sortable-controls .sort-help { margin-right: auto; color: var(--muted); font-size: 11px; }
+.sortable-controls button { min-width: 34px; }
+.sortable-exercise > .exercise { border: 0; }
+.sortable-exercise:hover .sort-grip { color: var(--accent); }
+.material-edit-form {
+    display: flex; gap: 5px; flex-wrap: wrap;
+    align-items: center; width: 100%;
+}
+.material-edit-form input {
+    border: 1px solid var(--line); border-radius: 5px;
+    background: var(--surface); color: var(--text);
+    padding: 7px 8px; font-size: 12px; flex: 1 1 100px; min-width: 70px;
+}
+.material-edit-form input[type="number"] { flex: 0 0 65px; max-width: 65px; }
+@media(max-width:600px) {
+    .sortable-controls { padding-inline: 12px; }
+    .sortable-controls .sort-help { display: none; }
+    .sortable-controls .sort-index { margin-right: auto; }
+}

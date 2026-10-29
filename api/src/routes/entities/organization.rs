@@ -7,7 +7,7 @@ use serde::{Deserialize,Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
 use crate::{
-    entities::{club, team, club_membership, team_membership, team_player, player, player_user, user, training, catalog_activity},
+    entities::{club, team, club_membership, team_membership, team_player, club_player, player, player_user, user, training, catalog_activity},
     middleware::{CurrentRole, Role},
     routes::authentication::login::Claims,
     state::AppState,
@@ -382,6 +382,12 @@ pub async fn assign_team_player(
     if player::Entity::find_by_id(player_id).one(&state.db).await.map_err(db_error)?.is_none(){
         return Err(StatusCode::NOT_FOUND);
     }
+    // Club membership persists even when the player leaves this team.
+    if club_player::Entity::find_by_id((target.club_id,player_id))
+        .one(&state.db).await.map_err(db_error)?.is_none(){
+        club_player::ActiveModel{club_id:Set(target.club_id),player_id:Set(player_id),
+            ..Default::default()}.insert(&state.db).await.map_err(db_error)?;
+    }
     if team_player::Entity::find_by_id((id,player_id)).one(&state.db).await.map_err(db_error)?.is_none(){
         team_player::ActiveModel{team_id:Set(id),player_id:Set(player_id),..Default::default()}
             .insert(&state.db).await.map_err(db_error)?;
@@ -577,11 +583,16 @@ pub async fn create_team_player(
        ||body.firstname.len()>100||body.lastname.len()>100||body.number>999{
         return Err(StatusCode::BAD_REQUEST);
     }
+    let target=team::Entity::find_by_id(team_id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
     let tx=state.db.begin().await.map_err(db_error)?;
     let saved=player::ActiveModel{
         id:Set(Uuid::new_v4()),firstname:Set(body.firstname.trim().to_owned()),
         lastname:Set(body.lastname.trim().to_owned()),number:Set(body.number),
         ..Default::default()
+    }.insert(&tx).await.map_err(db_error)?;
+    club_player::ActiveModel{
+        club_id:Set(target.club_id),player_id:Set(saved.id),..Default::default()
     }.insert(&tx).await.map_err(db_error)?;
     team_player::ActiveModel{
         team_id:Set(team_id),player_id:Set(saved.id),..Default::default()
@@ -589,4 +600,38 @@ pub async fn create_team_player(
     tx.commit().await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub,team=%team_id,player=%saved.id,action="team.player.create");
     Ok((StatusCode::CREATED,Json(saved)))
+}
+
+pub async fn list_club_players(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>
+)->ApiResult<Json<Vec<player::Model>>>{
+    if !can_access_club(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let direct=role.0==Role::Administrator ||
+        club_membership::Entity::find_by_id((claims.sub,id))
+            .one(&state.db).await.map_err(db_error)?.is_some();
+    let all_teams=team::Entity::find()
+        .filter(team::COLUMN.club_id.eq(id)).all(&state.db).await.map_err(db_error)?;
+    let mut ids=HashSet::new();
+    if direct{
+        for link in club_player::Entity::find()
+            .filter(club_player::COLUMN.club_id.eq(id))
+            .all(&state.db).await.map_err(db_error)?{
+                ids.insert(link.player_id);
+        }
+    }
+    for entry in all_teams{
+        if direct || can_read_team(&state,&claims,role.0,entry.id).await?{
+            for link in team_player::Entity::find()
+                .filter(team_player::COLUMN.team_id.eq(entry.id))
+                .all(&state.db).await.map_err(db_error)?{
+                ids.insert(link.player_id);
+            }
+        }
+    }
+    let rows=player::Entity::find().filter(player::COLUMN.id.is_in(ids))
+        .all(&state.db).await.map_err(db_error)?;
+    Ok(Json(rows))
 }

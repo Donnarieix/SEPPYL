@@ -23,6 +23,14 @@ pub async fn get_players(
         return entities::player::Entity::find().all(&state.db)
             .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR);
     }
+    let all_clubs=entities::club_player::Entity::find().all(&state.db)
+        .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    for relation in all_clubs{
+        if entities::club_membership::Entity::find_by_id((claims.sub,relation.club_id))
+            .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.is_some(){
+            ids.insert(relation.player_id);
+        }
+    }
     let memberships=entities::team_player::Entity::find().all(&state.db)
         .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     for membership in memberships {
@@ -165,6 +173,9 @@ pub async fn delete_player(
         .exec(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     entities::team_player::Entity::delete_many()
         .filter(entities::team_player::COLUMN.player_id.eq(player_id))
+        .exec(&txn).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    entities::club_player::Entity::delete_many()
+        .filter(entities::club_player::COLUMN.player_id.eq(player_id))
         .exec(&txn).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     let active: entities::player::ActiveModel = player.into();
     active.delete(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

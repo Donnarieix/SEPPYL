@@ -3,10 +3,10 @@ use axum::{
     Extension, Json, body::Bytes, extract::{Path, State},
     http::{StatusCode, header, HeaderMap}, response::IntoResponse,
 };
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait, Condition};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::authentication::login::Claims, state::AppState};
+use crate::{access,entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::authentication::login::Claims, state::AppState};
 
 #[derive(Serialize)]
 pub struct CatalogEntry {
@@ -46,18 +46,30 @@ pub fn valid_payload(body: &ActivityPayload) -> bool {
 pub async fn owned(
     claims: &Claims, state: &AppState, id: Uuid
 ) -> Result<catalog_activity::Model, StatusCode> {
-    catalog_activity::Entity::find_by_id(id)
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+    let item=catalog_activity::Entity::find_by_id(id).one(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+    if let Some(team_id)=item.team_id{
+        access::assert_team(state,claims.sub,team_id,false).await?;
+    } else if item.user_id!=claims.sub && access::effective_role(state,claims.sub).await?!=access::Role::Administrator {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(item)
 }
+pub async fn writable(claims:&Claims,state:&AppState,id:Uuid)->Result<catalog_activity::Model,StatusCode>{
+    let item=owned(claims,state,id).await?;
+    if let Some(team_id)=item.team_id{access::assert_team(state,claims.sub,team_id,true).await?}
+    Ok(item)
+}
+
 pub async fn insert(
     claims: &Claims, state: &AppState, body: ActivityPayload
 ) -> Result<catalog_activity::Model, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
+    let team_id=access::default_writable_team(state,claims.sub).await?;
     catalog_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(Some(team_id)),
         name: Set(body.name.trim().into()),
         description: Set(sanitize_description(&body.description)),
         image_url: Set(body.image_url.filter(|s| !s.is_empty())),
@@ -69,8 +81,13 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CatalogEntry>>, StatusCode> {
+    let teams=access::teams_for(&state,claims.sub,false).await?;
     let activities = catalog_activity::Entity::find()
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
+        .filter(Condition::any()
+            .add(catalog_activity::COLUMN.team_id.is_in(teams))
+            .add(Condition::all()
+                .add(catalog_activity::COLUMN.user_id.eq(claims.sub))
+                .add(catalog_activity::COLUMN.team_id.is_null())))
         .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let ids: Vec<Uuid> = activities.iter().map(|a| a.id).collect();
     let materials = if ids.is_empty() { Vec::new() } else {
@@ -97,7 +114,7 @@ pub async fn update(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>, Json(body): Json<ActivityPayload>
 ) -> Result<StatusCode, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
-    let activity = owned(&claims, &state, id).await?;
+    let activity = writable(&claims, &state, id).await?;
     let mut active: catalog_activity::ActiveModel = activity.into();
     active.name = Set(body.name.trim().into());
     active.description = Set(sanitize_description(&body.description));
@@ -109,7 +126,7 @@ pub async fn update(
 pub async fn delete(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>
 ) -> Result<StatusCode, StatusCode> {
-    let item = owned(&claims, &state, id).await?;
+    let item = writable(&claims, &state, id).await?;
     // Do not orphan existing training and spreadsheet results.
     let in_training = training_activity::Entity::find()
         .filter(training_activity::COLUMN.catalog_id.eq(id))
@@ -137,7 +154,7 @@ pub async fn add_material(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path(id): Path<Uuid>, Json(body): Json<MaterialPayload>,
 ) -> Result<(StatusCode, Json<catalog_material::Model>), StatusCode> {
-    owned(&claims, &state, id).await?;
+    writable(&claims, &state, id).await?;
     if body.name.trim().is_empty() || body.name.len() > 150 || !(1..=100000).contains(&body.quantity) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -173,7 +190,7 @@ pub async fn remove_material(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path((id, material_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
-    owned(&claims, &state, id).await?;
+    writable(&claims, &state, id).await?;
     let material = catalog_material::Entity::find_by_id(material_id)
         .filter(catalog_material::COLUMN.activity_id.eq(id))
         .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?

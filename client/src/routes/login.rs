@@ -23,8 +23,8 @@ pub fn Login() -> Element {
                         if *busy.read() { return; }
                         let user = username.read().trim().to_string();
                         let pass = password.read().clone();
-                        if user.len() < 3 || pass.len() < 8 && *is_registration.read() {
-                            error.set(Some("Pour un nouveau compte : 3 caractères minimum pour l'identifiant, 8 pour le mot de passe.".into()));
+                        if user.len() < 3 || pass.len() < 12 && *is_registration.read() {
+                            error.set(Some("Pour un nouveau compte : 3 caractères minimum pour l'identifiant, 12 pour le mot de passe.".into()));
                             return;
                         }
                         let registering = *is_registration.read();

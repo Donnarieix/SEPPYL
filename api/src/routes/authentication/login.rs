@@ -38,7 +38,7 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET".to_string());
+    let secret = crate::middleware::jwt_secret()?;
 
     let user = entities::user::Entity::find()
         .filter(entities::user::COLUMN.username.eq(payload.username))
@@ -65,7 +65,7 @@ pub async fn login(
         sub: user.id,
         // Local provider session persists across refresh for up to 24 hours.
         // Replace with the Donnarieix SSO provider and refresh flow later.
-        exp: now + 24 * 3600,
+        exp: now + 7 * 24 * 3600,
     };
 
     let token = jsonwebtoken::encode(

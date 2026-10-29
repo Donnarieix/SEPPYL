@@ -25,3 +25,15 @@ pub fn clear() {
     #[cfg(feature = "web")]
     LocalStorage::delete(STORAGE_KEY);
 }
+
+pub fn observe_status(status:reqwest::StatusCode)->reqwest::StatusCode{
+    if status==reqwest::StatusCode::UNAUTHORIZED {
+        // An API 401 means an invalid/expired session, never just a form error.
+        clear();
+        #[cfg(feature="web")]
+        if let Some(window)=web_sys::window(){
+            let _=window.location().replace("/login");
+        }
+    }
+    status
+}

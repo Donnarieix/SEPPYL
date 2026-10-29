@@ -18,6 +18,7 @@ pub struct CatalogEntry {
 pub struct ActivityPayload {
     pub name: String,
     pub description: String,
+    pub description_html: Option<String>,
     pub image_url: Option<String>,
 }
 #[derive(Deserialize)]
@@ -36,7 +37,9 @@ pub fn valid_image(value: Option<&str>) -> bool {
 }
 pub fn valid_payload(body: &ActivityPayload) -> bool {
     !body.name.trim().is_empty() && body.name.len() <= 150 &&
-        body.description.len() <= 20_000 && valid_image(body.image_url.as_deref())
+        body.description.len() <= 20_000 &&
+        body.description_html.as_ref().is_none_or(|html| html.len() <= 40_000) &&
+        valid_image(body.image_url.as_deref())
 }
 pub async fn owned(
     claims: &Claims, state: &AppState, id: Uuid
@@ -55,6 +58,7 @@ pub async fn insert(
         user_id: Set(claims.sub),
         name: Set(body.name.trim().into()),
         description: Set(body.description),
+        description_html: Set(body.description_html.map(|html| ammonia::clean(&html))),
         image_url: Set(body.image_url.filter(|s| !s.is_empty())),
         ..Default::default()
     }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
@@ -94,6 +98,10 @@ pub async fn update(
     let mut active: catalog_activity::ActiveModel = activity.into();
     active.name = Set(body.name.trim().into());
     active.description = Set(body.description);
+    // Older clients that omit rich HTML should not erase existing formatting.
+    if let Some(html) = body.description_html {
+        active.description_html = Set(Some(ammonia::clean(&html)));
+    }
     active.image_url = Set(body.image_url.filter(|s| !s.is_empty()));
     active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)

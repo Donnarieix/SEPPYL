@@ -245,6 +245,7 @@ pub async fn add_activity(
     let definition = catalog::insert(&claims, &state, catalog::ActivityPayload {
         name: body.name.clone(),
         description: body.description.clone(),
+        description_html: None,
         image_url: body.image_url.clone(),
     }).await?;
     let new = training_activity::ActiveModel {

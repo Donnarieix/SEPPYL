@@ -11,6 +11,8 @@ pub struct Model {
     pub user_id: Uuid,
     pub name: String,
     pub description: String,
+    /// Sanitized HTML, null for legacy plain-text descriptions.
+    pub description_html: Option<String>,
     pub image_url: Option<String>,
 }
 impl ActiveModelBehavior for ActiveModel {}

@@ -289,6 +289,39 @@ pub async fn attach_catalog(
     Ok((StatusCode::CREATED, linked.id.to_string()))
 }
 
+
+#[derive(Deserialize)]
+pub struct ReorderActivities {
+    pub activity_ids: Vec<Uuid>,
+}
+pub async fn reorder_activities(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ReorderActivities>,
+) -> Result<StatusCode, ApiError> {
+    owned_training(&claims, &state, id).await?;
+    let activities = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let actual: HashSet<Uuid> = activities.iter().map(|a| a.id).collect();
+    let proposed: HashSet<Uuid> = body.activity_ids.iter().copied().collect();
+    if actual != proposed || body.activity_ids.len() != activities.len() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let txn = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (index, activity_id) in body.activity_ids.iter().enumerate() {
+        let item = activities.iter().find(|a| a.id == *activity_id)
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let mut active: training_activity::ActiveModel = item.clone().into();
+        active.sort_order = Set(index as i32);
+        active.update(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!(actor=%claims.sub, training=%id, count=body.activity_ids.len(), action="training.reorder");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn remove_activity(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,

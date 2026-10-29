@@ -119,4 +119,80 @@ mod tests{
         for n in [10,50,100,250,500,1000]{assert!(accepted_size(n));}
         for n in [0,1,25,1001,u64::MAX]{assert!(!accepted_size(n));}
     }
+    #[tokio::test]
+    async fn audit_visibility_tracks_live_write_permissions_and_paginates_after_filter(){
+        use sea_orm::{Database,ActiveModelTrait,ActiveValue::Set};
+        use crate::entities::{club,team};
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let admin_id=Uuid::new_v4();
+        let coach_id=Uuid::new_v4();
+        let manager_id=Uuid::new_v4();
+        let foreign_id=Uuid::new_v4();
+        for (id,name,role) in [
+            (admin_id,"admin","administrator"),(coach_id,"coach","trainer"),
+            (manager_id,"manager","manager"),(foreign_id,"other","manager")
+        ]{
+            user::ActiveModel{id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let club_a=Uuid::new_v4();let club_b=Uuid::new_v4();
+        let team_a=Uuid::new_v4();let team_b=Uuid::new_v4();
+        for (id,name) in [(club_a,"Club A"),(club_b,"Club B")]{
+            club::ActiveModel{id:Set(id),name:Set(name.into()),is_public:Set(Some(false)),
+                ..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        for (id,cid) in [(team_a,club_a),(team_b,club_b)]{
+            team::ActiveModel{id:Set(id),club_id:Set(cid),name:Set("Équipe".into()),
+                ..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        club_membership::ActiveModel{user_id:Set(manager_id),club_id:Set(club_a),
+            role:Set("manager".into()),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        team_membership::ActiveModel{user_id:Set(coach_id),team_id:Set(team_a),
+            role:Set("trainer".into()),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        for (actor,scope,club_id,team_id,description) in [
+            (admin_id,Some("club"),Some(club_a),None,"Club A"),
+            (admin_id,Some("team"),Some(club_a),Some(team_a),"Équipe A"),
+            (admin_id,Some("team"),Some(club_b),Some(team_b),"Équipe B"),
+            (coach_id,Some("personal"),None,None,"Mon schéma"),
+            (admin_id,None,None,None,"Ancien événement")
+        ]{
+            audit_event::ActiveModel{
+                id:Set(Uuid::new_v4()),actor_id:Set(actor),action:Set("update".into()),
+                path:Set("/example".into()),status:Set(200),timestamp:Set(1),
+                scope:Set(scope.map(str::to_owned)),club_id:Set(club_id),team_id:Set(team_id),
+                description:Set(Some(description.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let query=||Query(AuditQuery{page:1,page_size:10});
+        let coach=Claims{sub:coach_id,exp:u64::MAX};
+        let manager=Claims{sub:manager_id,exp:u64::MAX};
+        let admin=Claims{sub:admin_id,exp:u64::MAX};
+        let coach_events=list(Extension(coach.clone()),Extension(CurrentRole(Role::Trainer)),
+            State(state.clone()),query()).await.unwrap().0;
+        assert_eq!(coach_events.total,2);
+        assert!(coach_events.items.iter().all(|e|e.description=="Équipe A"||e.description=="Mon schéma"));
+        let manager_events=list(Extension(manager),Extension(CurrentRole(Role::Manager)),
+            State(state.clone()),query()).await.unwrap().0;
+        assert_eq!(manager_events.total,2);
+        assert!(manager_events.items.iter().all(|e|e.description=="Club A"||e.description=="Équipe A"));
+        assert_eq!(list(Extension(coach),Extension(CurrentRole(Role::User)),
+            State(state.clone()),query()).await.err(),Some(StatusCode::FORBIDDEN));
+        let admin_events=list(Extension(admin),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),query()).await.unwrap().0;
+        assert_eq!(admin_events.total,5);
+        // Membership is checked per request, not frozen at event creation.
+        team_membership::Entity::delete_by_id((coach_id,team_a))
+            .exec(&state.db).await.unwrap();
+        let after=list(Extension(Claims{sub:coach_id,exp:u64::MAX}),
+            Extension(CurrentRole(Role::Trainer)),State(state),query()).await.unwrap().0;
+        assert_eq!(after.total,1);
+        assert_eq!(after.items[0].description,"Mon schéma");
+    }
 }

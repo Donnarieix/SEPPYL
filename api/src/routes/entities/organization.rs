@@ -459,3 +459,20 @@ mod public_visibility_tests {
         assert_eq!(visible[0].id,id);
     }
 }
+
+/* Only club managers and administrators can enumerate candidate accounts
+   for membership management. UUIDs stay in API payloads, not the UI. */
+pub async fn eligible_users(
+    Extension(claims):Extension<Claims>,
+    Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,
+)->ApiResult<Json<Vec<UserSummary>>>{
+    if !can_manage_club(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let users=user::Entity::find().all(&state.db).await.map_err(db_error)?;
+    Ok(Json(users.into_iter().map(|u|UserSummary{
+        id:u.id,username:u.username,
+        role:u.role.unwrap_or_else(||"user".into()),
+    }).collect()))
+}

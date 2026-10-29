@@ -118,3 +118,9 @@ pub async fn remove_team_player(token:&str,team_id:&str,player_id:&str)->Result<
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r.status())
 }
+
+pub async fn eligible_users(token:&str,club_id:&str)->Result<Vec<User>,String>{
+    let r=Client::new().get(format!("{}/clubs/{club_id}/eligible-users",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}

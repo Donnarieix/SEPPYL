@@ -635,3 +635,82 @@ pub async fn list_club_players(
         .all(&state.db).await.map_err(db_error)?;
     Ok(Json(rows))
 }
+
+#[cfg(test)]
+mod roster_lifecycle_tests{
+    use super::*;
+    use sea_orm::Database;
+
+    #[tokio::test]
+    async fn team_player_is_shared_and_survives_empty_team_deletion(){
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let coach=Uuid::new_v4();
+        let teammate=Uuid::new_v4();
+        let outsider=Uuid::new_v4();
+        for (id,name,global) in [(coach,"coach","trainer"),(teammate,"reader","user"),(outsider,"outsider","user")]{
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(global.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let club_id=Uuid::new_v4();
+        let team_id=Uuid::new_v4();
+        club::ActiveModel{id:Set(club_id),name:Set("Club".into()),
+            is_public:Set(Some(false)),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        team::ActiveModel{id:Set(team_id),club_id:Set(club_id),
+            name:Set("U17".into()),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        team_membership::ActiveModel{user_id:Set(coach),team_id:Set(team_id),
+            role:Set("trainer".into()),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        club_membership::ActiveModel{user_id:Set(teammate),club_id:Set(club_id),
+            role:Set("user".into()),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        let coach_claims=Claims{sub:coach,exp:u64::MAX};
+        let (_,created)=create_team_player(
+            Extension(coach_claims),Extension(CurrentRole(Role::Trainer)),
+            State(state.clone()),Path(team_id),Json(NewTeamPlayer{
+                firstname:"Alice".into(),lastname:"Test".into(),number:7
+            })
+        ).await.unwrap();
+        let id=created.0.id;
+        let reader_claims=Claims{sub:teammate,exp:u64::MAX};
+        let players=list_team_players(
+            Extension(reader_claims.clone()),Extension(CurrentRole(Role::User)),
+            State(state.clone()),Path(team_id)
+        ).await.unwrap().0;
+        assert_eq!(players.len(),1);
+        assert_eq!(players[0].id,id);
+        let denied=list_team_players(
+            Extension(Claims{sub:outsider,exp:u64::MAX}),Extension(CurrentRole(Role::User)),
+            State(state.clone()),Path(team_id)
+        ).await;
+        assert!(matches!(denied,Err(StatusCode::NOT_FOUND)));
+        assert!(!can_write_team(&state,&reader_claims,Role::User,team_id).await.unwrap());
+        // Removing a team must not delete the club's player record.
+        // Grant club manager rights for the removal operation.
+        club_membership::Entity::find_by_id((teammate,club_id))
+            .one(&state.db).await.unwrap().unwrap();
+        let row=club_membership::Entity::find_by_id((teammate,club_id))
+            .one(&state.db).await.unwrap().unwrap();
+        let mut active:club_membership::ActiveModel=row.into();
+        active.role=Set("manager".into());
+        active.update(&state.db).await.unwrap();
+        let manager=Claims{sub:teammate,exp:u64::MAX};
+        let result=rename_team(
+            Extension(manager.clone()),Extension(CurrentRole(Role::Manager)),
+            State(state.clone()),Path(team_id),Json(CreateNamed{name:"U18".into()})
+        ).await.unwrap();
+        assert_eq!(result.0.name,"U18");
+        delete_team(Extension(manager.clone()),Extension(CurrentRole(Role::Manager)),
+            State(state.clone()),Path(team_id)).await.unwrap();
+        let remaining=list_club_players(
+            Extension(manager),Extension(CurrentRole(Role::Manager)),
+            State(state),Path(club_id)).await.unwrap().0;
+        assert_eq!(remaining.len(),1);
+        assert_eq!(remaining[0].id,id);
+    }
+}

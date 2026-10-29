@@ -407,6 +407,7 @@ fn Preparation(
         async move { catalog::list(&token).await }
     });
     let mut selected = use_signal(String::new);
+    let drag_source = use_signal(|| None::<String>);
 
     let mut totals = BTreeMap::<String, i32>::new();
     for material in &detail.materials {
@@ -527,11 +528,14 @@ fn Preparation(
                 if detail.activities.is_empty() {
                     div { class: "panel-empty", "Aucune activité. Ajoutez un exercice pour préparer la séance." }
                 }
-                for activity in &detail.activities {
-                    ActivityCard {
+                for (position, activity) in detail.activities.iter().enumerate() {
+                    SortableActivity {
                         key: "{activity.id}",
                         activity: activity.clone(),
                         materials: detail.materials.iter().filter(|m| m.activity_id == activity.id).cloned().collect(),
+                        all_ids: detail.activities.iter().map(|a| a.id.clone()).collect(),
+                        position,
+                        drag_source,
                         token: token.clone(),
                         training_id: training_id.clone(),
                         on_saved,
@@ -559,6 +563,130 @@ fn Preparation(
                 Link { to: Route::TrainingPrint { id: training_id.clone() }, class: "print-footer-link",
                     "Ouvrir la fiche imprimable →"
                 }
+            }
+        }
+    }
+}
+
+fn updated_order(ids: &[String], source: &str, target: &str) -> Option<Vec<String>> {
+    let from = ids.iter().position(|id| id == source)?;
+    let to = ids.iter().position(|id| id == target)?;
+    if from == to { return None; }
+    let mut moved = ids.to_vec();
+    let item = moved.remove(from);
+    moved.insert(to, item);
+    Some(moved)
+}
+fn request_reorder(
+    mut busy: Signal<bool>,
+    ids: Vec<String>,
+    source: String,
+    target: String,
+    token: String,
+    training_id: String,
+    on_saved: EventHandler<()>,
+    on_error: EventHandler<String>,
+) {
+    if *busy.read() { return; }
+    let Some(next) = updated_order(&ids, &source, &target) else { return; };
+    busy.set(true);
+    spawn(async move {
+        match trainings::reorder_activities(&token, &training_id, &next).await {
+            Ok(()) => on_saved.call(()),
+            Err(message) => on_error.call(message),
+        }
+        busy.set(false);
+    });
+}
+
+#[component]
+fn SortableActivity(
+    activity: Activity,
+    materials: Vec<Material>,
+    all_ids: Vec<String>,
+    position: usize,
+    mut drag_source: Signal<Option<String>>,
+    token: String,
+    training_id: String,
+    on_saved: EventHandler<()>,
+    on_error: EventHandler<String>,
+) -> Element {
+    let busy = use_signal(|| false);
+    let activity_id_for_drag = activity.id.clone();
+    let activity_id_for_drop = activity.id.clone();
+    let activity_id_for_up = activity.id.clone();
+    let activity_id_for_down = activity.id.clone();
+    let total = all_ids.len();
+    let order_for_drop = all_ids.clone();
+    let order_for_up = all_ids.clone();
+    let order_for_down = all_ids.clone();
+    let token_drop = token.clone();
+    let token_up = token.clone();
+    let token_down = token.clone();
+    let training_drop = training_id.clone();
+    let training_up = training_id.clone();
+    let training_down = training_id.clone();
+
+    rsx! {
+        div {
+            class: "sortable-exercise",
+            draggable: "true",
+            ondragstart: move |_| drag_source.set(Some(activity_id_for_drag.clone())),
+            ondragend: move |_| drag_source.set(None),
+            ondragover: move |event| event.prevent_default(),
+            ondrop: move |event| {
+                event.prevent_default();
+                let from = drag_source.read().clone();
+                drag_source.set(None);
+                if let Some(from) = from {
+                    request_reorder(
+                        busy, order_for_drop.clone(), from, activity_id_for_drop.clone(),
+                        token_drop.clone(), training_drop.clone(), on_saved, on_error,
+                    );
+                }
+            },
+            div { class: "sortable-controls",
+                span { class: "sort-grip", title: "Glisser pour réordonner", "aria-hidden": "true", "⋮⋮" }
+                span { class: "sort-index", "{position + 1}" }
+                span { class: "sort-help", "Glisser pour réordonner" }
+                button {
+                    class: "button quiet small", r#type: "button",
+                    title: "Monter l'activité", "aria-label": "Monter l'activité",
+                    disabled: position == 0 || *busy.read(),
+                    onclick: move |_| {
+                        if position > 0 {
+                            request_reorder(
+                                busy, order_for_up.clone(), activity_id_for_up.clone(),
+                                order_for_up[position - 1].clone(), token_up.clone(),
+                                training_up.clone(), on_saved, on_error,
+                            );
+                        }
+                    },
+                    "↑"
+                }
+                button {
+                    class: "button quiet small", r#type: "button",
+                    title: "Descendre l'activité", "aria-label": "Descendre l'activité",
+                    disabled: position + 1 >= total || *busy.read(),
+                    onclick: move |_| {
+                        if position + 1 < order_for_down.len() {
+                            request_reorder(
+                                busy, order_for_down.clone(), activity_id_for_down.clone(),
+                                order_for_down[position + 1].clone(), token_down.clone(),
+                                training_down.clone(), on_saved, on_error,
+                            );
+                        }
+                    },
+                    "↓"
+                }
+            }
+            ActivityCard {
+                activity: activity.clone(),
+                materials: materials.clone(),
+                token: token.clone(),
+                training_id: training_id.clone(),
+                on_saved,
+                on_error,
             }
         }
     }

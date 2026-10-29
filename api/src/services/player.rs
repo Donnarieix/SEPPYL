@@ -97,19 +97,33 @@ async fn can_modify_player(claims:&Claims,state:&AppState,id:Uuid)->Result<bool,
     let role=organization::user_role(state,claims.sub).await?;
     if !role.can_write(){return Ok(false);}
     if role==crate::middleware::Role::Administrator{return Ok(true);}
-    if entities::player_user::Entity::find_by_id((claims.sub,id))
-        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.is_some(){
-        return Ok(true);
-    }
-    let memberships=entities::team_player::Entity::find()
+    // A shared player's identity belongs to its clubs/teams, not to the
+    // person who initially entered the record. Every attached team must be
+    // writable to avoid cross-team unauthorized edits.
+    let teams=entities::team_player::Entity::find()
         .filter(entities::team_player::COLUMN.player_id.eq(id))
         .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
-    for membership in memberships {
-        if organization::can_write_team(state,claims,role,membership.team_id).await?{
-            return Ok(true);
+    if !teams.is_empty(){
+        for membership in teams{
+            if !organization::can_write_team(state,claims,role,membership.team_id).await?{
+                return Ok(false);
+            }
         }
+        return Ok(true);
     }
-    Ok(false)
+    let clubs=entities::club_player::Entity::find()
+        .filter(entities::club_player::COLUMN.player_id.eq(id))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !clubs.is_empty(){
+        for association in clubs{
+            if !organization::can_manage_club(state,claims,role,association.club_id).await?{
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    Ok(entities::player_user::Entity::find_by_id((claims.sub,id))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.is_some())
 }
 
 pub async fn update_player(
@@ -151,6 +165,15 @@ pub async fn delete_player(
     let Some(player) = get_player(claims, state, player_id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
+    // Shared player records must be explicitly unlinked from their teams
+    // before deletion; deleting a team never deletes a player.
+    let team_link=entities::team_player::Entity::find()
+        .filter(entities::team_player::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let club_link=entities::club_player::Entity::find()
+        .filter(entities::club_player::COLUMN.player_id.eq(player_id))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    if team_link.is_some()||club_link.is_some(){return Err(StatusCode::CONFLICT);}
     // Preserve history instead of deleting recorded evaluations.
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.player_id.eq(player_id))

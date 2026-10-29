@@ -15,6 +15,8 @@ pub fn Header() -> Element {
         async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
     });
     let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if a.role=="administrator");
+    let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
+        if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"));
     rsx! {
         header { class: "topbar",
             div { class: "topbar-inner",
@@ -37,6 +39,11 @@ pub fn Header() -> Element {
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
+                    if can_audit {
+                        Link { to: Route::AuditLog {},
+                            class: if matches!(&current,Route::AuditLog{}){"topbar-account active"}else{"topbar-account"},
+                            "Journal d'activité" }
+                    }
                     Link { to: Route::Organization {},
                         class: if matches!(&current,Route::Organization{}){"topbar-account active"}else{"topbar-account"},
                         "Mon club" }
@@ -118,6 +125,16 @@ pub fn Header() -> Element {
                         path { d:"M9 9h6M9 13h6M9 17h4" }
                     }
                     span { "Admin" }
+                }
+            }
+            if can_audit {
+                Link { to: Route::AuditLog {},
+                    class: if matches!(&current, Route::AuditLog {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                    svg { width: "21", height: "21", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "1.8",
+                        path { d: "M8 3h10a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V7" }
+                        path { d: "M8 9h8M8 13h8M8 17h6" }
+                    }
+                    span { "Journal" }
                 }
             }
             Link { to: Route::AccountPage {},

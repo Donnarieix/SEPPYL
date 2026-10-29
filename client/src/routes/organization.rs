@@ -16,7 +16,7 @@ pub fn Organization()->Element{
     });
     let mut club_id=use_signal(String::new);
     let team_token=token.clone();
-    let teams=use_resource(move ||{
+    let mut teams=use_resource(move ||{
         let token=team_token.clone();
         let id=club_id.read().clone();
         async move{
@@ -71,7 +71,6 @@ pub fn Organization()->Element{
     let can_write_team=caps.as_ref().is_some_and(|c|c.can_write_teams.contains(&team_id.read()));
     let current_club=clubs_list.iter().find(|c|c.id==*club_id.read()).cloned();
     let is_public=current_club.as_ref().and_then(|c|c.is_public)==Some(true);
-    let team_for_roster=team_id.read().clone();
     let team_for_members=team_id.read().clone();
     let club_for_members=club_id.read().clone();
     rsx!{
@@ -185,7 +184,7 @@ pub fn Organization()->Element{
                                                                     let token=token.clone();
                                                                     move |_|{
                                                                         let token=token.clone();
-                                                                        let id=team_for_roster.clone();
+                                                                        let id=team_id.read().clone();
                                                                         let uid=uid.clone();
                                                                         busy.set(true);
                                                                         spawn(async move{

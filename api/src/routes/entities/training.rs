@@ -439,8 +439,12 @@ pub async fn set_attendance(
     Path(id): Path<Uuid>,
     Json(body): Json<AttendanceUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    let players=if let Some(team_id)=training.team_id {
+        organization::list_team_players_internal(&state,team_id).await?
+    } else {
+        services::player::get_players(&claims,&state).await?
+    };
     let allowed: HashSet<Uuid> = players.iter().map(|p| p.id).collect();
     let present: HashSet<Uuid> = body.player_ids.into_iter().collect();
 
@@ -480,7 +484,13 @@ pub async fn set_score(
     Path(id): Path<Uuid>,
     Json(body): Json<ScoreUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    if let Some(team_id)=training.team_id {
+        let roster=organization::list_team_players_internal(&state,team_id).await?;
+        if !roster.iter().any(|p|p.id==body.player_id) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     if !valid_score(body.score) {
         return Err(StatusCode::BAD_REQUEST);
     }

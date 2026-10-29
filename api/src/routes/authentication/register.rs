@@ -45,6 +45,7 @@ pub async fn register(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user = entities::user::ActiveModel {
+        id: sea_orm::ActiveValue::Set(uuid::Uuid::new_v4()),
         username: sea_orm::ActiveValue::Set(payload.username),
         password: sea_orm::ActiveValue::Set(hash.to_string()),
         ..Default::default()

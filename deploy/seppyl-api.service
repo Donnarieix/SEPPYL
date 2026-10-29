@@ -1,0 +1,21 @@
+[Unit]
+Description=SEPPYL API
+After=network.target
+
+[Service]
+Type=simple
+User=seppyl
+Group=seppyl
+WorkingDirectory=/var/lib/seppyl
+EnvironmentFile=/etc/seppyl/api.env
+ExecStart=/opt/seppyl/api/current/api
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/seppyl
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

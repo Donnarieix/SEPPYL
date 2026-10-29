@@ -1,0 +1,84 @@
+name: CI / Deploy SEPPYL
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: seppyl-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build API
+        run: cargo build -p api --release --locked
+      - run: tar czf "$RUNNER_TEMP/seppyl-api.tar.gz" -C target/release api
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seppyl-api
+          path: ${{ runner.temp }}/seppyl-api.tar.gz
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Build web
+        working-directory: client
+        run: dx build --platform web --release
+      - name: Package web
+        run: |
+          index="$(find . -path '*/release/web/public/index.html' -print -quit)"
+          test -n "$index"
+          tar czf "$RUNNER_TEMP/seppyl-web.tar.gz" -C "$(dirname "$index")" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seppyl-web
+          path: ${{ runner.temp }}/seppyl-web.tar.gz
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: [build-api, build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-api
+          path: ${{ runner.temp }}/api
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-web
+          path: ${{ runner.temp }}/web
+      - name: Configure SSH
+        env:
+          SSH_API_KEY: ${{ secrets.DEPLOY_API_SSH_KEY }}
+          SSH_WEB_KEY: ${{ secrets.DEPLOY_WEB_SSH_KEY }}
+          SSH_HOST_KEYS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_API_KEY" > ~/.ssh/api_key
+          printf '%s\n' "$SSH_WEB_KEY" > ~/.ssh/web_key
+          printf '%s\n' "$SSH_HOST_KEYS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/*_key ~/.ssh/known_hosts
+      - name: Deploy API
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          cat "$RUNNER_TEMP/api/seppyl-api.tar.gz" | ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/api_key -p "$PORT" "lud@$HOST"
+      - name: Deploy Web
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          cat "$RUNNER_TEMP/web/seppyl-web.tar.gz" | ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/web_key -p "$PORT" "lud@$HOST"

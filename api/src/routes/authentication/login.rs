@@ -38,7 +38,7 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET".to_string());
+    let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET is required");
 
     let user = entities::user::Entity::find()
         .filter(entities::user::COLUMN.username.eq(payload.username))

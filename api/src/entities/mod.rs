@@ -12,3 +12,8 @@ pub mod catalog_material;
 pub mod catalog_selection;
 pub mod catalog_result;
 pub mod user_preference;
+
+pub mod club;
+pub mod team;
+pub mod club_membership;
+pub mod team_membership;

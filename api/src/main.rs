@@ -1,11 +1,9 @@
 use axum::{
-    Router, middleware as axum_middleware,
-    routing::{delete, get, post, put},
+    Router, middleware as axum_middleware, routing::{delete, get, post, put},
 };
 use tokio::net::TcpListener;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-
 use crate::{
     middleware::auth, routes::{
         authentication::{login::login, register::register}, doc::ApiDoc, entities::{
@@ -14,7 +12,6 @@ use crate::{
         }, miscellaneous::{health::health, me::me},
     }, state::AppState,
 };
-
 mod entities;
 mod middleware;
 mod routes;
@@ -27,16 +24,10 @@ async fn main() {
     let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET is required");
     assert!(secret.len() >= 32 && secret != "SECRET", "JWT_SECRET must be at least 32 bytes and non-default");
     let bind = std::env::var("SEPPYL_BIND").unwrap_or_else(|_| "127.0.0.1:3101".to_string());
-
     let state = AppState::default().await;
+
     let protected = Router::new()
         .route("/me", get(me))
-        .route_layer(axum_middleware::from_fn(auth));
-
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/login", post(login))
-        .route("/register", post(register))
         .route("/player/list", get(get_players))
         .route("/player/get/{id}", get(get_player))
         .route("/player/create", post(create_player))
@@ -48,10 +39,15 @@ async fn main() {
         .route("/activity/update", put(update_activity))
         .route("/activity_player/update", put(update_activity_player))
         .route("/activity/delete/{id}", delete(delete_activity))
-        .with_state(state)
-        .merge(protected)
-        .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()));
+        .route_layer(axum_middleware::from_fn(auth));
 
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/login", post(login))
+        .route("/register", post(register))
+        .merge(protected)
+        .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .with_state(state);
     let listener = TcpListener::bind(&bind).await.expect("Cannot bind API listener");
     axum::serve(listener, app).await.expect("API server failed");
 }

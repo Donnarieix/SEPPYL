@@ -63,7 +63,8 @@ async fn main() {
         .route("/clubs/{id}/eligible-users", get(organization::eligible_users))
         .route("/clubs/{id}/capabilities", get(organization::capabilities))
         .route("/teams/{id}/members", get(organization::list_team_members))
-        .route("/teams/{id}/players", get(organization::list_team_players))
+        .route("/teams/{id}/players", get(organization::list_team_players).post(organization::create_team_player))
+        .route("/teams/{id}", put(organization::rename_team).delete(organization::delete_team))
         .route("/teams/{id}/players/{player_id}",
             put(organization::assign_team_player).delete(organization::remove_team_player))
         .route("/clubs/{id}/teams", get(organization::list_teams).post(organization::create_team))

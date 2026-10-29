@@ -2,12 +2,12 @@
 //! Role changes require club managers or global administrators.
 //! Team membership does not implicitly grant access to other teams.
 use axum::{Extension, Json, extract::{Path, State}, http::StatusCode};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
 use serde::{Deserialize,Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
 use crate::{
-    entities::{club, team, club_membership, team_membership, team_player, player, player_user, user},
+    entities::{club, team, club_membership, team_membership, team_player, player, player_user, user, training, catalog_activity},
     middleware::{CurrentRole, Role},
     routes::authentication::login::Claims,
     state::AppState,
@@ -358,9 +358,22 @@ pub async fn assign_team_player(
     }
     let owner=player_user::Entity::find_by_id((claims.sub,player_id))
         .one(&state.db).await.map_err(db_error)?.is_some();
-    // An administrator may migrate an existing player; ordinary coaches
-    // can only attach their own players or already-linked team players.
-    if !owner && role.0!=Role::Administrator{return Err(StatusCode::NOT_FOUND);}
+    let target=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut known_in_club=false;
+    let existing=team_player::Entity::find().filter(team_player::COLUMN.player_id.eq(player_id))
+        .all(&state.db).await.map_err(db_error)?;
+    for entry in existing{
+        if let Some(source)=team::Entity::find_by_id(entry.team_id).one(&state.db).await.map_err(db_error)?{
+            if source.club_id==target.club_id &&
+                can_read_team(&state,&claims,role.0,source.id).await?{
+                    known_in_club=true;break;
+                }
+        }
+    }
+    if !owner && !known_in_club && role.0!=Role::Administrator{
+        return Err(StatusCode::NOT_FOUND);
+    }
     if player::Entity::find_by_id(player_id).one(&state.db).await.map_err(db_error)?.is_none(){
         return Err(StatusCode::NOT_FOUND);
     }
@@ -501,4 +514,74 @@ pub async fn capabilities(
         }
     }
     Ok(Json(ClubCapabilities{can_manage,can_create_team:can_manage,can_write_teams}))
+}
+
+pub async fn rename_team(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,Json(body):Json<CreateNamed>,
+)->ApiResult<Json<team::Model>>{
+    let original=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if !can_manage_club(&state,&claims,role.0,original.club_id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if !valid_name(&body.name){return Err(StatusCode::BAD_REQUEST);}
+    let mut active:team::ActiveModel=original.into();
+    active.name=Set(body.name.trim().to_owned());
+    let updated=active.update(&state.db).await.map_err(db_error)?;
+    tracing::info!(actor=%claims.sub,team=%id,action="team.rename");
+    Ok(Json(updated))
+}
+pub async fn delete_team(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,
+)->ApiResult<StatusCode>{
+    let original=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if !can_manage_club(&state,&claims,role.0,original.club_id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    // Preserve all historic sessions and shared catalogue definitions: refuse
+    // destructive deletion when either points to the team.
+    let training_exists=training::Entity::find()
+        .filter(training::COLUMN.team_id.eq(id)).one(&state.db).await.map_err(db_error)?.is_some();
+    let catalog_exists=catalog_activity::Entity::find()
+        .filter(catalog_activity::COLUMN.team_id.eq(id)).one(&state.db).await.map_err(db_error)?.is_some();
+    if training_exists||catalog_exists{return Err(StatusCode::CONFLICT);}
+    let tx=state.db.begin().await.map_err(db_error)?;
+    team_player::Entity::delete_many().filter(team_player::COLUMN.team_id.eq(id))
+        .exec(&tx).await.map_err(db_error)?;
+    team_membership::Entity::delete_many().filter(team_membership::COLUMN.team_id.eq(id))
+        .exec(&tx).await.map_err(db_error)?;
+    let active:team::ActiveModel=original.into();
+    active.delete(&tx).await.map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
+    tracing::warn!(actor=%claims.sub,team=%id,action="team.delete");
+    Ok(StatusCode::NO_CONTENT)
+}
+#[derive(Deserialize)]
+pub struct NewTeamPlayer{pub firstname:String,pub lastname:String,pub number:u32}
+pub async fn create_team_player(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(team_id):Path<Uuid>,Json(body):Json<NewTeamPlayer>,
+)->ApiResult<(StatusCode,Json<player::Model>)>{
+    if !role.0.can_write()||!can_write_team(&state,&claims,role.0,team_id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if body.firstname.trim().is_empty()||body.lastname.trim().is_empty()
+       ||body.firstname.len()>100||body.lastname.len()>100||body.number>999{
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let tx=state.db.begin().await.map_err(db_error)?;
+    let saved=player::ActiveModel{
+        id:Set(Uuid::new_v4()),firstname:Set(body.firstname.trim().to_owned()),
+        lastname:Set(body.lastname.trim().to_owned()),number:Set(body.number),
+        ..Default::default()
+    }.insert(&tx).await.map_err(db_error)?;
+    team_player::ActiveModel{
+        team_id:Set(team_id),player_id:Set(saved.id),..Default::default()
+    }.insert(&tx).await.map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
+    tracing::info!(actor=%claims.sub,team=%team_id,player=%saved.id,action="team.player.create");
+    Ok((StatusCode::CREATED,Json(saved)))
 }

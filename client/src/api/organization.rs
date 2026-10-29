@@ -136,3 +136,25 @@ pub async fn capabilities(token:&str,club_id:&str)->Result<ClubCapabilities,Stri
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r.status())?;r.json().await.map_err(|e|e.to_string())
 }
+
+pub async fn rename_team(token:&str,id:&str,name:&str)->Result<(),String>{
+    let r=Client::new().put(format!("{}/teams/{id}",base()))
+        .bearer_auth(token).json(&Named{name}).send().await.map_err(|e|e.to_string())?;
+    check(r.status())
+}
+pub async fn delete_team(token:&str,id:&str)->Result<(),String>{
+    let r=Client::new().delete(format!("{}/teams/{id}",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    match r.status(){
+        StatusCode::CONFLICT=>Err("Suppression impossible : cette équipe possède des entraînements ou des activités. Son historique doit être conservé.".into()),
+        status=>check(status)
+    }
+}
+#[derive(Serialize)]
+struct NewPlayer<'a>{firstname:&'a str,lastname:&'a str,number:u32}
+pub async fn create_team_player(token:&str,id:&str,firstname:&str,lastname:&str,number:u32)->Result<(),String>{
+    let r=Client::new().post(format!("{}/teams/{id}/players",base()))
+        .bearer_auth(token).json(&NewPlayer{firstname,lastname,number})
+        .send().await.map_err(|e|e.to_string())?;
+    check(r.status())
+}

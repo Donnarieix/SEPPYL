@@ -17,7 +17,11 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - name: Test browser theme interaction
-        run: node --test client/tests/theme-transition.test.cjs
+        run: |
+          node --test client/tests/*.test.cjs
+          node --check client/assets/rich-editor.js
+          node --check client/assets/tactics-board.js
+          node --check client/assets/auth-guard.js
       - name: Resolve dependencies
         run: cargo generate-lockfile
       - name: Check API

@@ -571,7 +571,7 @@ mod integration_tests {
         let (created, id_string) = create(
             Extension(claims.clone()),
             State(state.clone()),
-            Json(CreateTraining { name: "Entraînement test".into(), date }),
+            Json(CreateTraining { name: "Entraînement test".into(), date, team_id: None }),
         ).await.unwrap();
         assert_eq!(created, StatusCode::CREATED);
         let id = Uuid::parse_str(&id_string).unwrap();

@@ -52,6 +52,8 @@ impl AppState {
 
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
+        backfill_team_resources(&db).await
+            .expect("Unable to backfill team scopes on existing data");
 
         Self { db }
     }
@@ -138,6 +140,45 @@ async fn migrate_existing_accounts(db:&DatabaseConnection)->Result<(),sea_orm::D
         record.global_role=Set(Some("user".into()));
         record.update(&transaction).await?;
         transaction.commit().await?;
+    }
+    Ok(())
+}
+
+
+/// Idempotent scope backfill. No player/score is deleted, and existing UUIDs
+/// remain stable so that old notes and training handouts keep working.
+async fn backfill_team_resources(db:&DatabaseConnection)->Result<(),sea_orm::DbErr>{
+    use crate::entities::{user,team_member,team,training,catalog_activity,player_user,team_player};
+    for account in user::Entity::find().all(db).await? {
+        let team_id=team_member::Entity::find()
+            .filter(team_member::COLUMN.user_id.eq(account.id))
+            .one(db).await?.map(|m|m.team_id);
+        let team_id=if team_id.is_some(){team_id}else if account.global_role.as_deref()==Some("administrator"){
+            team::Entity::find().one(db).await?.map(|t|t.id)
+        }else{None};
+        let Some(team_id)=team_id else{continue};
+        for row in training::Entity::find()
+            .filter(training::COLUMN.user_id.eq(account.id))
+            .filter(training::COLUMN.team_id.is_null()).all(db).await?{
+            let mut active:training::ActiveModel=row.into();
+            active.team_id=Set(Some(team_id));
+            active.update(db).await?;
+        }
+        for row in catalog_activity::Entity::find()
+            .filter(catalog_activity::COLUMN.user_id.eq(account.id))
+            .filter(catalog_activity::COLUMN.team_id.is_null()).all(db).await?{
+            let mut active:catalog_activity::ActiveModel=row.into();
+            active.team_id=Set(Some(team_id));
+            active.update(db).await?;
+        }
+        for pu in player_user::Entity::find()
+            .filter(player_user::COLUMN.user_id.eq(account.id)).all(db).await?{
+            if team_player::Entity::find_by_id((team_id,pu.player_id)).one(db).await?.is_none(){
+                team_player::ActiveModel{
+                    team_id:Set(team_id),player_id:Set(pu.player_id),..Default::default()
+                }.insert(db).await?;
+            }
+        }
     }
     Ok(())
 }

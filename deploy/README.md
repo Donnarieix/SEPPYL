@@ -3,7 +3,7 @@
 This must be performed **once** by the server administrator. The CI cannot provision SSH credentials, DNS, or root services.
 
 1. Ensure `seppyl.donnarieix.fr` resolves to the server and the wildcard certificate is installed.
-2. Fix the application security configuration before exposure. Create `/etc/seppyl/api.env` (root owned, mode 0600) with a strong `JWT_SECRET`, `SEPPYL_BIND=127.0.0.1:3101`, and `SEPPYL_ALLOW_REGISTRATION=false` (temporarily enable only for deliberate user enrollment). Never commit secrets.
+2. Application production configuration: Create `/etc/seppyl/api.env` (root owned, mode 0600) with a strong `JWT_SECRET`, `SEPPYL_BIND=127.0.0.1:3101`, and `SEPPYL_ALLOW_REGISTRATION=false` (temporarily enable only for deliberate user enrollment). Never commit secrets.
 3. Create the dedicated account and directories:
    ```sh
    sudo useradd --system --home /var/lib/seppyl --shell /usr/sbin/nologin seppyl

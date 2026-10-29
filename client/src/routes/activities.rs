@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::catalog::{self, Activity};
+use crate::api::organization;
 use super::{Route,layout::Header,rich_editor::RichTextEditor};
 
 #[component]

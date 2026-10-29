@@ -97,7 +97,7 @@ fn client() -> Client {
     Client::new()
 }
 async fn success(response: reqwest::Response) -> Result<(), String> {
-    let status = response.status();
+    let status = crate::session::observe_status(response.status());
     match status {
         StatusCode::UNAUTHORIZED => Err("Session expirée. Reconnectez-vous.".into()),
         StatusCode::FORBIDDEN => Err("Accès refusé.".into()),
@@ -111,7 +111,7 @@ async fn success(response: reqwest::Response) -> Result<(), String> {
 pub async fn list(token: &str) -> Result<Vec<Training>, String> {
     let response = client().get(format!("{}/trainings", base_url()))
         .bearer_auth(token).send().await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
+    if !crate::session::observe_status(response.status()).is_success() {
         success(response).await?;
         return Err("Réponse inattendue.".into());
     }
@@ -120,7 +120,7 @@ pub async fn list(token: &str) -> Result<Vec<Training>, String> {
 pub async fn get(token: &str, id: &str) -> Result<Detail, String> {
     let response = client().get(format!("{}/trainings/{id}", base_url()))
         .bearer_auth(token).send().await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
+    if !crate::session::observe_status(response.status()).is_success() {
         success(response).await?;
         return Err("Réponse inattendue.".into());
     }
@@ -131,7 +131,7 @@ pub async fn create(token: &str, name: &str, date: &str) -> Result<String, Strin
         .bearer_auth(token)
         .json(&TrainingRequest { name, date: date_time(date) })
         .send().await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
+    if !crate::session::observe_status(response.status()).is_success() {
         success(response).await?;
         return Err("Création impossible.".into());
     }

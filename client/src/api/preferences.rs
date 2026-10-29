@@ -48,8 +48,8 @@ pub async fn get(token: &str) -> Result<UserPreferences, String> {
     let response = Client::new().get(format!("{}/preferences", api_url()))
         .bearer_auth(token).send().await
         .map_err(|e| format!("Impossible de charger les préférences : {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Préférences indisponibles (HTTP {}).", response.status()));
+    if !crate::session::observe_status(response.status()).is_success() {
+        return Err(format!("Préférences indisponibles (HTTP {}).", crate::session::observe_status(response.status())));
     }
     response.json::<UserPreferences>().await
         .map_err(|e| format!("Préférences invalides : {e}"))
@@ -59,8 +59,8 @@ async fn patch(token: &str, change: PreferencePatch) -> Result<UserPreferences, 
     let response = Client::new().put(format!("{}/preferences", api_url()))
         .bearer_auth(token).json(&change).send().await
         .map_err(|e| format!("Impossible de sauvegarder la préférence : {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Préférence non enregistrée (HTTP {}).", response.status()));
+    if !crate::session::observe_status(response.status()).is_success() {
+        return Err(format!("Préférence non enregistrée (HTTP {}).", crate::session::observe_status(response.status())));
     }
     response.json::<UserPreferences>().await.map_err(|e| e.to_string())
 }

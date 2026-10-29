@@ -10,7 +10,7 @@ struct Update<'a> { id:&'a str, firstname:Option<&'a str>, lastname:Option<&'a s
 pub async fn list(token:&str)->Result<Vec<Player>,String>{
     let response=Client::new().get(format!("{}/player/list",url()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success(){return Err(format!("Chargement impossible (HTTP {}).",response.status()));}
+    if !crate::session::observe_status(response.status()).is_success(){return Err(format!("Chargement impossible (HTTP {}).",crate::session::observe_status(response.status())));}
     response.json::<Vec<Player>>().await.map_err(|e|e.to_string())
 }
 pub async fn save(token:&str,id:Option<&str>,firstname:&str,lastname:&str,number:u32)->Result<(),String>{
@@ -23,12 +23,12 @@ pub async fn save(token:&str,id:Option<&str>,firstname:&str,lastname:&str,number
             .json(&Create{firstname,lastname,number})
     };
     let res=req.send().await.map_err(|e|e.to_string())?;
-    if res.status().is_success(){Ok(())} else {Err(format!("Impossible d'enregistrer la joueuse (HTTP {}).",res.status()))}
+    if crate::session::observe_status(res.status()).is_success(){Ok(())} else {Err(format!("Impossible d'enregistrer la joueuse (HTTP {}).",crate::session::observe_status(res.status())))}
 }
 pub async fn delete(token:&str,id:&str)->Result<(),String>{
     let res=Client::new().delete(format!("{}/player/delete/{id}",url()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
-    match res.status(){
+    match crate::session::observe_status(res.status()){
         status if status.is_success()=>Ok(()),
         StatusCode::CONFLICT=>Err("Cette joueuse possède des présences ou des notes : suppression bloquée pour préserver l'historique.".into()),
         status=>Err(format!("Suppression impossible (HTTP {status}).")),

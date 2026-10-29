@@ -24,7 +24,7 @@ struct Selected<'a> { activity_id:&'a str }
 struct ImageResponse { image_url:String }
 
 pub async fn check(response:reqwest::Response)->Result<(),String>{
-    let status=response.status();
+    let status=crate::session::observe_status(response.status());
     match status {
         StatusCode::UNAUTHORIZED=>Err("Votre session a expiré. Reconnectez-vous.".into()),
         StatusCode::FORBIDDEN=>Err("Accès refusé.".into()),
@@ -36,7 +36,7 @@ pub async fn check(response:reqwest::Response)->Result<(),String>{
 pub async fn list(token:&str)->Result<Vec<Activity>,String> {
     let response=Client::new().get(format!("{}/catalog",api_base())).bearer_auth(token)
         .send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success() {check(response).await?;return Err("Réponse inattendue.".into());}
+    if !crate::session::observe_status(response.status()).is_success() {check(response).await?;return Err("Réponse inattendue.".into());}
     response.json().await.map_err(|e|e.to_string())
 }
 #[derive(Deserialize)]
@@ -49,7 +49,7 @@ pub async fn upsert(token:&str,id:Option<&str>,name:&str,description:&str,image_
     let request=if id.is_some() {client.put(url)} else {client.post(url)};
     let response=request.bearer_auth(token).json(&Payload{name,description,image_url})
         .send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success() {
+    if !crate::session::observe_status(response.status()).is_success() {
         check(response).await?;
         return Err("Réponse inattendue lors de la sauvegarde.".into());
     }
@@ -76,7 +76,7 @@ pub async fn upload(token:&str,bytes:Vec<u8>)->Result<String,String>{
     let response=Client::new().post(format!("{}/catalog/upload",api_base()))
         .bearer_auth(token).header("Content-Type","application/octet-stream")
         .body(bytes).send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success(){check(response).await?;return Err("Image non reconnue.".into());}
+    if !crate::session::observe_status(response.status()).is_success(){check(response).await?;return Err("Image non reconnue.".into());}
     response.json::<ImageResponse>().await.map(|r|r.image_url).map_err(|e|e.to_string())
 }
 pub async fn select_for_table(token:&str,id:&str)->Result<(),String>{

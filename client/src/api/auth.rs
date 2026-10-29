@@ -85,10 +85,10 @@ impl Api {
             .await
             .map_err(|err| err.to_string())?;
 
-        match response.status() {
+        match crate::session::observe_status(response.status()) {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err("Non autorisé".into()),
-            _ => Err(format!("Erreur serveur: {}", response.status())),
+            _ => Err(format!("Erreur serveur: {}", crate::session::observe_status(response.status()))),
         }
     }
 

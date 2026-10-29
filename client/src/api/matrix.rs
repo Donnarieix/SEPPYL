@@ -49,11 +49,11 @@ pub async fn load(token: &str) -> Result<Matrix, String> {
         .await
         .map_err(|error| format!("Impossible de joindre l'API : {error}"))?;
 
-    if response.status() == StatusCode::UNAUTHORIZED {
+    if crate::session::observe_status(response.status()) == StatusCode::UNAUTHORIZED {
         return Err("Session expirée. Reconnectez-vous.".into());
     }
-    if !response.status().is_success() {
-        return Err(format!("Chargement impossible (HTTP {}).", response.status()));
+    if !crate::session::observe_status(response.status()).is_success() {
+        return Err(format!("Chargement impossible (HTTP {}).", crate::session::observe_status(response.status())));
     }
     response.json::<Matrix>().await.map_err(|error| error.to_string())
 }
@@ -76,8 +76,8 @@ pub async fn save(
         .await
         .map_err(|error| error.to_string())?;
 
-    if !response.status().is_success() {
-        return Err(format!("Sauvegarde impossible (HTTP {}).", response.status()));
+    if !crate::session::observe_status(response.status()).is_success() {
+        return Err(format!("Sauvegarde impossible (HTTP {}).", crate::session::observe_status(response.status())));
     }
     Ok(())
 }
@@ -133,7 +133,7 @@ pub async fn create_player(
         .await
         .map_err(|error| format!("Impossible de contacter l'API : {error}"))?;
 
-    match response.status() {
+    match crate::session::observe_status(response.status()) {
         StatusCode::CREATED => Ok(()),
         StatusCode::UNAUTHORIZED => Err("Session expirée. Reconnectez-vous.".into()),
         StatusCode::FORBIDDEN => Err("Vous n'avez pas le droit d'ajouter cette joueuse.".into()),

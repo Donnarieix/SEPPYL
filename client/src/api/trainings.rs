@@ -190,3 +190,16 @@ pub async fn save_score(
         .send().await.map_err(|e| e.to_string())?;
     success(response).await
 }
+
+
+#[derive(Serialize)]
+struct ReorderRequest<'a> { activity_ids: &'a [String] }
+
+pub async fn reorder_activities(token: &str, id: &str, activity_ids: &[String]) -> Result<(), String> {
+    let response = Client::new()
+        .put(format!("{}/trainings/{id}/activities/order", base_url()))
+        .bearer_auth(token)
+        .json(&ReorderRequest { activity_ids })
+        .send().await.map_err(|e|e.to_string())?;
+    success(response).await
+}

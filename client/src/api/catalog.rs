@@ -67,6 +67,11 @@ pub async fn add_material(token:&str,id:&str,name:&str,quantity:i32)->Result<(),
     check(Client::new().post(format!("{}/catalog/{id}/materials",api_base())).bearer_auth(token)
         .json(&MaterialPayload{name,quantity}).send().await.map_err(|e|e.to_string())?).await
 }
+pub async fn update_material(token:&str,id:&str,material_id:&str,name:&str,quantity:i32)->Result<(),String>{
+    check(Client::new().put(format!("{}/catalog/{id}/materials/{material_id}",api_base()))
+        .bearer_auth(token).json(&MaterialPayload{name,quantity})
+        .send().await.map_err(|e|e.to_string())?).await
+}
 pub async fn remove_material(token:&str,id:&str,material_id:&str)->Result<(),String>{
     check(Client::new().delete(format!("{}/catalog/{id}/materials/{material_id}",api_base()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?).await

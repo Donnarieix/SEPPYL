@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ui-tableur
+      - 'feat/**'
   workflow_dispatch:
 
 jobs:

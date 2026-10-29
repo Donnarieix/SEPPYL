@@ -80,7 +80,10 @@ fn ActivityCard(activity:Activity,token:String,on_saved:EventHandler<()>,on_erro
                     if activity.materials.is_empty(){span{class:"muted-small","Aucun"}}
                     for material in &activity.materials{
                         div{class:"material-row",key:"{material.id}",
-                            span{"{material.quantity} × {material.name}"}
+                            MaterialEditor{
+                                token:token.clone(),activity_id:activity.id.clone(),material:material.clone(),
+                                on_saved,on_error
+                            }
                             button{class:"remove-link",disabled:*busy.read(),
                                 onclick:{
                                     let token=token.clone();let id=activity.id.clone();let material_id=material.id.clone();
@@ -249,6 +252,63 @@ pub fn ActivityEditor(
                             if *busy.read(){"Enregistrement…"}else{"Enregistrer"}}
                     }
                 }
+            }
+        }
+    }
+}
+
+
+#[component]
+fn MaterialEditor(
+    token: String,
+    activity_id: String,
+    material: catalog::Material,
+    on_saved: EventHandler<()>,
+    on_error: EventHandler<String>,
+) -> Element {
+    let mut editing = use_signal(|| false);
+    let mut name = use_signal(|| material.name.clone());
+    let mut quantity = use_signal(|| material.quantity.to_string());
+    let mut busy = use_signal(|| false);
+    rsx! {
+        if !*editing.read() {
+            span { "{material.quantity} × {material.name}" }
+            button { class:"remove-link", title:"Modifier le matériel",
+                onclick:move |_|editing.set(true), "Modifier" }
+        } else {
+            form { class:"material-edit-form",
+                onsubmit:{
+                    let token=token.clone();
+                    let activity_id=activity_id.clone();
+                    let material_id=material.id.clone();
+                    move |event|{
+                        event.prevent_default();
+                        if *busy.read(){return;}
+                        let label=name.read().trim().to_owned();
+                        let count=quantity.read().parse::<i32>().unwrap_or(0);
+                        if label.is_empty() || !(1..=100000).contains(&count) {
+                            on_error.call("Nom et quantité du matériel invalides.".into());
+                            return;
+                        }
+                        let token=token.clone();
+                        let activity_id=activity_id.clone();
+                        let material_id=material_id.clone();
+                        busy.set(true);
+                        spawn(async move {
+                            match catalog::update_material(&token,&activity_id,&material_id,&label,count).await{
+                                Ok(())=>{editing.set(false);on_saved.call(());}
+                                Err(err)=>on_error.call(err),
+                            }
+                            busy.set(false);
+                        });
+                    }
+                },
+                input { "aria-label":"Nom du matériel", value:"{name}",
+                    maxlength:"150", required:true, oninput:move |e|name.set(e.value()) }
+                input { "aria-label":"Quantité", r#type:"number", min:"1", value:"{quantity}",
+                    oninput:move |e|quantity.set(e.value()) }
+                button { class:"button outline small", r#type:"submit", disabled:*busy.read(), "OK" }
+                button { class:"button quiet small", r#type:"button", onclick:move |_|editing.set(false), "Annuler" }
             }
         }
     }

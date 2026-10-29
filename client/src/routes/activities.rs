@@ -22,7 +22,10 @@ pub fn Activities()->Element{
             main{class:"page",
                 div{class:"page-heading",
                     div{h1{"Bibliothèque d'activités"} p{"Définissez vos exercices une fois, puis réutilisez-les dans les entraînements et le tableur."}}
-                    button{class:"button solid",onclick:move |_|creating.set(true),"+ Nouvelle activité"}
+                    div { class:"heading-actions",
+                        Link { to: Route::Tactics {}, class:"button outline", "Tableau tactique" }
+                        button{class:"button solid",onclick:move |_|creating.set(true),"+ Nouvelle activité"}
+                    }
                 }
                 if let Some(message)=error.read().as_ref(){div{class:"form-error",role:"alert","{message}"}}
                 match data.read().clone(){

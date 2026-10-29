@@ -11,6 +11,7 @@ mod players;
 mod activities;
 mod account;
 mod rich_editor;
+mod tactics;
 
 use home::Home;
 use login::Login;
@@ -20,6 +21,7 @@ use trainings::Trainings;
 use players::Players;
 use activities::Activities;
 use account::AccountPage;
+use tactics::Tactics;
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {
@@ -31,6 +33,8 @@ pub enum Route {
     Players {},
     #[route("/activities")]
     Activities {},
+    #[route("/tactics")]
+    Tactics {},
     #[route("/settings")]
     AccountPage {},
     #[route("/login")]

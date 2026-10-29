@@ -25,6 +25,9 @@ pub fn Header() -> Element {
                     Link { to: Route::Activities {},
                         class: if matches!(&current, Route::Activities {}) { "active" } else { "" },
                         "Activités" }
+                    Link { to: Route::Tactics {},
+                        class: if matches!(&current, Route::Tactics {}) { "active" } else { "" },
+                        "Tactiques" }
                 }
                 div { class: "topbar-utilities",
                     Link {
@@ -73,6 +76,15 @@ pub fn Header() -> Element {
                     path { d: "M8 9h8M8 13h8M8 17h5" }
                 }
                 span { "Activités" }
+            }
+            Link { to: Route::Tactics {},
+                class: if matches!(&current, Route::Tactics {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                svg { width:"21", height:"21", view_box:"0 0 24 24",
+                    fill:"none", stroke:"currentColor", stroke_width:"1.8",
+                    circle { cx:"12", cy:"12", r:"9" }
+                    path { d:"M12 3v18M3 12h18" }
+                }
+                span { "Tactiques" }
             }
             Link { to: Route::AccountPage {},
                 class: if matches!(&current, Route::AccountPage {}) { "mobile-nav-link active" } else { "mobile-nav-link" },

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ui-tableur
+      - feature/club-roles-audit-editor
   workflow_dispatch:
 
 jobs:

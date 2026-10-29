@@ -3,8 +3,8 @@ use serde::Deserialize;
 fn base()->&'static str{option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000")}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Event{
-    pub id:String,pub actor_id:String,pub action:String,
-    pub path:String,pub status:i32,pub timestamp:i64,
+    pub id:String,pub author:String,pub action:String,
+    pub description:String,pub status:i32,pub status_label:String,pub timestamp:i64,
 }
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct AuditPage{

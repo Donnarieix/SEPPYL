@@ -39,9 +39,23 @@ jobs:
         with:
           path: ~/.cargo/bin/dx
           key: ${{ runner.os }}-${{ runner.arch }}-dioxus-cli-0.7.10-v1
-      - name: Install Dioxus CLI (only on cache miss)
+      - name: Install official prebuilt Dioxus CLI (only on cache miss)
         if: steps.cache-dx.outputs.cache-hit != 'true'
-        run: cargo install dioxus-cli --version 0.7.10 --locked
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10"
+          archive="dx-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 "$base/$archive" -o "$RUNNER_TEMP/dx.tar.gz"
+          curl -fsSL --retry 3 "$base/dx-x86_64-unknown-linux-gnu.sha256" -o "$RUNNER_TEMP/dx.sha256"
+          checksum="$(grep -Eo '[0-9a-fA-F]{64}' "$RUNNER_TEMP/dx.sha256" | head -n 1)"
+          test -n "$checksum"
+          printf '%s  %s\\n' "$checksum" "$RUNNER_TEMP/dx.tar.gz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/dx-unpacked" "$HOME/.cargo/bin"
+          tar -xzf "$RUNNER_TEMP/dx.tar.gz" -C "$RUNNER_TEMP/dx-unpacked"
+          executable="$(find "$RUNNER_TEMP/dx-unpacked" -type f -name dx -print -quit)"
+          test -n "$executable"
+          install -m 0755 "$executable" "$HOME/.cargo/bin/dx"
       - name: Verify Dioxus CLI
         run: dx --version
       - name: Build web

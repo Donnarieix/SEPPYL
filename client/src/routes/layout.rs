@@ -30,6 +30,7 @@ pub fn Header() -> Element {
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
+                    Link { to: Route::Organization {}, class: "topbar-account", "Clubs" }
                     Link {
                         to: Route::AccountPage {},
                         class: if matches!(&current, Route::AccountPage {}) { "topbar-account active" } else { "topbar-account" },

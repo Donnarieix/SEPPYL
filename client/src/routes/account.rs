@@ -63,6 +63,10 @@ pub fn AccountPage() -> Element {
                         p { "Informations personnelles et préférences d'utilisation." }
                     }
                 }
+                div { class: "settings-organization-link",
+                    Link { to: Route::Organization {}, class: "button outline",
+                        "Gérer les clubs, les équipes et les droits d'accès" }
+                }
                 nav { class: "settings-tabs", role: "tablist", "aria-label": "Rubriques du compte",
                     button {
                         class: if active_tab.read().as_str() == "appearance" { "settings-tab active" } else { "settings-tab" },

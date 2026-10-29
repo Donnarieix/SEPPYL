@@ -1,6 +1,11 @@
 use dioxus::prelude::*;
 use crate::api::audit;
 use super::{Route,layout::Header};
+fn date_utc(timestamp:i64)->String{
+    chrono::DateTime::from_timestamp(timestamp,0)
+        .map(|d|d.format("%d/%m/%Y à %H:%M UTC").to_string())
+        .unwrap_or_else(||"Date indisponible".into())
+}
 #[component]
 pub fn AuditLog()->Element{
     let session=use_context::<Signal<Option<String>>>();
@@ -29,7 +34,7 @@ pub fn AuditLog()->Element{
             main{class:"page audit-page",
                 div{class:"page-heading",
                     div{h1{"Journal d'activité"}
-                        p{"Historique complet des opérations, accessible aux administrateurs."}}
+                        p{"Opérations visibles selon vos droits de modification."}}
                     button{class:"button outline",onclick:move |_|events.restart(),"Actualiser"}
                 }
                 section{class:"panel",
@@ -64,15 +69,23 @@ pub fn AuditLog()->Element{
                             if result.items.is_empty(){p{class:"panel-empty","Aucun événement sur cette page."}}
                             div{class:"audit-table-wrap",
                                 table{class:"audit-table",
-                                    thead{tr{th{"Horodatage (UTC)"}th{"Action"}th{"Ressource"}th{"Compte"}th{"HTTP"}}}
+                                    thead{tr{th{"Date et heure"}th{"Action"}th{"Détail de l'opération"}th{"Effectuée par"}th{"Résultat"}}}
                                     tbody{
                                         for item in result.items{
                                             tr{key:"{item.id}",
-                                                td{title:"Horodatage Unix en secondes","{item.timestamp}"}
-                                                td{"{item.action}"}
-                                                td{"{item.path}"}
-                                                td{code{"{item.actor_id}"}}
-                                                td{"{item.status}"}
+                                                td{time{class:"audit-datetime","data-audit-epoch":"{item.timestamp}",
+                                                    title:"Heure affichée en UTC avant conversion locale",
+                                                    "{date_utc(item.timestamp)}"}}
+                                                td{span{class:"audit-action","{item.action}"}}
+                                                td{class:"audit-description","{item.description}"}
+                                                td{class:"audit-author","{item.author}"}
+                                                td{span{
+                                                    class:if (200..300).contains(&item.status){"audit-status success"}
+                                                        else if (400..500).contains(&item.status){"audit-status warning"}
+                                                        else{"audit-status error"},
+                                                    title:"Code HTTP {item.status}",
+                                                    "{item.status_label}"
+                                                }}
                                             }
                                         }
                                     }

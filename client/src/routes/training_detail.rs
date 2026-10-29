@@ -6,6 +6,27 @@ use crate::api::catalog;
 use crate::api::preferences::{self, AttendanceView};
 use super::{Route, dialogs::PlayerDialog, layout::Header};
 
+
+/// Move an existing entry before the target. No-op for invalid or equal IDs.
+fn reorder_before(order:&[String],item:&str,target:&str)->Option<Vec<String>>{
+    if item==target{return None}
+    let mut items=order.to_vec();
+    let from=items.iter().position(|id|id==item)?;
+    items.remove(from);
+    let at=items.iter().position(|id|id==target)?;
+    items.insert(at,item.to_string());
+    if items==order {None}else{Some(items)}
+}
+fn reorder_after(order:&[String],item:&str,target:&str)->Option<Vec<String>>{
+    if item==target{return None}
+    let mut items=order.to_vec();
+    let from=items.iter().position(|id|id==item)?;
+    items.remove(from);
+    let at=items.iter().position(|id|id==target)?;
+    items.insert(at+1,item.to_string());
+    if items==order {None}else{Some(items)}
+}
+
 #[component]
 pub fn TrainingDetail(id: String) -> Element {
     let session = use_context::<Signal<Option<String>>>();
@@ -407,6 +428,7 @@ fn Preparation(
         async move { catalog::list(&token).await }
     });
     let mut selected = use_signal(String::new);
+    let mut dragged = use_signal(|| None::<String>);
 
     let mut totals = BTreeMap::<String, i32>::new();
     for material in &detail.materials {
@@ -527,15 +549,97 @@ fn Preparation(
                 if detail.activities.is_empty() {
                     div { class: "panel-empty", "Aucune activité. Ajoutez un exercice pour préparer la séance." }
                 }
-                for activity in &detail.activities {
-                    ActivityCard {
-                        key: "{activity.id}",
-                        activity: activity.clone(),
-                        materials: detail.materials.iter().filter(|m| m.activity_id == activity.id).cloned().collect(),
-                        token: token.clone(),
-                        training_id: training_id.clone(),
-                        on_saved,
-                        on_error,
+                for (index,activity) in detail.activities.iter().enumerate() {
+                    {
+                        let item_id=activity.id.clone();
+                        let order:Vec<String>=detail.activities.iter().map(|a|a.id.clone()).collect();
+                        let token_for_drag=token.clone();
+                        let training_for_drag=training_id.clone();
+                        let token_for_move=token.clone();
+                        let training_for_move=training_id.clone();
+                        let target_id=item_id.clone();
+                        let previous=index.checked_sub(1).and_then(|i|order.get(i)).cloned();
+                        let next=order.get(index+1).cloned();
+                        rsx! {
+                            div {
+                                class:"sortable-activity",
+                                key:"{item_id}",
+                                draggable:"true",
+                                ondragstart: {
+                                    let item_id=item_id.clone();
+                                    move |_|dragged.set(Some(item_id.clone()))
+                                },
+                                ondragover: move |event|event.prevent_default(),
+                                ondrop: move |event| {
+                                    event.prevent_default();
+                                    let Some(from)=dragged.read().clone() else {return;};
+                                    dragged.set(None);
+                                    let Some(reordered)=reorder_before(&order,&from,&target_id) else {return;};
+                                    let token=token_for_drag.clone();
+                                    let training_id=training_for_drag.clone();
+                                    spawn(async move {
+                                        match trainings::reorder(&token,&training_id,&reordered).await{
+                                            Ok(())=>on_saved.call(()),
+                                            Err(e)=>on_error.call(e),
+                                        }
+                                    });
+                                },
+                                div { class:"activity-order-controls",
+                                    span { class:"drag-handle",title:"Glisser pour déplacer", "aria-hidden":"true", "⠿" }
+                                    span { class:"muted-small", "Glisser pour réorganiser" }
+                                    button { class:"button outline small", disabled:previous.is_none(),
+                                        "aria-label":"Monter l'activité",
+                                        onclick:{
+                                            let target=previous.clone();
+                                            let order=order.clone();
+                                            let id=item_id.clone();
+                                            let token=token_for_move.clone();
+                                            let training_id=training_for_move.clone();
+                                            move |_| {
+                                                let Some(target)=target.as_ref() else{return;};
+                                                let Some(reordered)=reorder_before(&order,&id,target) else{return;};
+                                                let token=token.clone();
+                                                let training_id=training_id.clone();
+                                                spawn(async move{
+                                                    match trainings::reorder(&token,&training_id,&reordered).await{
+                                                        Ok(())=>on_saved.call(()),
+                                                        Err(e)=>on_error.call(e),
+                                                    }
+                                                });
+                                            }
+                                        },"↑" }
+                                    button { class:"button outline small", disabled:next.is_none(),
+                                        "aria-label":"Descendre l'activité",
+                                        onclick:{
+                                            let target=next.clone();
+                                            let order=order.clone();
+                                            let id=item_id.clone();
+                                            let token=token.clone();
+                                            let training_id=training_id.clone();
+                                            move |_| {
+                                                let Some(target)=target.as_ref() else{return;};
+                                                let Some(reordered)=reorder_after(&order,&id,target) else{return;};
+                                                let token=token.clone();
+                                                let training_id=training_id.clone();
+                                                spawn(async move{
+                                                    match trainings::reorder(&token,&training_id,&reordered).await{
+                                                        Ok(())=>on_saved.call(()),
+                                                        Err(e)=>on_error.call(e),
+                                                    }
+                                                });
+                                            }
+                                        },"↓" }
+                                }
+                                ActivityCard {
+                                    activity:activity.clone(),
+                                    materials: detail.materials.iter().filter(|m| m.activity_id == activity.id).cloned().collect(),
+                                    token:token.clone(),
+                                    training_id:training_id.clone(),
+                                    on_saved,
+                                    on_error,
+                                }
+                            }
+                        }
                     }
                 }
             }

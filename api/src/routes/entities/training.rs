@@ -18,23 +18,31 @@ use crate::{
     },
     routes::authentication::login::Claims,
     services,
-    routes::entities::catalog,
+    routes::entities::{catalog, organization},
     state::AppState,
 };
 
 type ApiError = StatusCode;
 
-async fn owned_training(
-    claims: &Claims,
-    state: &AppState,
-    id: Uuid,
-) -> Result<training::Model, ApiError> {
-    training::Entity::find_by_id(id)
-        .filter(training::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+async fn access_training(
+    claims:&Claims, state:&AppState, id:Uuid, write:bool,
+) -> Result<training::Model,ApiError> {
+    let found=training::Entity::find_by_id(id).one(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let role=organization::user_role(state,claims.sub).await?;
+    let allowed=match found.team_id {
+        Some(team_id) if write =>
+            role.can_write() && organization::can_write_team(state,claims,role,team_id).await?,
+        Some(team_id) => organization::can_read_team(state,claims,role,team_id).await?,
+        None if write => role.can_write() && (found.user_id==claims.sub || role==crate::middleware::Role::Administrator),
+        None => found.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+    };
+    if !allowed{return Err(StatusCode::NOT_FOUND);}
+    Ok(found)
+}
+async fn owned_training(claims:&Claims,state:&AppState,id:Uuid)->Result<training::Model,ApiError>{
+    access_training(claims,state,id,true).await
 }
 
 async fn owned_activity(
@@ -66,6 +74,7 @@ pub struct TrainingDetail {
 pub struct CreateTraining {
     pub name: String,
     pub date: DateTime,
+    pub team_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -118,13 +127,19 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<training::Model>>, ApiError> {
-    let trainings = training::Entity::find()
-        .filter(training::COLUMN.user_id.eq(claims.sub))
-        .order_by_desc(training::COLUMN.date)
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(trainings))
+    let role=organization::user_role(&state,claims.sub).await?;
+    let all=training::Entity::find()
+        .order_by_desc(training::COLUMN.date).all(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut allowed=Vec::new();
+    for session in all {
+        let visible=match session.team_id {
+            Some(id) => organization::can_read_team(&state,&claims,role,id).await?,
+            None => session.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+        };
+        if visible {allowed.push(session);}
+    }
+    Ok(Json(allowed))
 }
 
 pub async fn create(
@@ -135,9 +150,17 @@ pub async fn create(
     if !valid_name(&body.name) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let role=organization::user_role(&state,claims.sub).await?;
+    if !role.can_write(){return Err(StatusCode::FORBIDDEN);}
+    if let Some(team_id)=body.team_id {
+        if !organization::can_write_team(&state,&claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     let new = training::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(body.team_id),
         name: Set(body.name.trim().to_string()),
         date: Set(body.date),
         notes: Set(String::new()),
@@ -152,7 +175,7 @@ pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<TrainingDetail>, ApiError> {
-    let training = owned_training(&claims, &state, id).await?;
+    let training = access_training(&claims, &state, id, false).await?;
     let players = services::player::get_players(&claims, &state).await?;
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.training_id.eq(id))
@@ -674,7 +697,7 @@ mod reorder_tests {
         let claims=Claims{sub:uid,exp:u64::MAX};
         let date=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
         let (_,id)=create(Extension(claims.clone()),State(state.clone()),
-            Json(CreateTraining{name:"Training".into(),date})).await.unwrap();
+            Json(CreateTraining{name:"Training".into(),date,team_id:None})).await.unwrap();
         let tid=Uuid::parse_str(&id).unwrap();
         for name in ["Échauffement","Passes","Match"] {
             add_activity(Extension(claims.clone()),State(state.clone()),Path(tid),

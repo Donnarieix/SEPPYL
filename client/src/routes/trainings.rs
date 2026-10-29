@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::api::trainings;
+use crate::api::{trainings,organization};
 use super::{Route, layout::Header};
 
 #[component]
@@ -98,6 +98,21 @@ pub fn NewTraining(
     let mut date = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
+    let mut team_id = use_signal(String::new);
+    let token_for_teams=token.clone();
+    let teams=use_resource(move ||{
+        let token=token_for_teams.clone();
+        async move{
+            let clubs=organization::clubs(&token).await?;
+            let mut choices=Vec::new();
+            for club in clubs {
+                for team in organization::teams(&token,&club.id).await? {
+                    choices.push((team.id,format!("{} · {}",club.name,team.name)));
+                }
+            }
+            Ok::<Vec<(String,String)>,String>(choices)
+        }
+    });
     rsx! {
         div { class: "dialog-backdrop",
             div { class: "dialog-panel", role: "dialog", "aria-modal": "true",
@@ -122,7 +137,9 @@ pub fn NewTraining(
                         error.set(None);
                         let token = token.clone();
                         spawn(async move {
-                            match trainings::create(&token, &name_value, &date_value).await {
+                            let selected_team=team_id.read().clone();
+                            match trainings::create(&token, &name_value, &date_value,
+                                if selected_team.is_empty(){None}else{Some(&selected_team)}).await {
                                 Ok(id) => on_created.call(id),
                                 Err(message) => error.set(Some(message)),
                             }
@@ -138,6 +155,17 @@ pub fn NewTraining(
                         div { class: "field",
                             label { "Date" }
                             input { r#type: "date", value: "{date}", required: true, oninput: move |e| date.set(e.value()) }
+                        }
+                        div { class:"field",
+                            label { "Équipe (facultatif pour les séances historiques)" }
+                            select { value:"{team_id}", onchange:move |e|team_id.set(e.value()),
+                                option { value:"", "Séance personnelle / historique" }
+                                if let Some(Ok(options)) = teams.read().clone() {
+                                    for (id,label) in options {
+                                        option { value:"{id}", "{label}" }
+                                    }
+                                }
+                            }
                         }
                         if let Some(message) = error.read().as_ref() {
                             p { class: "form-error", role: "alert", "{message}" }

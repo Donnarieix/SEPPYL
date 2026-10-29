@@ -11,6 +11,7 @@ pub struct Training {
     pub name: String,
     pub date: String,
     pub notes: String,
+    pub team_id: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Player {
@@ -62,6 +63,7 @@ pub struct Detail {
 struct TrainingRequest<'a> {
     name: &'a str,
     date: String,
+    team_id: Option<&'a str>,
 }
 #[derive(Serialize)]
 struct UpdateTrainingRequest<'a> {
@@ -127,10 +129,10 @@ pub async fn get(token: &str, id: &str) -> Result<Detail, String> {
     }
     response.json::<Detail>().await.map_err(|e| e.to_string())
 }
-pub async fn create(token: &str, name: &str, date: &str) -> Result<String, String> {
+pub async fn create(token: &str, name: &str, date: &str, team_id: Option<&str>) -> Result<String, String> {
     let response = client().post(format!("{}/trainings", base_url()))
         .bearer_auth(token)
-        .json(&TrainingRequest { name, date: date_time(date) })
+        .json(&TrainingRequest { name, date: date_time(date), team_id })
         .send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         success(response).await?;

@@ -312,3 +312,20 @@ pub async fn remove_team_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+
+pub async fn user_role(state:&AppState, id:Uuid) -> ApiResult<Role> {
+    let user=user::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    Role::parse(user.role.as_deref().unwrap_or("trainer"))
+        .ok_or(StatusCode::FORBIDDEN)
+}
+pub async fn can_read_team(
+    state: &AppState, claims: &Claims, role: Role, id: Uuid
+) -> ApiResult<bool> {
+    if role==Role::Administrator {return Ok(true);}
+    let Some(team)=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+    else {return Ok(false)};
+    if can_manage_club(state,claims,role,team.club_id).await? {return Ok(true);}
+    Ok(team_membership::Entity::find_by_id((claims.sub,id))
+        .one(&state.db).await.map_err(db_error)?.is_some())
+}

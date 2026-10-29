@@ -731,3 +731,58 @@ mod reorder_tests {
         assert!(matches!(invalid,Err(StatusCode::BAD_REQUEST)));
     }
 }
+
+
+#[cfg(test)]
+mod team_scope_regression {
+    use super::*;
+    use crate::entities::{user,club,team,team_membership};
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn assigned_team_is_shared_but_unauthorized_teams_remain_private() {
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let creator=Uuid::new_v4();
+        let teammate=Uuid::new_v4();
+        let outsider=Uuid::new_v4();
+        for (id,name,role) in [(creator,"coach1","trainer"),(teammate,"coach2","user"),(outsider,"other","trainer")] {
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let club_id=Uuid::new_v4();
+        club::ActiveModel{id:Set(club_id),name:Set("Club".into()),
+            is_public:Set(Some(false)),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        let team_id=Uuid::new_v4();
+        team::ActiveModel{id:Set(team_id),club_id:Set(club_id),
+            name:Set("Équipe".into()),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        for (id,role) in [(creator,"trainer"),(teammate,"user")] {
+            team_membership::ActiveModel{user_id:Set(id),team_id:Set(team_id),
+                role:Set(role.into()),..Default::default()}
+                .insert(&state.db).await.unwrap();
+        }
+        let now=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
+        let claims=Claims{sub:creator,exp:u64::MAX};
+        let (_,created_id)=create(Extension(claims.clone()),State(state.clone()),
+            Json(CreateTraining{name:"Séance partagée".into(),date:now,team_id:Some(team_id)}))
+            .await.unwrap();
+        let id=Uuid::parse_str(&created_id).unwrap();
+        let reader=Claims{sub:teammate,exp:u64::MAX};
+        assert!(get(Extension(reader.clone()),State(state.clone()),Path(id)).await.is_ok());
+        let their_sessions=list(Extension(reader.clone()),State(state.clone())).await.unwrap().0;
+        assert_eq!(their_sessions.len(),1);
+        let forbidden=update(Extension(reader),State(state.clone()),Path(id),
+            Json(UpdateTraining{name:"Interdit".into(),date:now,notes:String::new()})).await;
+        assert!(matches!(forbidden,Err(StatusCode::NOT_FOUND)));
+        let stranger=Claims{sub:outsider,exp:u64::MAX};
+        assert!(matches!(
+            get(Extension(stranger.clone()),State(state.clone()),Path(id)).await,
+            Err(StatusCode::NOT_FOUND)
+        ));
+        assert!(list(Extension(stranger),State(state)).await.unwrap().0.is_empty());
+    }
+}

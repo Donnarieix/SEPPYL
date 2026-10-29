@@ -31,6 +31,7 @@ use crate::{
     state::AppState,
 };
 
+mod audit;
 mod entities;
 mod middleware;
 mod routes;

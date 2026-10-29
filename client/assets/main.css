@@ -1284,3 +1284,67 @@ button.grid-add-button:hover,
         animation: none !important;
     }
 }
+
+
+/* Activity editing: readable WYSIWYG with a compact toolbar. */
+.rich-editor { border:1px solid var(--line); border-radius:7px; overflow:hidden; background:var(--surface); }
+.rich-toolbar {
+    display:flex; align-items:center; flex-wrap:wrap; gap:5px;
+    padding:9px 10px; border-bottom:1px solid var(--line);
+    background:var(--surface-soft);
+}
+.rich-toolbar button {
+    border:1px solid transparent; border-radius:4px; background:transparent;
+    color:var(--text); padding:7px 10px; min-width:32px; min-height:34px;
+    font-size:13px; font-weight:600;
+}
+.rich-toolbar button:hover,.rich-toolbar button:focus-visible {
+    background:var(--surface-hover); border-color:var(--line);
+}
+.rich-toolbar-divider { height:23px; border-left:1px solid var(--line); margin:0 6px; }
+.rich-surface {
+    min-height:270px; max-height:560px; overflow-y:auto;
+    padding:22px 23px; line-height:1.75; font-size:14px;
+    color:var(--text); outline:none; white-space:normal;
+}
+.rich-surface:focus { box-shadow:inset 0 0 0 1px var(--accent); }
+.rich-surface:empty:before {
+    content:attr(data-placeholder); color:var(--muted); opacity:.7;
+    pointer-events:none;
+}
+.rich-output { display:none !important; }
+.rich-render { white-space:normal; line-height:1.7; overflow-wrap:anywhere; }
+.rich-render :is(p,ul,ol,h2,h3,blockquote) { margin:0 0 .65em; }
+.rich-render ul,.rich-render ol { padding-left:1.7em; }
+.rich-render h2 { font-size:1.25em; font-weight:700; }
+.rich-render h3 { font-size:1.1em; font-weight:700; }
+.rich-render blockquote { border-left:3px solid var(--line); padding-left:12px; color:var(--muted); }
+.activity-dialog .rich-editor { width:100%; }
+.activity-dialog .dialog-body .field:nth-child(2) { min-width:0; }
+@media(max-width:600px) { .rich-surface { min-height:220px; padding:16px; } .rich-toolbar { gap:3px; padding:7px; } }
+
+/* Reordering activities: drag handle for mouse, accessible arrows for touch. */
+.sortable-activity {
+    border-bottom:1px solid var(--line);
+    background:var(--surface);
+    transition:background-color 140ms ease;
+}
+.sortable-activity:hover { background:var(--surface-soft); }
+.activity-order-controls {
+    display:flex; align-items:center; gap:9px;
+    padding:9px 21px;
+    border-bottom:1px solid var(--line);
+    color:var(--muted);
+}
+.activity-order-controls .button { min-width:35px; }
+.drag-handle { font-size:20px; line-height:1; color:var(--muted); cursor:grab; }
+.activity-order-controls .muted-small { margin-right:auto; }
+.sortable-activity .exercise { border-bottom:0; }
+@media(max-width:600px){ .activity-order-controls{padding:8px 14px;} }
+
+/* Inline material update / remove */
+.material-edit-actions { display:flex; align-items:center; gap:7px; }
+.editable-material { gap:12px; flex-wrap:wrap; }
+.material-edit-form { display:flex; flex:1; flex-wrap:wrap; gap:8px; align-items:center; }
+.material-edit-form input { min-width:110px; flex:1; border:1px solid var(--line); padding:9px; background:var(--surface); }
+.material-edit-form input[type=number]{ flex:0 0 80px; min-width:70px; }

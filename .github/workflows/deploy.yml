@@ -50,7 +50,7 @@ jobs:
           curl -fsSL --retry 3 "$base/dx-x86_64-unknown-linux-gnu.sha256" -o "$RUNNER_TEMP/dx.sha256"
           checksum="$(grep -Eo '[0-9a-fA-F]{64}' "$RUNNER_TEMP/dx.sha256" | head -n 1)"
           test -n "$checksum"
-          printf '%s  %s\\n' "$checksum" "$RUNNER_TEMP/dx.tar.gz" | sha256sum --check -
+          printf '%s  %s\n' "$checksum" "$RUNNER_TEMP/dx.tar.gz" | sha256sum --check -
           mkdir -p "$RUNNER_TEMP/dx-unpacked" "$HOME/.cargo/bin"
           tar -xzf "$RUNNER_TEMP/dx.tar.gz" -C "$RUNNER_TEMP/dx-unpacked"
           executable="$(find "$RUNNER_TEMP/dx-unpacked" -type f -name dx -print -quit)"

@@ -5,7 +5,7 @@ use axum::{
 };
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter,
-    QueryOrder, TransactionTrait,
+    QueryOrder, TransactionTrait, Condition,
 };
 use sea_orm::entity::prelude::DateTime;
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ use crate::{
     },
     routes::authentication::login::Claims,
     services,
+    access,
     routes::entities::catalog,
     state::AppState,
 };
@@ -29,12 +30,20 @@ async fn owned_training(
     state: &AppState,
     id: Uuid,
 ) -> Result<training::Model, ApiError> {
-    training::Entity::find_by_id(id)
-        .filter(training::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+    let item=training::Entity::find_by_id(id).one(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+    if let Some(team_id)=item.team_id{
+        access::assert_team(state,claims.sub,team_id,false).await?;
+    } else if item.user_id!=claims.sub && access::effective_role(state,claims.sub).await?!=access::Role::Administrator {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(item)
+}
+
+async fn writable_training(claims:&Claims,state:&AppState,id:Uuid)->Result<training::Model,ApiError>{
+    let item=owned_training(claims,state,id).await?;
+    if let Some(team_id)=item.team_id{access::assert_team(state,claims.sub,team_id,true).await?;}
+    Ok(item)
 }
 
 async fn owned_activity(
@@ -43,7 +52,7 @@ async fn owned_activity(
     training_id: Uuid,
     activity_id: Uuid,
 ) -> Result<training_activity::Model, ApiError> {
-    owned_training(claims, state, training_id).await?;
+    writable_training(claims, state, training_id).await?;
     training_activity::Entity::find_by_id(activity_id)
         .filter(training_activity::COLUMN.training_id.eq(training_id))
         .one(&state.db)
@@ -118,8 +127,14 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<training::Model>>, ApiError> {
+    let teams=access::teams_for(&state,claims.sub,false).await?;
+    let filter=Condition::any()
+        .add(training::COLUMN.team_id.is_in(teams))
+        .add(Condition::all()
+            .add(training::COLUMN.user_id.eq(claims.sub))
+            .add(training::COLUMN.team_id.is_null()));
     let trainings = training::Entity::find()
-        .filter(training::COLUMN.user_id.eq(claims.sub))
+        .filter(filter)
         .order_by_desc(training::COLUMN.date)
         .all(&state.db)
         .await
@@ -135,9 +150,11 @@ pub async fn create(
     if !valid_name(&body.name) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let team_id=access::default_writable_team(&state,claims.sub).await?;
     let new = training::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(Some(team_id)),
         name: Set(body.name.trim().to_string()),
         date: Set(body.date),
         notes: Set(String::new()),
@@ -216,7 +233,7 @@ pub async fn update(
     if !valid_name(&body.name) || body.notes.len() > 20_000 {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let training = owned_training(&claims, &state, id).await?;
+    let training = writable_training(&claims, &state, id).await?;
     let mut active: training::ActiveModel = training.into();
     active.name = Set(body.name.trim().to_string());
     active.date = Set(body.date);
@@ -231,7 +248,7 @@ pub async fn add_activity(
     Path(id): Path<Uuid>,
     Json(body): Json<CreateActivity>,
 ) -> Result<(StatusCode, String), ApiError> {
-    owned_training(&claims, &state, id).await?;
+    writable_training(&claims, &state, id).await?;
     if !valid_name(&body.name) || body.description.len() > 20_000
         || !valid_image_url(body.image_url.as_deref()) {
         return Err(StatusCode::BAD_REQUEST);
@@ -266,7 +283,7 @@ pub async fn attach_catalog(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path((id, catalog_id)): Path<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, String), ApiError> {
-    owned_training(&claims, &state, id).await?;
+    writable_training(&claims, &state, id).await?;
     let def = catalog::owned(&claims, &state, catalog_id).await?;
     let existing = training_activity::Entity::find()
         .filter(training_activity::COLUMN.training_id.eq(id))
@@ -300,7 +317,7 @@ pub async fn reorder_activities(
     Path(id):Path<Uuid>,
     Json(body):Json<ReorderActivities>,
 )->Result<StatusCode,ApiError>{
-    owned_training(&claims,&state,id).await?;
+    writable_training(&claims,&state,id).await?;
     let activities=training_activity::Entity::find()
         .filter(training_activity::COLUMN.training_id.eq(id))
         .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -402,7 +419,7 @@ pub async fn set_attendance(
     Path(id): Path<Uuid>,
     Json(body): Json<AttendanceUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
+    writable_training(&claims, &state, id).await?;
     let players = services::player::get_players(&claims, &state).await?;
     let allowed: HashSet<Uuid> = players.iter().map(|p| p.id).collect();
     let present: HashSet<Uuid> = body.player_ids.into_iter().collect();
@@ -443,7 +460,7 @@ pub async fn set_score(
     Path(id): Path<Uuid>,
     Json(body): Json<ScoreUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
+    writable_training(&claims, &state, id).await?;
     if !valid_score(body.score) {
         return Err(StatusCode::BAD_REQUEST);
     }

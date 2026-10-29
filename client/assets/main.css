@@ -1433,3 +1433,48 @@ button.grid-add-button:hover,
 @media(min-width:601px) and (max-width:800px) {
     .mobile-nav { grid-template-columns:repeat(6,minmax(0,1fr)); }
 }
+
+
+/* Club and team administration */
+.organization-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:17px; align-items:start; }
+.organization-layout > * { min-width:0; }
+.organization-item {
+    display:block;width:100%;text-align:left;padding:14px 18px;
+    border:0;border-bottom:1px solid var(--line);
+    background:var(--surface);color:var(--text);font-size:13px;
+}
+.organization-item:hover { background:var(--surface-hover); }
+.organization-item.active { background:var(--surface-soft);font-weight:700;border-left:3px solid var(--accent); }
+.organization-form {
+    display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;
+    padding:17px 20px;border-top:1px solid var(--line);
+}
+.organization-form > label { flex:1 1 100%;font-size:12px; }
+.organization-form > input { flex:1;min-width:140px;border:1px solid var(--line);padding:10px;background:var(--surface);color:var(--text); }
+.organization-form > .field { margin:0;flex:1 1 155px;min-width:0; }
+.organization-form > .field input,.organization-form > .field select { width:100%; }
+.organization-form > button { flex-shrink:0; }
+.organization-members { margin-top:18px; }
+.organization-grant { padding:23px; }
+.organization-note { margin:0;padding:0 23px 19px;color:var(--muted);font-size:11px;line-height:1.55; }
+.organization-users { max-height:330px;overflow:auto; }
+.organization-user {
+    display:grid;grid-template-columns:1fr minmax(130px,1fr) 110px auto;
+    align-items:center;gap:15px;padding:12px 21px;
+    border-bottom:1px solid var(--line);font-size:12px;
+}
+.organization-user code { font-size:10px;overflow-wrap:anywhere;color:var(--muted); }
+.organization-user strong { font-size:11px; }
+.settings-organization-link { margin:0 0 16px; }
+.settings-organization-link a { text-decoration:none; }
+@media(max-width:800px) {
+    .organization-layout { grid-template-columns:minmax(0,1fr); }
+    .organization-user { grid-template-columns:1fr 1fr; }
+    .organization-user code { grid-column:1 / -1;grid-row:2; }
+    .organization-user button { justify-self:end; }
+}
+@media(max-width:600px) {
+    .organization-form { flex-direction:column;align-items:stretch;padding:15px; }
+    .organization-form > .field,.organization-form > input { flex-basis:auto;width:100%; }
+    .organization-user { gap:8px;padding:12px; }
+}

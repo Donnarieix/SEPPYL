@@ -208,7 +208,7 @@
         if(Array.isArray(decoded))loaded=decoded;
       }catch(_){loaded=[];}
       objects=loaded;
-      selected.clear();dragging=null;lineStart=null;draggingCurve=null;
+      selected.clear();dragging=null;marquee=null;arrowStart=null;draggingCurve=null;
       root.__tacticsRevision=root.dataset.tacticsRevision;
       render();
     }

@@ -23,6 +23,7 @@ use crate::{
             catalog,
             training,
             organization,
+            tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
         miscellaneous::{health::health, me::me, preferences, account},
@@ -81,6 +82,8 @@ async fn main() {
         .route("/matrix/activity", post(create_matrix_activity))
         .route("/matrix/result", put(update_matrix_result))
         .route("/matrix/select", post(select_activity))
+        .route("/tactics", get(tactics::list).post(tactics::create))
+        .route("/tactics/{id}", put(tactics::update).delete(tactics::delete))
         .route("/catalog", get(catalog::list).post(catalog::create))
         .route("/catalog/{id}", put(catalog::update).delete(catalog::delete))
         .route("/catalog/{id}/materials", post(catalog::add_material))

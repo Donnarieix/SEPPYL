@@ -17,3 +17,4 @@ pub mod club;
 pub mod team;
 pub mod club_membership;
 pub mod team_membership;
+pub mod tactical_diagram;

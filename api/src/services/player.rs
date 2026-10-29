@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
 use uuid::Uuid;
 
-use crate::{entities, routes::{authentication::login::Claims, entities::player::{CreatePlayerRequest, UpdatePlayerRequest}}, state::AppState};
+use crate::{entities, routes::{authentication::login::Claims, entities::{player::{CreatePlayerRequest, UpdatePlayerRequest},organization}}, state::AppState};
 
 pub async fn get_players(
     claims: &Claims,
@@ -14,16 +14,21 @@ pub async fn get_players(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let players = entities::player::Entity::find()
-        .filter(entities::player::COLUMN.id.is_in(
-            players_users
-                .iter()
-                .map(|pu| pu.player_id)
-        ))
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
+    // Own legacy players plus team players visible to this account.
+    // Team read permissions are checked individually, including club managers.
+    let mut ids:std::collections::HashSet<Uuid>=
+        players_users.into_iter().map(|pu|pu.player_id).collect();
+    let role=organization::user_role(state,claims.sub).await?;
+    let memberships=entities::team_player::Entity::find().all(&state.db)
+        .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    for membership in memberships {
+        if organization::can_read_team(state,claims,role,membership.team_id).await? {
+            ids.insert(membership.player_id);
+        }
+    }
+    let players=entities::player::Entity::find()
+        .filter(entities::player::COLUMN.id.is_in(ids))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(players)
 }
 
@@ -75,11 +80,34 @@ pub async fn create_player(
     Ok(player.id)
 }
 
+
+async fn can_modify_player(claims:&Claims,state:&AppState,id:Uuid)->Result<bool,StatusCode>{
+    let role=organization::user_role(state,claims.sub).await?;
+    if !role.can_write(){return Ok(false);}
+    if role==crate::middleware::Role::Administrator{return Ok(true);}
+    if entities::player_user::Entity::find_by_id((claims.sub,id))
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.is_some(){
+        return Ok(true);
+    }
+    let memberships=entities::team_player::Entity::find()
+        .filter(entities::team_player::COLUMN.player_id.eq(id))
+        .all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    for membership in memberships {
+        if organization::can_write_team(state,claims,role,membership.team_id).await?{
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 pub async fn update_player(
     claims: &Claims,
     state: &AppState,
     payload: UpdatePlayerRequest,
 ) -> Result<Uuid, StatusCode> {
+    if !can_modify_player(claims,state,payload.id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
     let Some(player) = get_player(claims, state, payload.id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -105,6 +133,9 @@ pub async fn delete_player(
     claims: &Claims, state: &AppState, player_id: Uuid,
 ) -> Result<(), StatusCode> {
     use crate::entities::{training_attendance, training_score, activity_player, catalog_result};
+    if !can_modify_player(claims,state,player_id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
     let Some(player) = get_player(claims, state, player_id).await? else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -128,6 +159,9 @@ pub async fn delete_player(
     entities::player_user::Entity::delete_many()
         .filter(entities::player_user::COLUMN.player_id.eq(player_id))
         .exec(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    entities::team_player::Entity::delete_many()
+        .filter(entities::team_player::COLUMN.player_id.eq(player_id))
+        .exec(&txn).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     let active: entities::player::ActiveModel = player.into();
     active.delete(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

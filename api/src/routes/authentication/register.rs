@@ -26,6 +26,10 @@ pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(), StatusCode> {
+    if std::env::var("SEPPYL_ALLOW_REGISTRATION").as_deref() != Ok("true") {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     let existing_user = entities::user::Entity::find()
         .filter(entities::user::COLUMN.username.eq(payload.username.clone()))
         .one(&state.db)

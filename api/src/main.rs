@@ -21,6 +21,7 @@ use crate::{
             },
             matrix::{create_matrix_activity, get_matrix, update_matrix_result, select_activity},
             catalog,
+            club,
             training,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
@@ -77,6 +78,10 @@ async fn main() {
         .route("/catalog/{id}/materials", post(catalog::add_material))
         .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material).put(catalog::update_material))
         .route("/catalog/upload", post(catalog::upload_image).layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)))
+        .route("/clubs",get(club::list).post(club::create_club))
+        .route("/clubs/{club_id}/teams",post(club::create_team))
+        .route("/clubs/{club_id}/members",put(club::assign_club))
+        .route("/teams/{team_id}/members",put(club::assign_team))
         .route("/trainings", get(training::list).post(training::create))
         .route("/trainings/{id}", get(training::get).put(training::update))
         .route("/trainings/{id}/activities", post(training::add_activity))

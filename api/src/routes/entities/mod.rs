@@ -3,3 +3,4 @@ pub mod matrix;
 pub mod player;
 pub mod training;
 pub mod catalog;
+pub mod club;

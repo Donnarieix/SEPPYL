@@ -33,7 +33,11 @@ async fn owned_training(
     let item=training::Entity::find_by_id(id).one(&state.db).await
         .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
     if let Some(team_id)=item.team_id{
-        access::assert_team(state,claims.sub,team_id,false).await?;
+        match access::assert_team(state,claims.sub,team_id,false).await{
+            Ok(())=>{},
+            Err(StatusCode::FORBIDDEN|StatusCode::UNAUTHORIZED)=>return Err(StatusCode::NOT_FOUND),
+            Err(error)=>return Err(error),
+        }
     } else if item.user_id!=claims.sub && access::effective_role(state,claims.sub).await?!=access::Role::Administrator {
         return Err(StatusCode::NOT_FOUND);
     }
@@ -548,6 +552,10 @@ mod integration_tests {
         let other = Uuid::new_v4();
         let claims = Claims { sub: owner, exp: u64::MAX };
         let stranger = Claims { sub: other, exp: u64::MAX };
+        user::ActiveModel {
+            id:Set(other),username:Set("stranger".into()),
+            password:Set("test".into()),..Default::default()
+        }.insert(&state.db).await.unwrap();
         // A real user row is required for the player_user foreign key.
         user::ActiveModel {
             id: Set(owner),
@@ -555,6 +563,7 @@ mod integration_tests {
             password: Set("not-used-in-this-test".into()),
             ..Default::default()
         }.insert(&state.db).await.unwrap();
+        let team_id=crate::access::seed_test_coach(&state,owner).await;
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let (created, id_string) = create(
@@ -585,6 +594,9 @@ mod integration_tests {
             user_id: Set(owner),
             player_id: Set(player_id),
             ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        crate::entities::team_player::ActiveModel{
+            team_id:Set(team_id),player_id:Set(player_id),..Default::default()
         }.insert(&state.db).await.unwrap();
 
         let (_, activity_id) = add_activity(

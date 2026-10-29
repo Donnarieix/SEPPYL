@@ -266,6 +266,7 @@ mod shared_catalog_tests {
             password: Set("test".into()),
             ..Default::default()
         }.insert(&state.db).await.unwrap();
+        let team_id=crate::access::seed_test_coach(&state,uid).await;
         let pid = Uuid::new_v4();
         player::ActiveModel {
             id: Set(pid), firstname: Set("Alice".into()),
@@ -273,6 +274,9 @@ mod shared_catalog_tests {
         }.insert(&state.db).await.unwrap();
         player_user::ActiveModel {
             user_id: Set(uid), player_id: Set(pid), ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        crate::entities::team_player::ActiveModel{
+            team_id:Set(team_id),player_id:Set(pid),..Default::default()
         }.insert(&state.db).await.unwrap();
 
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();

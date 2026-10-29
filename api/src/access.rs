@@ -82,3 +82,26 @@ pub async fn default_writable_team(state:&AppState,subject:Uuid)->Result<Uuid,St
     available.sort_unstable();
     available.into_iter().next().ok_or(StatusCode::FORBIDDEN)
 }
+
+
+#[cfg(test)]
+pub async fn seed_test_coach(state:&AppState,user_id:Uuid)->Uuid{
+    use sea_orm::{ActiveModelTrait,ActiveValue::Set};
+    use crate::entities::{club,team,club_member,team_member};
+    let club=club::ActiveModel{
+        id:Set(Uuid::new_v4()),name:Set("Test club".into()),..Default::default()
+    }.insert(&state.db).await.unwrap();
+    let team=team::ActiveModel{
+        id:Set(Uuid::new_v4()),club_id:Set(club.id),
+        name:Set("Test team".into()),..Default::default()
+    }.insert(&state.db).await.unwrap();
+    club_member::ActiveModel{
+        club_id:Set(club.id),user_id:Set(user_id),
+        role:Set("reader".into()),..Default::default()
+    }.insert(&state.db).await.unwrap();
+    team_member::ActiveModel{
+        team_id:Set(team.id),user_id:Set(user_id),
+        role:Set("coach".into()),..Default::default()
+    }.insert(&state.db).await.unwrap();
+    team.id
+}

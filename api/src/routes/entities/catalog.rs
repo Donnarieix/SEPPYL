@@ -172,7 +172,7 @@ pub async fn update_material(
     Path((id,material_id)):Path<(Uuid,Uuid)>,
     Json(body):Json<MaterialPayload>,
 )->Result<StatusCode,StatusCode>{
-    owned(&claims,&state,id).await?;
+    writable(&claims,&state,id).await?;
     if body.name.trim().is_empty() || body.name.len()>150 ||
        !(1..=100_000).contains(&body.quantity){return Err(StatusCode::BAD_REQUEST)}
     let material=catalog_material::Entity::find_by_id(material_id)

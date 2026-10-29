@@ -44,6 +44,7 @@ fn App() -> Element {
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
         document::Stylesheet { href: asset!("/assets/main.css") }
         document::Script { src: asset!("/assets/theme-transition.js") }
+        document::Script { src: asset!("/assets/auth-guard.js") }
         div {
             class: "site-root",
             "data-theme": initial_theme.as_str(),

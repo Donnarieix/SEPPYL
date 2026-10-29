@@ -65,7 +65,7 @@ pub async fn login(
         sub: user.id,
         // Local provider session persists across refresh for up to 24 hours.
         // Replace with the Donnarieix SSO provider and refresh flow later.
-        exp: now + 24 * 3600,
+        exp: now + 7 * 24 * 3600,
     };
 
     let token = jsonwebtoken::encode(

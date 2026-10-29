@@ -570,6 +570,12 @@ mod integration_tests {
             password: Set("not-used-in-this-test".into()),
             ..Default::default()
         }.insert(&state.db).await.unwrap();
+        // The authenticated stranger also exists in the user table:
+        // the real middleware never issues Claims for deleted users.
+        user::ActiveModel {
+            id: Set(other), username: Set("other-coach".into()),
+            password: Set("not-used-in-this-test".into()), ..Default::default()
+        }.insert(&state.db).await.unwrap();
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let (created, id_string) = create(

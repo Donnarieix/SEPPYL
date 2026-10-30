@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use crate::api::trainings::{self, Activity, Detail, Material};
 use crate::api::catalog;
 use crate::api::preferences::{self, AttendanceView};
-use super::{Route, dialogs::PlayerDialog, layout::Header};
+use super::{Route, dialogs::PlayerDialog, layout::Header, rich_editor::RichTextEditor};
 
 #[component]
 pub fn TrainingDetail(id: String) -> Element {
@@ -704,10 +704,20 @@ fn ActivityCard(
     let mut material_name = use_signal(String::new);
     let mut quantity = use_signal(|| "1".to_string());
     let mut busy = use_signal(|| false);
+    let mut editing=use_signal(||false);
+    let mut edit_name=use_signal(||activity.name.clone());
+    let mut edit_description=use_signal(||activity.description.clone());
+    let mut edit_html=use_signal(||activity.description_html.clone());
+    let mut edit_image=use_signal(||activity.image_url.clone().unwrap_or_default());
     rsx! {
         article { class: "exercise",
             div { class: "exercise-head",
                 h3 { "{activity.name}" }
+                div { class:"exercise-head-actions",
+                    button { class:"button outline small",r#type:"button",
+                        disabled:*busy.read(),onclick:move |_|editing.set(true),
+                        "Modifier"
+                    }
                 button { class: "remove-link", title: "Supprimer cet exercice", disabled: *busy.read(),
                     onclick: {
                         let token = token.clone();
@@ -729,6 +739,7 @@ fn ActivityCard(
                         }
                     },
                     "Supprimer"
+                }
                 }
             }
             if let Some(html)=activity.description_html.as_deref() {
@@ -809,6 +820,72 @@ fn ActivityCard(
                     input { "aria-label": "Quantité", r#type: "number", min: "1", max: "100000",
                         value: "{quantity}", oninput: move |e| quantity.set(e.value()) }
                     button { class: "button outline small", r#type: "submit", disabled: *busy.read(), "Ajouter" }
+                }
+            }
+        }
+        if *editing.read(){
+            div { class:"dialog-backdrop",
+                div { class:"dialog-panel activity-dialog",role:"dialog","aria-modal":"true",
+                    div { class:"dialog-header",
+                        div { h2 { "Modifier l'activité de la séance" }
+                            p { "Cette modification concerne uniquement cette séance, pas la bibliothèque." }
+                        }
+                        button { class:"icon-button",r#type:"button",
+                            onclick:move |_|editing.set(false),"×" }
+                    }
+                    form { onsubmit:{
+                        let token=token.clone();let training_id=training_id.clone();
+                        let activity_id=activity.id.clone();
+                        move |event|{
+                            event.prevent_default();
+                            if *busy.read(){return;}
+                            let name=edit_name.read().trim().to_string();
+                            if name.is_empty(){on_error.call("Le nom est obligatoire.".into());return;}
+                            let description=edit_description.read().clone();
+                            let html=edit_html.read().clone();
+                            let image=edit_image.read().trim().to_string();
+                            let token=token.clone();let training_id=training_id.clone();
+                            let activity_id=activity_id.clone();
+                            busy.set(true);
+                            spawn(async move{
+                                let result=trainings::update_activity(
+                                    &token,&training_id,&activity_id,&name,&description,
+                                    html.as_deref(),if image.is_empty(){None}else{Some(&image)}
+                                ).await;
+                                match result{
+                                    Ok(())=>{editing.set(false);on_saved.call(());},
+                                    Err(error)=>on_error.call(error),
+                                }
+                                busy.set(false);
+                            });
+                        }
+                    },
+                        div { class:"dialog-body",
+                            div { class:"field",label { "Nom" }
+                                input { value:"{edit_name}",required:true,maxlength:"150",
+                                    oninput:move |e|edit_name.set(e.value()) }
+                            }
+                            div { class:"field",label { "Description et consignes" }
+                                RichTextEditor{
+                                    initial_html:activity.description_html.clone(),
+                                    initial_plain:activity.description.clone(),
+                                    on_html:move |v:String|edit_html.set(Some(v)),
+                                    on_plain:move |v:String|edit_description.set(v),
+                                }
+                            }
+                            div { class:"field",label { "URL de l'image (facultatif)" }
+                                input { value:"{edit_image}",placeholder:"https://…",
+                                    oninput:move |e|edit_image.set(e.value()) }
+                            }
+                        }
+                        div { class:"dialog-footer",
+                            button { class:"button quiet",r#type:"button",
+                                onclick:move |_|editing.set(false),"Annuler" }
+                            button { class:"button solid",r#type:"submit",disabled:*busy.read(),
+                                if *busy.read(){"Enregistrement…"}else{"Enregistrer les modifications"}
+                            }
+                        }
+                    }
                 }
             }
         }

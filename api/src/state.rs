@@ -1,5 +1,5 @@
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ConnectOptions, Database, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
 };
 
 use crate::entities;

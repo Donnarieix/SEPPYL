@@ -214,6 +214,8 @@
     }
     function loadDiagram() {
       hidePalette();
+      sizeFeedback?.classList.remove("visible");
+      clearTimeout(feedbackTimer);
       let loaded=[];
       try {
         const decoded=JSON.parse(root.dataset.tacticsInitial||"[]");
@@ -242,6 +244,23 @@
     });
     root.querySelector("[data-tactic-custom]")?.addEventListener("input", event => paint(event.target.value));
     root.querySelector("[data-tactic-remove]")?.addEventListener("click", dropSelection);
+    const sizeFeedback=root.querySelector("[data-tactic-size-feedback]");
+    let feedbackTimer=null;
+    const showSizeFeedback=(event)=>{
+      if(!sizeFeedback)return;
+      sizeFeedback.querySelector("strong").textContent=String(Math.round(brushSize));
+      const bounds=root.getBoundingClientRect();
+      const x=event.clientX-bounds.left;
+      const y=event.clientY-bounds.top;
+      sizeFeedback.style.left=Math.max(48,Math.min(bounds.width-48,x))+"px";
+      sizeFeedback.style.top=Math.max(54,Math.min(bounds.height-20,y-24))+"px";
+      sizeFeedback.classList.remove("visible");
+      // Restart the short entrance animation without creating a permanent overlay.
+      void sizeFeedback.offsetWidth;
+      sizeFeedback.classList.add("visible");
+      clearTimeout(feedbackTimer);
+      feedbackTimer=setTimeout(()=>sizeFeedback.classList.remove("visible"),880);
+    };
     const resize = value => {
       const n=Number(value);
       if(!Number.isFinite(n))return;
@@ -249,6 +268,8 @@
       for(const item of objects)if(selected.has(item.id))item.size=brushSize;
       const label=root.querySelector("[data-tactic-size-label]");
       if(label)label.textContent=String(Math.round(brushSize));
+      const range=root.querySelector("[data-tactic-size]");
+      if(range)range.value=String(brushSize);
       if(selected.size)sync();
       render();
     };
@@ -259,6 +280,7 @@
       if(isEditing())return;
       event.preventDefault();
       resize(brushSize+(event.deltaY<0?2:-2));
+      showSizeFeedback(event);
     },{passive:false});
     svg.addEventListener("contextmenu",event=>{
       if(isEditing())return;

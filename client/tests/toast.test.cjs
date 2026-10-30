@@ -27,7 +27,7 @@ test("toast replaces previous message and disappears after idle without layout c
  span.textContent="Joueuse déjà dans l'effectif";
  notify();
  assert.equal(classes.has("seppyl-toast-hidden"),false);
- assert.equal(timers.size,2);
+ assert.equal(timers.size,1);
  const last=[...timers.values()].at(-1);last();
  assert.equal(classes.has("seppyl-toast-hidden"),true);
 });

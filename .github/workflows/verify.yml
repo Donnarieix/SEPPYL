@@ -79,3 +79,58 @@ jobs:
                       assert columns != ["firstname"], "Legacy unique first-name index remains"
           print("Verified backup, player IDs and foreign keys after migration")
           PY
+
+      - name: Verify production data path, immutable backup and activity preservation
+        env:
+          JWT_SECRET: production-migration-fixture-secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$PWD"
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -p "$temp/data"
+          cp data/sappyl.db "$temp/data/sappyl.db"
+          python3 - "$temp/data/sappyl.db" "$temp/pre.json" <<'PY'
+          import json,sqlite3,sys
+          with sqlite3.connect(sys.argv[1]) as db:
+              names={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              counts={name:db.execute('SELECT COUNT(*) FROM "'+name+'"').fetchone()[0]
+                      for name in ("activities","activity_player","catalog_activities",
+                                   "training_activities","trainings","players") if name in names}
+          with open(sys.argv[2],"w") as f: json.dump(counts,f)
+          PY
+          (
+            cd "$temp"
+            SEPPYL_BIND=127.0.0.1:3101 "$workspace/target/debug/api"
+          ) > "$temp/api.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$temp"' EXIT
+          healthy=0
+          for attempt in $(seq 1 40); do
+            if curl -fsS --max-time 1 http://127.0.0.1:3101/health >/dev/null 2>&1; then
+              healthy=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$healthy" -ne 1 ]; then cat "$temp/api.log"; exit 1; fi
+          python3 - "$temp/data/sappyl.db" "$temp/pre.json" <<'PY'
+          import json,sqlite3,sys
+          from pathlib import Path
+          db_path=Path(sys.argv[1])
+          backup=Path(str(db_path)+"-before-v0.1")
+          assert backup.is_file(),"Pre-v0.1 production snapshot was not created"
+          with sqlite3.connect(db_path) as after,sqlite3.connect(backup) as before:
+              assert after.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              assert after.execute("PRAGMA foreign_key_check").fetchall()==[]
+              assert before.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              original=json.load(open(sys.argv[2]))
+              for table,count in original.items():
+                  new_count=after.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0]
+                  assert new_count>=count,f"Lost data from {table}: {count} -> {new_count}"
+              assert not Path(str(db_path).replace("sappyl.db","seppyl.local.db")).exists(),\
+                 "Production must not silently switch to development database"
+          print("Production-path migration preserved existing activities and created a consistent backup")
+          PY

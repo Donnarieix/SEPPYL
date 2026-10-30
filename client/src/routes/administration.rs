@@ -29,7 +29,7 @@ pub fn Administration()->Element{
     let mut club=use_signal(String::new);
     let mut team=use_signal(String::new);
     let team_token=token.clone();
-    let teams=use_resource(move ||{
+    let mut teams=use_resource(move ||{
         let token=team_token.clone();
         let id=club.read().clone();
         async move{

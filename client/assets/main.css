@@ -2310,7 +2310,20 @@ button.grid-add-button:hover,
 .club-sidebar-avatar:has(img){background:var(--surface)!important}
 .workspace-team-icon:has(img){background:var(--surface)}
 .club-information-panel{min-width:0}
-.club-information-form{display:flex;flex-direction:column;gap:18px;padding:22px}
+/* Override the horizontal .workspace-form defaults. In particular its
+   align-items:end was pushing every vertically stacked control to the right. */
+.club-information-panel{width:100%;max-width:100%;box-sizing:border-box;min-width:0}
+.club-information-panel .club-information-form{
+  display:grid;grid-template-columns:minmax(0,1fr);justify-items:stretch;align-items:stretch;
+  width:100%;box-sizing:border-box;gap:18px;padding:22px;
+}
+.club-information-panel .club-information-form > *{
+  width:100%;min-width:0;max-width:100%;box-sizing:border-box;justify-self:stretch;
+}
+.club-information-panel .club-information-form > .field{flex:initial;align-self:stretch}
+.club-information-panel .club-information-form > .field :is(input,textarea){
+  display:block;width:100%;min-width:0;box-sizing:border-box;
+}
 .club-information-identity{display:grid;grid-template-columns:108px minmax(0,1fr);gap:22px;align-items:start}
 .club-logo-preview{display:grid;place-items:center;aspect-ratio:1/1;width:108px;
   border:1px solid var(--line);border-radius:13px;background:var(--surface-soft);

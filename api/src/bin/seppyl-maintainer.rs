@@ -1,6 +1,6 @@
 //! Offline privileged role promotion. No HTTP endpoint can grant Maintainer.
 //! Run this command locally on the server against the same SQLite database.
-use sea_orm::{ConnectionTrait,Database,sea_query::{Query,Alias,Expr}};
+use sea_orm::{ConnectionTrait,Database,sea_query::{Query,Alias,Expr,ExprTrait}};
 #[tokio::main]
 async fn main(){
     if let Err(error)=run().await{

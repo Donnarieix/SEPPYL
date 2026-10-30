@@ -193,4 +193,42 @@ mod tests{
         assert_eq!(integer(&db,"SELECT COUNT(*) AS count FROM player_refs","count").await.unwrap(),1);
         assert!(query_rows(&db,"PRAGMA foreign_key_check").await.unwrap().is_empty());
     }
+    #[tokio::test]
+    async fn complete_player_identity_is_unique_but_firstnames_can_repeat(){
+        let mut opt=ConnectOptions::new("sqlite::memory:");
+        opt.max_connections(1);
+        let db=Database::connect(opt).await.unwrap();
+        db.execute_unprepared(
+            "CREATE TABLE players (id TEXT PRIMARY KEY, firstname TEXT NOT NULL, lastname TEXT NOT NULL, number INTEGER NOT NULL)"
+        ).await.unwrap();
+        enforce_player_identity(&db).await.unwrap();
+        db.execute_unprepared("INSERT INTO players VALUES ('a','Lina','Petit',7)")
+            .await.unwrap();
+        db.execute_unprepared("INSERT INTO players VALUES ('b','Lina','Martin',7)")
+            .await.unwrap();
+        db.execute_unprepared("INSERT INTO players VALUES ('c','Lina','Petit',8)")
+            .await.unwrap();
+        assert!(db.execute_unprepared(
+            "INSERT INTO players VALUES ('d','Lina','Petit',7)"
+        ).await.is_err());
+        db.execute_unprepared("UPDATE players SET lastname='Giraud' WHERE id='a'")
+            .await.unwrap();
+        db.execute_unprepared("INSERT INTO players VALUES ('d','Lina','Petit',7)")
+            .await.unwrap();
+    }
+    #[tokio::test]
+    async fn preexisting_duplicate_triples_stop_migration_without_merging(){
+        let mut opt=ConnectOptions::new("sqlite::memory:");
+        opt.max_connections(1);
+        let db=Database::connect(opt).await.unwrap();
+        db.execute_unprepared(
+            "CREATE TABLE players (id TEXT PRIMARY KEY, firstname TEXT NOT NULL, lastname TEXT NOT NULL, number INTEGER NOT NULL)"
+        ).await.unwrap();
+        db.execute_unprepared(
+            "INSERT INTO players VALUES ('a','Lina','Petit',7), ('b','Lina','Petit',7)"
+        ).await.unwrap();
+        assert!(enforce_player_identity(&db).await.is_err());
+        assert_eq!(integer(&db,"SELECT COUNT(*) AS count FROM players","count")
+            .await.unwrap(),2);
+    }
 }

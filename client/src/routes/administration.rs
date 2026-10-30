@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use crate::api::{account,organization as org};
-use super::{Route,layout::Header,membership::MembershipPanel};
+use super::{Route,layout::Header,membership::MembershipPanel,
+    team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor};
 
 #[component]
 pub fn Administration()->Element{
@@ -20,10 +21,9 @@ pub fn Administration()->Element{
     let clubs_token=token.clone();
     let mut clubs=use_resource(move ||{
         let token=clubs_token.clone();
-        async move{match token{Some(token)=>org::clubs(&token).await,None=>Err("Connexion requise.".into())}}
+        async move{match token{Some(token)=>org::admin_clubs(&token).await,None=>Err("Connexion requise.".into())}}
     });
     let mut tab=use_signal(||"users".to_string());
-    let mut query=use_signal(String::new);
     let mut selected_user=use_signal(String::new);
     let mut role=use_signal(||"user".to_string());
     let mut club=use_signal(String::new);
@@ -39,6 +39,29 @@ pub fn Administration()->Element{
         }
     });
     let mut name=use_signal(String::new);
+    let mut new_team=use_signal(String::new);
+    let mut club_section=use_signal(||"information".to_string());
+    let mut roster_player=use_signal(String::new);
+    let roster_token=token.clone();
+    let mut roster=use_resource(move ||{
+        let token=roster_token.clone();
+        let team_id=team.read().clone();
+        async move{
+            if team_id.is_empty(){Ok(Vec::new())}
+            else{match token{Some(token)=>org::team_players(&token,&team_id).await,
+                None=>Err("Connexion requise.".into())}}
+        }
+    });
+    let candidates_token=token.clone();
+    let mut club_candidates=use_resource(move ||{
+        let token=candidates_token.clone();
+        let id=club.read().clone();
+        async move{
+            if id.is_empty(){Ok(Vec::new())}
+            else{match token{Some(token)=>org::club_players(&token,&id).await,
+                None=>Err("Connexion requise.".into())}}
+        }
+    });
     let mut busy=use_signal(||false);
     let mut notice=use_signal(||None::<String>);
     if token.is_none(){
@@ -77,11 +100,8 @@ pub fn Administration()->Element{
     let directory=users.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
     let clubs_list=clubs.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
     let teams_list=teams.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
-    let needle=query.read().trim().to_lowercase();
-    let matching:Vec<_>=directory.iter()
-        .filter(|u|needle.is_empty() || u.username.to_lowercase().contains(&needle))
-        .cloned().collect();
-    let search_empty=matching.is_empty();
+    let matching=directory.clone();
+    let selected_club=clubs_list.iter().find(|item|item.id==*club.read()).cloned();
     let selected=directory.iter().find(|u|u.id==*selected_user.read()).cloned();
     let group_id=if team.read().is_empty(){club.read().clone()}else{team.read().clone()};
     let scope=if team.read().is_empty(){"club"}else{"team"};
@@ -116,22 +136,6 @@ pub fn Administration()->Element{
                                     p{"Recherchez un compte pour gérer son rôle et ses rattachements."}
                                 }
                             }
-                            div{class:"workspace-search",
-                                div{class:"admin-search-field",
-                                    span{class:"admin-search-icon","aria-hidden":"true","⌕"}
-                                    input{value:"{query}",r#type:"search",
-                                        autocomplete:"off",
-                                        placeholder:"Nom du compte…",
-                                        "aria-label":"Filtrer les comptes par nom",
-                                        oninput:move |e|query.set(e.value())}
-                                    if !query.read().is_empty(){
-                                        button{class:"admin-search-clear",r#type:"button",
-                                            "aria-label":"Effacer la recherche",
-                                            onclick:move |_|query.set(String::new()),"Effacer"}
-                                    }
-                                }
-                                span{class:"muted-small","{matching.len()} sur {directory.len()} compte(s)"}
-                            }
                             div{class:"admin-users",
                                 for user in matching{
                                     button{key:"{user.id}",
@@ -149,14 +153,6 @@ pub fn Administration()->Element{
                                             small{"{user.role}"}}
                                         span{class:"admin-user-arrow","›"}
                                     }
-                                }
-                            }
-                            if search_empty && users.read().as_ref().is_some_and(|r|r.is_ok()) {
-                                div{class:"workspace-empty admin-search-empty",
-                                    strong{"Aucun compte trouvé"}
-                                    p{"Essayez un autre nom de compte."}
-                                    button{class:"button outline small",r#type:"button",
-                                        onclick:move |_|query.set(String::new()),"Réinitialiser la recherche"}
                                 }
                             }
                             if let Some(Err(message))=users.read().clone(){

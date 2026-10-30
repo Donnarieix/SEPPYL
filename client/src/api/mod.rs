@@ -8,3 +8,5 @@ pub mod account;
 pub mod tactics;
 pub mod organization;
 pub mod audit;
+
+pub mod changelog;

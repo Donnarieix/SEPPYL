@@ -44,14 +44,17 @@ pub async fn login(
         .filter(entities::user::COLUMN.username.eq(payload.username))
         .one(&state.db)
         .await
-        .unwrap();
+        .map_err(|error| {
+            tracing::error!(%error, "Unable to query account for login");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    if user.is_none() {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-    let user = user.unwrap();
-
-    let password_hash = PasswordHash::new(&user.password).unwrap();
+    let password_hash = PasswordHash::new(&user.password)
+        .map_err(|error| {
+            tracing::error!(%error, "Invalid stored password hash");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     if !Argon2::default()
         .verify_password(payload.password.as_bytes(), &password_hash)
         .is_ok()
@@ -73,7 +76,10 @@ pub async fn login(
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .unwrap();
+    .map_err(|error| {
+        tracing::error!(%error, "Unable to sign login token");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(LoginResponse { token }))
 }

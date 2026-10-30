@@ -303,7 +303,7 @@ pub fn Organization()->Element{
                                                 }
                                             },
                                             div{class:"field",label{"Joueuse"},
-                                                select{value:"{player_id}",required:true,
+                                                select{value:"{player_id}",required:true,"data-seppyl-searchable":"true",
                                                     onchange:move |e|player_id.set(e.value()),
                                                     option{value:"","Sélectionner une joueuse"}
                                                     if let Some(Ok(people))=own_players.read().clone(){

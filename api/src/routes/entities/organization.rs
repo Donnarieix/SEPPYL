@@ -298,6 +298,40 @@ mod integration_tests {
     use sea_orm::Database;
 
     #[tokio::test]
+    async fn administrator_cannot_assign_or_demote_maintainer(){
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let admin=Uuid::new_v4();
+        let maintainer=Uuid::new_v4();
+        let user_id=Uuid::new_v4();
+        for (id,name,role) in [
+            (admin,"admin","administrator"),(maintainer,"owner","maintainer"),
+            (user_id,"trainer","trainer")
+        ]{
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let claims=Claims{sub:admin,exp:u64::MAX};
+        let forbidden=grant_global_role(
+            Extension(claims.clone()),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Path(user_id),
+            Json(GrantGlobalRole{role:"maintainer".into()})
+        ).await;
+        assert_eq!(forbidden,Err(StatusCode::BAD_REQUEST));
+        let forbidden=grant_global_role(
+            Extension(claims),Extension(CurrentRole(Role::Administrator)),
+            State(state.clone()),Path(maintainer),
+            Json(GrantGlobalRole{role:"user".into()})
+        ).await;
+        assert_eq!(forbidden,Err(StatusCode::FORBIDDEN));
+        let after=user::Entity::find_by_id(maintainer).one(&state.db).await.unwrap().unwrap();
+        assert_eq!(after.role.as_deref(),Some("maintainer"));
+        assert!(Role::Maintainer.is_admin());
+    }
+    #[tokio::test]
     async fn club_and_team_memberships_are_scoped() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();

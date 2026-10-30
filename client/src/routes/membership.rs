@@ -50,7 +50,75 @@ pub fn MembershipPanel(
                 }
             }
             if let Some(message)=notice.read().as_ref(){
-                p{class:"inline-notice",role:"status","{message}"}
+                div{class:"seppyl-toast",role:"status",
+                    span{class:"seppyl-toast-message","{message}"}
+                    button{r#type:"button",class:"seppyl-toast-close",
+                        "data-toast-dismiss":"true","aria-label":"Fermer la notification","×"}
+                }
+            }
+            if can_manage{
+                div{class:"permission-editor",
+                    div{class:"permission-editor-title",
+                        h3{"Ajouter ou modifier un accès"}
+                        p{"Sélectionnez un utilisateur et définissez ses droits."}
+                    }
+                    form{
+                        onsubmit:{
+                            let token=token.clone();
+                            let scope=scope.clone();
+                            let id=id.clone();
+                            move |event|{
+                                event.prevent_default();
+                                let account=selected.read().clone();
+                                let chosen_role=role.read().clone();
+                                if account.is_empty()||*busy.read(){return;}
+                                let token=token.clone();
+                                let scope=scope.clone();
+                                let id=id.clone();
+                                busy.set(true);
+                                spawn(async move{
+                                    let result=if scope=="club"{
+                                        org::grant_club(&token,&id,&account,&chosen_role).await
+                                    }else{
+                                        org::grant_team(&token,&id,&account,&chosen_role).await
+                                    };
+                                    match result{
+                                        Ok(())=>{
+                                            notice.set(Some("Autorisation enregistrée.".into()));
+                                            members.restart();selected.set(String::new());
+                                        }
+                                        Err(error)=>notice.set(Some(error)),
+                                    }
+                                    busy.set(false);
+                                });
+                            }
+                        },
+                        div{class:"field",
+                            label{"Compte"}
+                            select{value:"{selected}",required:true,"data-seppyl-searchable":"true",
+                                onchange:move |e|selected.set(e.value()),
+                                option{value:"","Choisir un utilisateur"}
+                                for item in &names{
+                                    option{key:"{item.id}",value:"{item.id}","{item.username}"}
+                                }
+                            }
+                        }
+                        div{class:"field",
+                            label{"Autorisation"}
+                            select{value:"{role}",onchange:move |e|role.set(e.value()),
+                                option{value:"user","Lecture seule"}
+                                if is_club{
+                                    option{value:"manager","Gestionnaire du club"}
+                                }else{
+                                    option{value:"trainer","Entraîneur"}
+                                }
+                            }
+                        }
+                        button{class:"button solid",r#type:"submit",disabled:*busy.read(),
+                            if *busy.read(){"Enregistrement…"}else{"Enregistrer l'accès"}
+                        }
+                    }
+                }
             }
             div{class:"permission-table-wrap",
                 table{class:"permission-table",
@@ -102,69 +170,6 @@ pub fn MembershipPanel(
                             },
                             Some(Err(error))=>rsx!{tr{td{colspan:"3","{error}"}}},
                             None=>rsx!{tr{td{colspan:"3","Chargement…"}}},
-                        }
-                    }
-                }
-            }
-            if can_manage{
-                div{class:"permission-editor",
-                    div{class:"permission-editor-title",
-                        h3{"Ajouter ou modifier un accès"}
-                        p{"Sélectionnez un utilisateur et définissez ses droits."}
-                    }
-                    form{
-                        onsubmit:{
-                            let token=token.clone();
-                            let scope=scope.clone();
-                            let id=id.clone();
-                            move |event|{
-                                event.prevent_default();
-                                let account=selected.read().clone();
-                                let chosen_role=role.read().clone();
-                                if account.is_empty()||*busy.read(){return;}
-                                let token=token.clone();
-                                let scope=scope.clone();
-                                let id=id.clone();
-                                busy.set(true);
-                                spawn(async move{
-                                    let result=if scope=="club"{
-                                        org::grant_club(&token,&id,&account,&chosen_role).await
-                                    }else{
-                                        org::grant_team(&token,&id,&account,&chosen_role).await
-                                    };
-                                    match result{
-                                        Ok(())=>{
-                                            notice.set(Some("Autorisation enregistrée.".into()));
-                                            members.restart();selected.set(String::new());
-                                        }
-                                        Err(error)=>notice.set(Some(error)),
-                                    }
-                                    busy.set(false);
-                                });
-                            }
-                        },
-                        div{class:"field",
-                            label{"Compte"}
-                            select{value:"{selected}",required:true,onchange:move |e|selected.set(e.value()),
-                                option{value:"","Choisir un utilisateur"}
-                                for item in &names{
-                                    option{key:"{item.id}",value:"{item.id}","{item.username}"}
-                                }
-                            }
-                        }
-                        div{class:"field",
-                            label{"Autorisation"}
-                            select{value:"{role}",onchange:move |e|role.set(e.value()),
-                                option{value:"user","Lecture seule"}
-                                if is_club{
-                                    option{value:"manager","Gestionnaire du club"}
-                                }else{
-                                    option{value:"trainer","Entraîneur"}
-                                }
-                            }
-                        }
-                        button{class:"button solid",r#type:"submit",disabled:*busy.read(),
-                            if *busy.read(){"Enregistrement…"}else{"Enregistrer l'accès"}
                         }
                     }
                 }

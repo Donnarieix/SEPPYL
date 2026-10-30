@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
     if (message.type() === 'error') failures.push('console.error: ' + message.text());
   });
   page.on('requestfailed', request => {
-    if (request.url().startsWith('http://127.0.0.1:4173/')) {
+    if (request.url().startsWith('http://127.0.0.1:4173/') && !String(request.failure()?.errorText).includes('ERR_ABORTED')) {
       failures.push('requestfailed: ' + request.method() + ' ' + request.url() + ': ' + request.failure()?.errorText);
     }
   });

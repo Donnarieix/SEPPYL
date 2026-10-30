@@ -2809,3 +2809,51 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 .login-card .signup-legal a{font-size:inherit;color:var(--accent);
   text-decoration:underline;text-underline-offset:3px}
 .login-card .signup-legal a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+
+/* Footer-aware full-height routes: do not reserve a second viewport for login.
+   The footer shares the same viewport instead of pushing the login card down. */
+.site-root > .login-screen{
+  min-height:0;
+  width:100%;
+  flex:1 0 auto;
+  padding:clamp(24px,5vh,55px) 20px;
+  margin:0;
+}
+.site-root > .print-sheet{
+  width:min(850px,calc(100% - 40px));
+  max-width:850px;
+  flex:0 0 auto;
+  align-self:center;
+  margin:20px auto;
+  padding:32px;
+}
+@media (max-width:650px){
+  .site-root > .login-screen{padding:22px 14px}
+  .site-root > .print-sheet{
+    width:calc(100% - 24px);
+    padding:20px;
+    margin:12px auto;
+  }
+}
+@media print{
+  html,body,.site-root{
+    display:block!important;
+    min-height:0!important;
+    height:auto!important;
+    overflow:visible!important;
+  }
+  .site-root > .print-sheet{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    box-shadow:none!important;
+    display:block!important;
+  }
+  .site-root > .site-footer,
+  .site-root > .mobile-nav,
+  .site-root > .topbar{display:none!important}
+  .print-guidance{display:none!important}
+}

@@ -37,6 +37,8 @@ impl AppState {
             .expect("Unable to migrate club information columns");
         crate::migrations::add_team_information(&migration_db).await
             .expect("Unable to migrate team information columns");
+        crate::migrations::add_changelog_fields(&migration_db).await
+            .expect("Unable to migrate changelog information columns");
         migration_db.close().await
             .expect("Unable to close migration connection");
 

@@ -79,6 +79,7 @@ fn LegalHeading(title:String, description:String)->Element {
 pub fn LegalNotice()->Element {
     rsx! {
         document::Title{"Mentions légales | SEPPYL"}
+        document::Link{rel:"canonical",href:"https://seppyl.donnarieix.fr/mentions-legales"}
         document::Meta{name:"description",content:"Informations sur l'éditeur, l'hébergement et les droits associés à SEPPYL."}
         main{class:"page legal-page",
             LegalHeading{
@@ -128,6 +129,7 @@ pub fn LegalNotice()->Element {
 pub fn PrivacyPolicy()->Element {
     rsx! {
         document::Title{"Politique de confidentialité | SEPPYL"}
+        document::Link{rel:"canonical",href:"https://seppyl.donnarieix.fr/confidentialite"}
         document::Meta{name:"description",content:"Comment SEPPYL traite les données des comptes, clubs, équipes et joueuses, et comment exercer vos droits."}
         main{class:"page legal-page",
             LegalHeading{
@@ -161,6 +163,7 @@ pub fn PrivacyPolicy()->Element {
                     h2{"4. Destinataires et visibilité"}
                     p{"Les données privées des joueuses et des entraînements sont destinées aux utilisateurs qui disposent des habilitations correspondantes. Les Mainteneurs et Administrateurs disposent d'un accès de gestion selon leurs rôles. Les clubs ayant activé leur visibilité rendent publics les noms, descriptions et logos des clubs et équipes, mais pas les fiches des joueuses ni leurs évaluations."}
                     p{"L'hébergeur et les éventuels prestataires nécessaires au fonctionnement du service peuvent être amenés à traiter certaines données. Leur identité et les éventuels transferts hors de l'Espace économique européen doivent être vérifiés et documentés par le responsable du traitement."}
+                    p{"Lorsqu'un club choisit de renseigner un logo hébergé sur un site tiers, l'affichage de cette image peut déclencher une requête du navigateur vers le serveur tiers, susceptible de recevoir certaines données techniques comme l'adresse IP. Les responsables du service doivent en vérifier les implications avant publication."}
                 }
                 section{
                     h2{"5. Conservation"}
@@ -192,6 +195,7 @@ pub fn PrivacyPolicy()->Element {
 pub fn TermsOfUse()->Element {
     rsx! {
         document::Title{"Conditions générales d'utilisation | SEPPYL"}
+        document::Link{rel:"canonical",href:"https://seppyl.donnarieix.fr/cgu"}
         document::Meta{name:"description",content:"Règles d'utilisation de la plateforme SEPPYL pour les clubs, entraîneurs et utilisateurs."}
         main{class:"page legal-page",
             LegalHeading{

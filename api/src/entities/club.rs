@@ -10,5 +10,7 @@ pub struct Model {
     pub name: String,
     /// Public visibility is explicit, never enabled by default.
     pub is_public: Option<bool>,
+    pub description: Option<String>,
+    pub logo_url: Option<String>,
 }
 impl ActiveModelBehavior for ActiveModel {}

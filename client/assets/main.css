@@ -2857,3 +2857,11 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
   .site-root > .topbar{display:none!important}
   .print-guidance{display:none!important}
 }
+
+
+/* The fixed mobile toolbar only exists inside authenticated routes.
+   Public/login/print routes must not keep its old 73px reserved gutter. */
+@media(max-width:800px){
+  .site-root:not(:has(.mobile-nav)){padding-bottom:0!important}
+  .site-root:not(:has(.mobile-nav)) > .site-footer{padding-bottom:0}
+}

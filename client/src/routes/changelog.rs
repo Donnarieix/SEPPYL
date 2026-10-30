@@ -170,6 +170,12 @@ pub fn ChangelogHost()->Element{
                                             });
                                         }
                                     },
+                                    if *is_hidden.read(){
+                                        div{class:"changelog-hidden-warning",role:"alert",
+                                            strong{"Attention — changelog masqué"}
+                                            p{"Cette version est invisible pour les autres utilisateurs et ne déclenchera aucune annonce tant qu'elle reste masquée."}
+                                        }
+                                    }
                                     if *creating.read(){
                                         div{class:"field",label{"Version"},
                                             input{value:"{new_version}",required:true,maxlength:"32",
@@ -187,12 +193,6 @@ pub fn ChangelogHost()->Element{
                                         }
                                         input{r#type:"checkbox",checked:*is_hidden.read(),
                                             onchange:move |event|is_hidden.set(event.checked())}
-                                    }
-                                    if *is_hidden.read(){
-                                        div{class:"changelog-hidden-warning",role:"alert",
-                                            strong{"Attention — changelog masqué"}
-                                            p{"Cette version est invisible pour les autres utilisateurs et ne déclenchera aucune annonce tant qu'elle reste masquée."}
-                                        }
                                     }
                                     div{class:"field",
                                         label{"Notes de version"}

@@ -48,6 +48,7 @@ pub fn AccountPage() -> Element {
     let theme_token_system = token.clone();
     let theme_token_light = token.clone();
     let theme_token_dark = token.clone();
+    let theme_token_contrast = token.clone();
     let density_token_comfortable = token.clone();
     let density_token_compact = token.clone();
     let attendance_grid_token = token.clone();
@@ -204,6 +205,42 @@ pub fn AccountPage() -> Element {
                                         },
                                         span { class: "choice-icon", "☾" }
                                         span { "Sombre" }
+                                    }
+                                    button {
+                                        class: if prefs.theme == Theme::Contrast { "settings-choice selected" } else { "settings-choice" },
+                                        "aria-pressed": if prefs.theme == Theme::Contrast { "true" } else { "false" },
+                                        disabled: *appearance_busy.read(),
+                                        "data-theme-option": "contrast",
+                                        onclick: move |_| {
+                                            let before = *appearance.read();
+                                            if before.theme == Theme::Contrast || *appearance_busy.read() { return; }
+                                            // Optimistic UI: the browser reveal is cosmetic;
+                                            // applying the theme must never await the API.
+                                            appearance.set(UserPreferences { theme: Theme::Contrast, ..before });
+                                            appearance_busy.set(true);
+                                            appearance_feedback.set(None);
+                                            let token = theme_token_contrast.clone();
+                                            spawn(async move {
+                                                match preferences::save_appearance(&token, Theme::Contrast, before.density).await {
+                                                    Ok(saved) => appearance.set(saved),
+                                                    Err(error) => {
+                                                        appearance.set(before);
+                                                        #[cfg(feature = "web")]
+                                                        {
+                                                            let script = format!(
+                                                                "window.__seppylRestoreTheme?.('{}')",
+                                                                before.theme.as_str()
+                                                            );
+                                                            let _ = document::eval(&script);
+                                                        }
+                                                        appearance_feedback.set(Some((false, error)));
+                                                    }
+                                                }
+                                                appearance_busy.set(false);
+                                            });
+                                        },
+                                        span { class: "choice-icon", "◑" }
+                                        span { "Contrasté" }
                                     }
                                 }
                             }

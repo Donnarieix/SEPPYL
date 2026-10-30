@@ -81,6 +81,7 @@ pub fn Administration()->Element{
     let matching:Vec<_>=directory.iter()
         .filter(|u|needle.is_empty() || u.username.to_lowercase().contains(&needle))
         .cloned().collect();
+    let search_empty=matching.is_empty();
     let selected=directory.iter().find(|u|u.id==*selected_user.read()).cloned();
     let group_id=if team.read().is_empty(){club.read().clone()}else{team.read().clone()};
     let scope=if team.read().is_empty(){"club"}else{"team"};
@@ -150,7 +151,7 @@ pub fn Administration()->Element{
                                     }
                                 }
                             }
-                            if matching.is_empty() && users.read().as_ref().is_some_and(|r|r.is_ok()) {
+                            if search_empty && users.read().as_ref().is_some_and(|r|r.is_ok()) {
                                 div{class:"workspace-empty admin-search-empty",
                                     strong{"Aucun compte trouvé"}
                                     p{"Essayez un autre nom de compte."}

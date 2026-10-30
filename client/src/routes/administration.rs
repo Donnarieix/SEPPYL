@@ -118,7 +118,11 @@ pub fn Administration()->Element{
                     span{class:"role-pill role-admin","Administrateur"}
                 }
                 if let Some(message)=notice.read().as_ref(){
-                    p{class:"inline-notice",role:"status","{message}"}
+                    div{class:"seppyl-toast",role:"status",
+                        span{class:"seppyl-toast-message","{message}"}
+                        button{r#type:"button",class:"seppyl-toast-close",
+                            "data-toast-dismiss":"true","aria-label":"Fermer la notification","×"}
+                    }
                 }
                 nav{class:"workspace-tabs",role:"tablist","aria-label":"Administration",
                     button{class:if *tab.read()=="users"{"selected"}else{""},

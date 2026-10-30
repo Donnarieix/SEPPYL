@@ -17,14 +17,14 @@ type ApiResult<T> = Result<T, StatusCode>;
 fn db_error(_: sea_orm::DbErr) -> StatusCode { StatusCode::INTERNAL_SERVER_ERROR }
 
 pub async fn can_manage_club(state: &AppState, claims: &Claims, role: Role, id: Uuid) -> ApiResult<bool> {
-    if role == Role::Administrator { return Ok(true); }
+    if role.is_admin() { return Ok(true); }
     if !role.can_write(){return Ok(false);}
     let membership = club_membership::Entity::find_by_id((claims.sub, id))
         .one(&state.db).await.map_err(db_error)?;
     Ok(membership.is_some_and(|m| m.role == "manager"))
 }
 pub async fn can_access_club(state: &AppState, claims: &Claims, role: Role, id: Uuid) -> ApiResult<bool> {
-    if role == Role::Administrator { return Ok(true); }
+    if role.is_admin() { return Ok(true); }
     if club_membership::Entity::find_by_id((claims.sub, id))
         .one(&state.db).await.map_err(db_error)?.is_some() { return Ok(true); }
     let teams = team::Entity::find().filter(team::COLUMN.club_id.eq(id))
@@ -36,7 +36,7 @@ pub async fn can_access_club(state: &AppState, claims: &Claims, role: Role, id: 
         .one(&state.db).await.map_err(db_error)?.is_some())
 }
 pub async fn can_write_team(state: &AppState, claims: &Claims, role: Role, id: Uuid) -> ApiResult<bool> {
-    if role == Role::Administrator { return Ok(true); }
+    if role.is_admin() { return Ok(true); }
     if !role.can_write(){return Ok(false);}
     let Some(team) = team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)? else {
         return Ok(false);
@@ -79,7 +79,7 @@ pub async fn list_clubs(
 pub async fn list_admin_clubs(
     Extension(role):Extension<CurrentRole>,State(state):State<AppState>,
 )->ApiResult<Json<Vec<club::Model>>>{
-    if role.0!=Role::Administrator{return Err(StatusCode::FORBIDDEN);}
+    if !role.0.is_admin(){return Err(StatusCode::FORBIDDEN);}
     Ok(Json(club::Entity::find().all(&state.db).await.map_err(db_error)?))
 }
 #[derive(Deserialize)]
@@ -170,7 +170,7 @@ pub async fn create_club(
     Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
     State(state): State<AppState>, Json(body): Json<CreateNamed>,
 ) -> ApiResult<(StatusCode,Json<club::Model>)> {
-    if role.0 != Role::Administrator { return Err(StatusCode::FORBIDDEN); }
+    if !role.0.is_admin() { return Err(StatusCode::FORBIDDEN); }
     if !valid_name(&body.name) { return Err(StatusCode::BAD_REQUEST); }
     let saved = club::ActiveModel {
         id: Set(Uuid::new_v4()), name: Set(body.name.trim().into()),
@@ -188,7 +188,7 @@ pub async fn list_teams(
         .all(&state.db).await.map_err(db_error)?;
     let direct_club_membership=club_membership::Entity::find_by_id((claims.sub,id))
         .one(&state.db).await.map_err(db_error)?.is_some();
-    if role.0 == Role::Administrator || direct_club_membership {
+    if role.0.is_admin() || direct_club_membership {
         return Ok(Json(all));
     }
     let assigned:HashSet<Uuid> = team_membership::Entity::find()
@@ -273,12 +273,17 @@ pub async fn grant_global_role(
     State(state): State<AppState>, Path(user_id): Path<Uuid>,
     Json(body): Json<GrantGlobalRole>,
 ) -> ApiResult<StatusCode> {
-    if role.0 != Role::Administrator { return Err(StatusCode::FORBIDDEN); }
+    if !role.0.is_admin() { return Err(StatusCode::FORBIDDEN); }
     if !matches!(body.role.as_str(),"user"|"trainer"|"manager"|"administrator") {
         return Err(StatusCode::BAD_REQUEST);
     }
     let user=user::Entity::find_by_id(user_id).one(&state.db).await.map_err(db_error)?
         .ok_or(StatusCode::NOT_FOUND)?;
+    // This endpoint can never grant, demote or remove Maintainer.
+    // Promotion is exclusively performed offline via the server CLI.
+    if user.role.as_deref()==Some("maintainer"){
+        return Err(StatusCode::FORBIDDEN);
+    }
     let mut active:user::ActiveModel=user.into();
     active.role=Set(Some(body.role));
     active.update(&state.db).await.map_err(db_error)?;
@@ -341,7 +346,7 @@ pub async fn list_users(
     Extension(role): Extension<CurrentRole>,
     State(state): State<AppState>,
 ) -> ApiResult<Json<Vec<UserSummary>>> {
-    if role.0 != Role::Administrator { return Err(StatusCode::FORBIDDEN); }
+    if !role.0.is_admin() { return Err(StatusCode::FORBIDDEN); }
     let users = user::Entity::find().all(&state.db).await.map_err(db_error)?;
     Ok(Json(users.into_iter().map(|u| UserSummary {
         id: u.id, username: u.username,
@@ -417,7 +422,7 @@ pub async fn user_role(state:&AppState, id:Uuid) -> ApiResult<Role> {
 pub async fn can_read_team(
     state: &AppState, claims: &Claims, role: Role, id: Uuid
 ) -> ApiResult<bool> {
-    if role==Role::Administrator {return Ok(true);}
+    if role.is_admin() {return Ok(true);}
     let Some(team)=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
     else {return Ok(false)};
     if club_membership::Entity::find_by_id((claims.sub,team.club_id))
@@ -466,7 +471,7 @@ pub async fn assign_team_player(
                 }
         }
     }
-    if !owner && !known_in_club && role.0!=Role::Administrator{
+    if !owner && !known_in_club && !role.0.is_admin(){
         return Err(StatusCode::NOT_FOUND);
     }
     if player::Entity::find_by_id(player_id).one(&state.db).await.map_err(db_error)?.is_none(){
@@ -714,7 +719,7 @@ pub async fn list_club_players(
     if !can_access_club(&state,&claims,role.0,id).await?{
         return Err(StatusCode::NOT_FOUND);
     }
-    let direct=role.0==Role::Administrator ||
+    let direct=role.0.is_admin() ||
         club_membership::Entity::find_by_id((claims.sub,id))
             .one(&state.db).await.map_err(db_error)?.is_some();
     let all_teams=team::Entity::find()

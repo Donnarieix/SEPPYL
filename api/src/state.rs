@@ -11,26 +11,51 @@ pub struct AppState {
 
 impl AppState {
     pub async fn default() -> Self {
-        // Use an ignored local copy rather than writing real player data into the
-        // SQLite file already tracked by Git. Keep that original file untouched.
-        const LOCAL_DB: &str = "data/seppyl.local.db";
-        std::fs::create_dir_all("data").expect("Unable to create data directory");
-        if !std::path::Path::new(LOCAL_DB).exists()
-            && std::path::Path::new("data/sappyl.db").exists()
-        {
-            std::fs::copy("data/sappyl.db", LOCAL_DB)
+        // PRODUCTION: keep using the EXISTING SQLite database. The previously
+        // deployed systemd unit runs from /var/lib/seppyl and sets SEPPYL_BIND
+        // to 127.0.0.1:3101. Switching to a new database filename would split
+        // the users, activities, attendance and scores between two databases.
+        let production=std::env::current_dir().map(|dir|dir==std::path::Path::new("/var/lib/seppyl"))
+            .unwrap_or(false)
+            || std::env::var("SEPPYL_BIND").as_deref()==Ok("127.0.0.1:3101");
+        let path=std::env::var("SEPPYL_DB_PATH").unwrap_or_else(|_|{
+            if production{"data/sappyl.db".to_owned()}
+            else{"data/seppyl.local.db".to_owned()}
+        });
+        if let Some(parent)=std::path::Path::new(&path).parent(){
+            std::fs::create_dir_all(parent).expect("Unable to create persistent data directory");
+        }
+        if production && !std::path::Path::new(&path).is_file(){
+            panic!("Production SQLite database missing at {path}; refusing to create an empty one");
+        }
+        // LOCAL DEVELOPMENT ONLY: create a detached working copy of the
+        // tracked historical file; never use this path in production.
+        if !production && path=="data/seppyl.local.db"
+            && !std::path::Path::new(&path).exists()
+            && std::path::Path::new("data/sappyl.db").exists(){
+            std::fs::copy("data/sappyl.db",&path)
                 .expect("Unable to initialize local database from existing data/sappyl.db");
         }
-
-        let url = "sqlite://data/seppyl.local.db?mode=rwc";
-        // Run SQLite table rebuilds on a dedicated single connection so
-        // connection-local foreign-key PRAGMAs cannot leak across pool workers.
-        let mut migration_options=ConnectOptions::new(url);
+        let url=format!("sqlite://{}?mode=rwc",path);
+        let mut migration_options=ConnectOptions::new(url.clone());
         migration_options.max_connections(1);
         let migration_db=Database::connect(migration_options).await
             .expect("Unable to connect for database migration");
+        if production{
+            // SQLite's VACUUM INTO makes an atomic snapshot even when the
+            // database uses WAL. Keep the *first* pre-v0.1 snapshot for
+            // recovery; do not overwrite it on restart or failed deployment.
+            let backup=format!("{path}-before-v0.1");
+            if !std::path::Path::new(&backup).exists(){
+                migration_db.execute_unprepared(&format!(
+                    "VACUUM INTO '{}'",backup.replace("'","''")
+                )).await.expect("Unable to back up production SQLite before migration");
+                tracing::info!(file=%backup,"Safeguarded production database before migration");
+            }
+        }
+        let old_player_backup=format!("{path}-before-player-migration");
         crate::migrations::migrate_legacy_player_firstname(
-            &migration_db,Some("data/seppyl.local.db-before-player-migration")
+            &migration_db,Some(&old_player_backup)
         )
             .await.expect("Unable to safely migrate the players table; restore the backup and inspect SQLite schema");
         crate::migrations::add_club_information(&migration_db).await
@@ -63,7 +88,7 @@ impl AppState {
             .await
             .unwrap();
 
-        if user.is_none() {
+        if user.is_none() && !production {
             let user = entities::user::ActiveModel {
                 id: Set(uuid::Uuid::new_v4()),
                 username: Set("admin".into()),

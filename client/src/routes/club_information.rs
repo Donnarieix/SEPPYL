@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use crate::api::{organization as org,catalog};
+use crate::api::organization as org;
+use super::logo_picker::{LogoPicker,LogoSelection,image_style};
 
 /// Reused in the operational "Mon club" and independent global administration.
 /// Stores only safe text and an approved HTTPS or uploaded image URL.
@@ -10,10 +11,14 @@ pub fn ClubInformationEditor(
     let mut name=use_signal(||club.name.clone());
     let mut description=use_signal(||club.description.clone().unwrap_or_default());
     let mut logo=use_signal(||club.logo_url.clone().unwrap_or_default());
+    let mut logo_x=use_signal(||club.logo_x.unwrap_or(0));
+    let mut logo_y=use_signal(||club.logo_y.unwrap_or(0));
+    let mut logo_zoom=use_signal(||club.logo_zoom.unwrap_or(100));
     let mut public=use_signal(||club.is_public==Some(true));
     let mut saving=use_signal(||false);
-    let mut uploading=use_signal(||false);
+
     let preview=org::club_logo_src(Some(logo.read().as_str()));
+    let crop_style=image_style(*logo_x.read(),*logo_y.read(),*logo_zoom.read());
     rsx!{
         section{class:"panel club-information-panel",
             div{class:"panel-head",
@@ -25,7 +30,7 @@ pub fn ClubInformationEditor(
                     let token=token.clone();let id=club.id.clone();
                     move |event|{
                         event.prevent_default();
-                        if *saving.read()||*uploading.read(){return;}
+                        if *saving.read(){return;}
                         let label=name.read().trim().to_string();
                         let text=description.read().trim().to_string();
                         let image=logo.read().trim().to_string();
@@ -36,7 +41,8 @@ pub fn ClubInformationEditor(
                         spawn(async move{
                             let result=org::update_club_information(
                                 &token,&id,&label,&text,
-                                if image.is_empty(){None}else{Some(&image)},visible
+                                if image.is_empty(){None}else{Some(&image)},visible,
+                                *logo_x.read(),*logo_y.read(),*logo_zoom.read()
                             ).await;
                             match result{
                                 Ok(())=>on_saved.call(()),
@@ -48,46 +54,21 @@ pub fn ClubInformationEditor(
                 },
                 div{class:"club-information-identity",
                     div{class:"club-logo-preview",
-                        if let Some(url)=preview{
-                            img{src:"{url}",alt:"Logo de {club.name}"}
+                        if let Some(src)=preview{
+                            img{src:"{src}",alt:"Logo de {club.name}",style:"{crop_style}"}
                         }else{
                             span{"{club.name.chars().next().unwrap_or('C').to_uppercase()}"}
                         }
                     }
-                    div{class:"club-logo-controls",
-                        label{"Logo du club"}
-                        input{r#type:"url",placeholder:"https://exemple.fr/logo.png",
-                            value:if logo.read().starts_with("https://"){"{logo}"}else{""},
-                            oninput:move |e|logo.set(e.value())}
-                        input{r#type:"file",accept:".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif",
-                            disabled:*uploading.read(),
-                            onchange:{
-                                let token=token.clone();
-                                move |event|{
-                                    let token=token.clone();
-                                    async move{
-                                        for file in event.files(){
-                                            uploading.set(true);
-                                            let result=match file.read_bytes().await{
-                                                Ok(bytes)=>catalog::upload(&token,bytes.to_vec()).await,
-                                                Err(error)=>Err(format!("Lecture impossible : {error}")),
-                                            };
-                                            match result{
-                                                Ok(image)=>logo.set(image),
-                                                Err(error)=>on_error.call(error),
-                                            }
-                                            uploading.set(false);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if *uploading.read(){small{"Téléversement…"}}
-                        small{"PNG, JPEG, WebP ou GIF, 4 Mo maximum."}
-                        if !logo.read().is_empty(){
-                            button{class:"button quiet small",r#type:"button",
-                                onclick:move |_|logo.set(String::new()),"Retirer le logo"}
-                        }
+                    LogoPicker{
+                        key:"{club.id}",token:token.clone(),
+                        logo:logo.read().clone(),crop_x:*logo_x.read(),
+                        crop_y:*logo_y.read(),crop_zoom:*logo_zoom.read(),
+                        on_change:move |value:LogoSelection|{
+                            logo.set(value.url);logo_x.set(value.x);logo_y.set(value.y);
+                            logo_zoom.set(value.zoom);
+                        },
+                        on_error:move |error|on_error.call(error)
                     }
                 }
                 div{class:"field",label{"Nom du club"},
@@ -106,7 +87,7 @@ pub fn ClubInformationEditor(
                 }
                 div{class:"club-information-actions",
                     button{class:"button solid",r#type:"submit",
-                        disabled:*saving.read()||*uploading.read(),
+                        disabled:*saving.read(),
                         if *saving.read(){"Enregistrement…"}else{"Enregistrer les informations"}}
                 }
             }

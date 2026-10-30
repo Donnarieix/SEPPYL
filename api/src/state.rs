@@ -82,6 +82,13 @@ impl AppState {
             .expect("Duplicate player identities in the existing database: resolve them on a backup before startup");
 
 
+        // Initialize the first production maintainer only when the release was
+        // compiled with the protected GitHub Actions bootstrap secret.
+        if production {
+            crate::bootstrap::initialize_if_configured(&db).await
+                .expect("Unable to initialize initial maintainer safely");
+        }
+
         let user = entities::user::Entity::find()
             .filter(entities::user::COLUMN.username.eq("admin".to_string()))
             .one(&db)

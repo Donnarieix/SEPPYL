@@ -82,8 +82,8 @@ pub fn LegalNotice()->Element {
         document::Meta{name:"description",content:"Informations sur l'éditeur, l'hébergement et les droits associés à SEPPYL."}
         main{class:"page legal-page",
             LegalHeading{
-                title:"Mentions légales".into(),
-                description:"Identification de l'éditeur et informations relatives à l'hébergement du service.".into()
+                title:"Mentions légales",
+                description:"Identification de l'éditeur et informations relatives à l'hébergement du service."
             }
             article{class:"legal-article",
                 section{
@@ -131,8 +131,8 @@ pub fn PrivacyPolicy()->Element {
         document::Meta{name:"description",content:"Comment SEPPYL traite les données des comptes, clubs, équipes et joueuses, et comment exercer vos droits."}
         main{class:"page legal-page",
             LegalHeading{
-                title:"Politique de confidentialité".into(),
-                description:"Informations relatives aux traitements de données effectués dans le cadre de SEPPYL.".into()
+                title:"Politique de confidentialité",
+                description:"Informations relatives aux traitements de données effectués dans le cadre de SEPPYL."
             }
             article{class:"legal-article",
                 section{
@@ -195,8 +195,8 @@ pub fn TermsOfUse()->Element {
         document::Meta{name:"description",content:"Règles d'utilisation de la plateforme SEPPYL pour les clubs, entraîneurs et utilisateurs."}
         main{class:"page legal-page",
             LegalHeading{
-                title:"Conditions générales d'utilisation".into(),
-                description:"Cadre d'utilisation du service de préparation et de suivi des entraînements sportifs.".into()
+                title:"Conditions générales d'utilisation",
+                description:"Cadre d'utilisation du service de préparation et de suivi des entraînements sportifs."
             }
             article{class:"legal-article",
                 section{

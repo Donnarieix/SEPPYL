@@ -2281,7 +2281,7 @@ button.grid-add-button:hover,
   box-sizing:border-box;flex:none!important;align-self:start;justify-self:start;
   grid-area:unset!important;min-width:0!important;max-width:218px!important;
   width:218px!important;min-height:0!important;height:auto!important;
-  position:absolute!important;transform:none!important;inset:auto!important
+  position:absolute!important;transform:none!important
 }
 .tactic-context-palette.open{display:flex!important;flex-direction:row!important;
   flex-wrap:wrap!important;align-content:start!important;gap:8px!important}

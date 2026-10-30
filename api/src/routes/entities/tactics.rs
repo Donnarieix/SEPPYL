@@ -124,6 +124,18 @@ pub async fn delete(
 mod tests{
     use super::*;
     #[test]
+    fn dashed_arrow_styles_round_trip_and_old_schemes_remain_solid(){
+        let older=r#"{"id":"a","kind":"arrow","x":10,"y":20,"end_x":80,"end_y":90,"label":null}"#;
+        let old:DrawingObject=serde_json::from_str(older).unwrap();
+        assert!(!old.dashed);
+        let mut changed=old;
+        changed.dashed=true;
+        let value=serde_json::to_string(&changed).unwrap();
+        let restored:DrawingObject=serde_json::from_str(&value).unwrap();
+        assert!(restored.dashed);
+        assert!(value.contains("\\"dashed\\":true"));
+    }
+    #[test]
     fn rejects_untrusted_objects_and_invalid_positions(){
         let mut good=DiagramPayload{name:"Exercice".into(),layout:"football".into(),
             objects:vec![DrawingObject{id:"1".into(),kind:"player".into(),x:400.0,y:250.0,

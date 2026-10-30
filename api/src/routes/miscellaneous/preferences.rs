@@ -17,7 +17,7 @@ pub enum AttendanceView { #[default] Grid, List }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Theme { #[default] System, Light, Dark }
+pub enum Theme { #[default] System, Light, Dark, Contrast }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,7 +46,7 @@ fn to_view(value: &str) -> Result<AttendanceView, StatusCode> {
 }
 fn to_theme(value: Option<&str>) -> Result<Theme, StatusCode> {
     match value.unwrap_or("system") { "system" => Ok(Theme::System),
-        "light" => Ok(Theme::Light), "dark" => Ok(Theme::Dark),
+        "light" => Ok(Theme::Light), "dark" => Ok(Theme::Dark), "contrast" => Ok(Theme::Contrast),
         _ => Err(StatusCode::INTERNAL_SERVER_ERROR) }
 }
 fn to_density(value: Option<&str>) -> Result<Density, StatusCode> {
@@ -68,7 +68,7 @@ fn view_str(value: AttendanceView) -> String {
     match value { AttendanceView::Grid => "grid", AttendanceView::List => "list" }.into()
 }
 fn theme_str(value: Theme) -> String {
-    match value { Theme::System => "system", Theme::Light => "light", Theme::Dark => "dark" }.into()
+    match value { Theme::System => "system", Theme::Light => "light", Theme::Dark => "dark", Theme::Contrast => "contrast" }.into()
 }
 fn density_str(value: Density) -> String {
     match value { Density::Comfortable => "comfortable", Density::Compact => "compact" }.into()

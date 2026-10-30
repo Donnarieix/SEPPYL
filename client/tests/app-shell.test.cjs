@@ -47,6 +47,8 @@ test("footer layout uses one viewport for shell and only natural heights for rou
  assert.match(css,/\.site-root\s*>\s*main\{[^}]*flex:1 0 auto/);
  assert.match(css,/\.site-footer\{[^}]*margin-top:auto/);
  assert.ok(css.includes(".site-root:has(.mobile-nav) > .site-footer"));
+ assert.ok(!css.includes("min-height:calc(100dvh - 62px)"),
+   "Club/admin cannot reserve a full viewport in addition to header and footer");
  assert.ok(css.includes(".site-root{padding-bottom:0!important}"));
  assert.ok(!css.includes("min-height: 100vh; }"),"Legacy route-level viewport is forbidden");
 });

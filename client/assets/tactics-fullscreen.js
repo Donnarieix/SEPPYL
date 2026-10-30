@@ -15,23 +15,26 @@
       button.title = active ? "Quitter le plein écran (Échap)" : "Afficher le studio sur tout l'écran";
     }
   };
+  const toggle = async () => {
+    const studio = root();
+    if(!studio)return;
+    try {
+      if(document.fullscreenElement===studio)await document.exitFullscreen();
+      else if(typeof studio.requestFullscreen==="function")await studio.requestFullscreen();
+    } catch(error) {console.warn("Le plein écran est indisponible",error);}
+    refresh();
+  };
+  document.addEventListener("keydown",event=>{
+    const active=document.activeElement;
+    if(event.key.toLowerCase()!=="f"||event.repeat||event.ctrlKey||event.metaKey||event.altKey||
+       active?.matches?.("input,textarea,select")||active?.isContentEditable||!root())return;
+    event.preventDefault();
+    void toggle();
+  });
   document.addEventListener("click", async event => {
     const button = event.target?.closest?.("[data-tactics-fullscreen]");
     if (!button) return;
-    const studio = root();
-    if (!studio) return;
-    try {
-      if (document.fullscreenElement === studio) {
-        await document.exitFullscreen();
-      } else if (typeof studio.requestFullscreen === "function") {
-        await studio.requestFullscreen();
-      } else {
-        button.title = "Le plein écran n'est pas pris en charge par ce navigateur";
-      }
-    } catch (error) {
-      console.warn("Le plein écran est indisponible", error);
-    }
-    refresh();
+    await toggle();
   });
   document.addEventListener("fullscreenchange", refresh);
   document.addEventListener("fullscreenerror", refresh);

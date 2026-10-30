@@ -35,8 +35,8 @@ async fn access_training(
         Some(team_id) if write =>
             role.can_write() && organization::can_write_team(state,claims,role,team_id).await?,
         Some(team_id) => organization::can_read_team(state,claims,role,team_id).await?,
-        None if write => role.can_write() && (found.user_id==claims.sub || role==crate::middleware::Role::Administrator),
-        None => found.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+        None if write => role.can_write() && (found.user_id==claims.sub || role.is_admin()),
+        None => found.user_id==claims.sub || role.is_admin(),
     };
     if !allowed{return Err(StatusCode::NOT_FOUND);}
     Ok(found)
@@ -135,7 +135,7 @@ pub async fn list(
     for session in all {
         let visible=match session.team_id {
             Some(id) => organization::can_read_team(&state,&claims,role,id).await?,
-            None => session.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+            None => session.user_id==claims.sub || role.is_admin(),
         };
         if visible {allowed.push(session);}
     }

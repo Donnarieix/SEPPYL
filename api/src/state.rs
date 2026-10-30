@@ -87,17 +87,6 @@ impl AppState {
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
 
-        // Transitional release cleanup: remove the obsolete marker only.
-        // This never changes accounts, passwords, roles, SQLite or backup files.
-        // The next release removes this cleanup block itself.
-        if production {
-            match std::fs::remove_file("data/.maintainer-bootstrapped-v1") {
-                Ok(()) => tracing::info!("Obsolete bootstrap file removed"),
-                Err(err) if err.kind()==std::io::ErrorKind::NotFound => {},
-                Err(err) => tracing::warn!(%err,"Unable to remove obsolete bootstrap file"),
-            }
-        }
-
         Self { db }
     }
 }

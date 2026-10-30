@@ -12,5 +12,8 @@ pub struct Model {
     pub is_public: Option<bool>,
     pub description: Option<String>,
     pub logo_url: Option<String>,
+    pub logo_x: Option<i32>,
+    pub logo_y: Option<i32>,
+    pub logo_zoom: Option<i32>,
 }
 impl ActiveModelBehavior for ActiveModel {}

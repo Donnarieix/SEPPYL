@@ -590,7 +590,13 @@ pub async fn create_team_player(
         id:Set(Uuid::new_v4()),firstname:Set(body.firstname.trim().to_owned()),
         lastname:Set(body.lastname.trim().to_owned()),number:Set(body.number),
         ..Default::default()
-    }.insert(&tx).await.map_err(db_error)?;
+    }.insert(&tx).await.map_err(|error|{
+        tracing::warn!(%error,"Unable to create team player");
+        match error.sql_err(){
+            Some(sea_orm::SqlErr::UniqueConstraintViolation(_))=>StatusCode::CONFLICT,
+            _=>StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    })?;
     club_player::ActiveModel{
         club_id:Set(target.club_id),player_id:Set(saved.id),..Default::default()
     }.insert(&tx).await.map_err(db_error)?;

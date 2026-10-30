@@ -21,3 +21,6 @@ pub mod tactical_diagram;
 pub mod audit_event;
 pub mod team_player;
 pub mod club_player;
+
+pub mod changelog_entry;
+pub mod changelog_read;

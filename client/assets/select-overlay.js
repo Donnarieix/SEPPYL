@@ -9,6 +9,9 @@
   const withinApp=el=>!!el?.closest?.(".site-root");
   const searchable=el=>el?.getAttribute?.("data-seppyl-searchable")==="true" ||
     Array.from(el?.options||[]).filter(o=>!o.hidden&&o.value!=="").length>=8;
+  const isPlaceholder=(option,el)=>option.value==="" &&
+    (el.required||/^(choisir|sélectionner|sélectionnez|rechercher)\b/i.test(
+      option.textContent.trim()));
   const selectable=el=>el?.matches?.("select:not([multiple]):not([size])") &&
     !el.disabled && withinApp(el) && (!coarse()||searchable(el));
   const rootFor=el=>document.fullscreenElement?.contains(el)
@@ -87,7 +90,8 @@
     const host=rootFor(el);
     if(!host){close();return;}
     const isSearch=searchable(el);
-    options=Array.from(el.options).filter(o=>!o.hidden&&(!isSearch||o.value!==""));
+    options=Array.from(el.options).filter(o=>!o.hidden&&
+      (!isSearch||!isPlaceholder(o,el)));
     index=Math.max(0,options.findIndex(o=>o.value===el.value&&!o.disabled));
     panel=document.createElement("div");panel.className="seppyl-select-popover";
     panel.setAttribute("role",isSearch?"dialog":"listbox");

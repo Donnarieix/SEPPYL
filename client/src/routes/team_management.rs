@@ -10,7 +10,12 @@ pub fn TeamManagerRow(team:org::Team,token:String,on_saved:EventHandler<()>,
     let mut busy=use_signal(||false);
     rsx!{
         div{class:"workspace-roster-item team-manage-row",
-            span{class:"workspace-team-icon","⚽"}
+            span{class:"workspace-team-icon",
+                if let Some(src)=org::club_logo_src(team.logo_url.as_deref()){
+                    img{src:"{src}",alt:"",
+                        style:"{org::logo_style(team.logo_x,team.logo_y,team.logo_zoom)}"}
+                }else{"⚽"}
+            }
             if *editing.read(){
                 form{class:"team-rename-form",
                     onsubmit:{

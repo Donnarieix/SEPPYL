@@ -119,7 +119,7 @@ pub fn Administration()->Element{
                     }
                     span{class:"role-pill role-admin",
                         if identity.read().as_ref().is_some_and(|v|v.as_ref().is_ok_and(|u|u.role=="maintainer")) {
-                            "Maintainer"
+                            "Mainteneur"
                         }else{"Administrateur"}
                     }
                 }
@@ -161,7 +161,15 @@ pub fn Administration()->Element{
                                         },
                                         span{class:"admin-user-avatar","{user.username.chars().next().unwrap_or('?').to_uppercase()}"}
                                         span{class:"admin-user-info",strong{"{user.username}"}
-                                            small{"{user.role}"}}
+                                            small{match user.role.as_str(){
+                                                "maintainer"=>"Mainteneur",
+                                                "administrator"=>"Administrateur",
+                                                "manager"=>"Gestionnaire",
+                                                "trainer"=>"Entraîneur",
+                                                "user"=>"Utilisateur",
+                                                "visitor"=>"Visiteur",
+                                                _=>"Utilisateur",
+                                            }}}
                                         span{class:"admin-user-arrow","›"}
                                     }
                                 }

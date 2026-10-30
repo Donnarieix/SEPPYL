@@ -1,6 +1,6 @@
 //! Offline privileged role promotion. No HTTP endpoint can grant Maintainer.
 //! Run this command locally on the server against the same SQLite database.
-use sea_orm::{ConnectionTrait,Database,DbBackend,Statement};
+use sea_orm::{ConnectionTrait,Database,sea_query::{Query,Alias,Expr}};
 #[tokio::main]
 async fn main(){
     if let Err(error)=run().await{
@@ -21,9 +21,11 @@ async fn run()->Result<(),Box<dyn std::error::Error>>{
     }
     let uri=format!("sqlite://{}?mode=rw",file);
     let db=Database::connect(uri).await?;
-    let user=db.query_one(&Statement::from_sql_and_values(DbBackend::Sqlite,
-        "SELECT role FROM users WHERE username = ?",vec![username.clone().into()]
-    )).await?;
+    let users=Alias::new("users");
+    let query=Query::select()
+        .column(Alias::new("role")).from(users.clone())
+        .and_where(Expr::col(Alias::new("username")).eq(username.as_str())).to_owned();
+    let user=db.query_one(&query).await?;
     let Some(user)=user else{
         return Err("Aucun compte ne correspond à cet identifiant.".into());
     };
@@ -32,10 +34,11 @@ async fn run()->Result<(),Box<dyn std::error::Error>>{
         println!("Ce compte est déjà Maintainer ; aucune modification.");
         return Ok(());
     }
-    let result=db.execute(&Statement::from_sql_and_values(DbBackend::Sqlite,
-        "UPDATE users SET role = 'maintainer' WHERE username = ? AND (role IS NULL OR role != 'maintainer')",
-        vec![username.clone().into()]
-    )).await?;
+    let update=Query::update()
+        .table(users)
+        .value(Alias::new("role"),"maintainer")
+        .and_where(Expr::col(Alias::new("username")).eq(username.as_str())).to_owned();
+    let result=db.execute(&update).await?;
     if result.rows_affected()!=1{
         return Err("Aucun compte modifié. Vérifiez les permissions sur la base.".into());
     }

@@ -343,7 +343,11 @@ pub fn Organization()->Element{
                                         div{class:"club-team-row",key:"{team.id}",
                                             div{class:"club-team-name",
                                                 strong{"{team.name}"}
-                                                span{class:"muted-small","Équipe du club"}
+                                                if let Some(description)=team.description.as_deref(){
+                                                    span{class:"muted-small","{description}"}
+                                                }else{
+                                                    span{class:"muted-small","Équipe du club"}
+                                                }
                                             }
                                             button{class:"button outline small",r#type:"button",
                                                 onclick:{

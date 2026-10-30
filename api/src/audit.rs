@@ -55,6 +55,7 @@ async fn scope_player(state:&AppState,actor:Uuid,pid:Uuid,description:String)->C
     let relations=club_player::Entity::find()
         .filter(club_player::COLUMN.player_id.eq(pid)).all(&state.db).await;
     if let Ok(mut links)=relations{
+        links.sort_by_key(|l|l.club_id);
         links.dedup_by_key(|l|l.club_id);
         if links.len()==1 {
             let club_id=links[0].club_id;
@@ -82,7 +83,7 @@ pub async fn capture(
     state:&AppState, actor:Uuid, method:&Method, path:&str, payload:Option<&Value>,
 )->Context{
     let parts:Vec<&str>=path.trim_matches('/').split('/').collect();
-    let generic=format!("{} de données",operation(method));
+    let generic=format!("{} d'une opération non catégorisée",operation(method));
     match parts.as_slice(){
         ["player","create"]=>{
             let who=match (body_string(payload,"firstname"),body_string(payload,"lastname")){
@@ -268,19 +269,88 @@ pub async fn capture(
             if tail.is_empty() && *method==Method::PUT{context.rename_from=Some(t.name);}
             context
         }
-        ["trainings",id,..]=>{
-            let Ok(id)=Uuid::parse_str(id) else{return Context::admin(generic)};
-            let Ok(Some(t))=training::Entity::find_by_id(id).one(&state.db).await
-                else{return Context::admin(generic)};
-            let desc=format!("{} de la séance {}",operation(method),quoted(&t.name));
-            scoped_team_or_personal(state,t.team_id,desc).await
+        ["trainings",training_id,rest @ ..]=>{
+            let Some(tid)=id(training_id) else{return Context::admin("Opération sur une séance inconnue".into())};
+            let Ok(Some(t))=training::Entity::find_by_id(tid).one(&state.db).await
+                else{return Context::admin("Opération sur une séance introuvable".into())};
+            let what=match *rest{
+                []=>match *method{
+                    Method::PUT=>format!("Modification de la séance {}",quoted(&t.name)),
+                    _=>format!("{} de la séance {}",operation(method),quoted(&t.name)),
+                },
+                ["attendance"]=>format!("Modification des présences de la séance {}",quoted(&t.name)),
+                ["scores"]=>{
+                    let who=if let Some(pid)=body_id(payload,"player_id"){
+                        player::Entity::find_by_id(pid).one(&state.db).await.ok().flatten()
+                            .map(|p|quoted(&label_player(&p))).unwrap_or_else(||"une joueuse".into())
+                    }else{"une joueuse".into()};
+                    format!("Notation de {who} dans la séance {}",quoted(&t.name))
+                },
+                ["activities"]=>format!("Ajout d'une activité à la séance {}",quoted(&t.name)),
+                ["catalog",catalog_id]=>{
+                    let name=if let Some(aid)=id(catalog_id){
+                        catalog_activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
+                            .map(|c|c.name).unwrap_or_else(||"activité".into())
+                    }else{"activité".into()};
+                    format!("Ajout de l'activité {} à la séance {}",quoted(&name),quoted(&t.name))
+                },
+                ["activities","order"]=>format!("Réorganisation des activités de la séance {}",quoted(&t.name)),
+                ["activities",aid,rest @ ..]=>{
+                    let name=if let Some(aid)=id(aid){
+                        training_activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
+                            .map(|a|a.name).unwrap_or_else(||"activité introuvable".into())
+                    }else{"activité".into()};
+                    match *rest{
+                        [] if *method==Method::DELETE=>
+                            format!("Retrait de l'activité {} de la séance {}",quoted(&name),quoted(&t.name)),
+                        []=>{
+                            let change=change_text(&name,body_string(payload,"name"),"nom")
+                                .unwrap_or_else(||"consignes ou illustration modifiées".into());
+                            format!("Modification de l'activité {} dans la séance {} — {change}",quoted(&name),quoted(&t.name))
+                        },
+                        ["materials"]=>format!("Ajout de matériel à l'activité {} dans la séance {}",quoted(&name),quoted(&t.name)),
+                        ["materials",mid]=>{
+                            let material=if let Some(mid)=id(mid){
+                                if let Ok(Some(m))=training_material::Entity::find_by_id(mid).one(&state.db).await {
+                                    m.name
+                                }else if let Ok(Some(m))=catalog_material::Entity::find_by_id(mid).one(&state.db).await {
+                                    m.name
+                                }else{"matériel".into()}
+                            }else{"matériel".into()};
+                            format!("Retrait du matériel {} de l'activité {} dans la séance {}",quoted(&material),quoted(&name),quoted(&t.name))
+                        }
+                        _=>format!("{} de l'activité {} dans la séance {}",operation(method),quoted(&name),quoted(&t.name))
+                    }
+                },
+                _=>format!("{} de la séance {}",operation(method),quoted(&t.name))
+            };
+            scoped_team_or_personal(state,t.team_id,what).await
         }
-        ["catalog",id,..]=>{
-            let Ok(id)=Uuid::parse_str(id) else{return Context::admin(generic)};
-            let Ok(Some(c))=catalog_activity::Entity::find_by_id(id).one(&state.db).await
-                else{return Context::admin(generic)};
-            let desc=format!("{} de l'activité {}",operation(method),quoted(&c.name));
-            scoped_team_or_personal(state,c.team_id,desc).await
+        ["catalog",catalog_id,rest @ ..]=>{
+            let Some(aid)=id(catalog_id) else{return Context::admin("Opération sur une activité inconnue".into())};
+            let Ok(Some(c))=catalog_activity::Entity::find_by_id(aid).one(&state.db).await
+                else{return Context::admin("Opération sur une activité introuvable".into())};
+            let what=match *rest{
+                [] if *method==Method::DELETE=>format!("Suppression de l'activité {}",quoted(&c.name)),
+                []=>{
+                    let change=change_text(&c.name,body_string(payload,"name"),"nom")
+                        .unwrap_or_else(||"description, image ou équipe modifiée".into());
+                    format!("Modification de l'activité {} — {change}",quoted(&c.name))
+                },
+                ["materials"]=>{
+                    let material=body_string(payload,"name").unwrap_or("matériel");
+                    format!("Ajout du matériel {} à l'activité {}",quoted(material),quoted(&c.name))
+                },
+                ["materials",material_id]=>{
+                    let name=if let Some(mid)=id(material_id){
+                        catalog_material::Entity::find_by_id(mid).one(&state.db).await.ok().flatten()
+                            .map(|m|m.name).unwrap_or_else(||"matériel introuvable".into())
+                    }else{"matériel".into()};
+                    format!("{} du matériel {} de l'activité {}",operation(method),quoted(&name),quoted(&c.name))
+                },
+                _=>format!("{} de l'activité {}",operation(method),quoted(&c.name))
+            };
+            scoped_team_or_personal(state,c.team_id,what).await
         }
         ["trainings"]|["catalog"]=>{
             // Creation payloads explicitly carry team_id; missing team_id is personal.

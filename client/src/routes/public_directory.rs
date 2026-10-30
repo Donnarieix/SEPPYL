@@ -6,6 +6,15 @@ use super::Route;
 pub fn PublicDirectory()->Element{
     let clubs=use_resource(||async{organization::public_clubs().await});
     rsx!{
+        document::Title { "Annuaire public des clubs | SEPPYL" }
+        document::Meta { name:"description",
+            content:"Découvrez les clubs sportifs et les équipes qui partagent leurs informations sur SEPPYL." }
+        document::Meta { name:"robots", content:"index,follow" }
+        document::Meta { property:"og:title", content:"Annuaire public des clubs | SEPPYL" }
+        document::Meta { property:"og:description",
+            content:"Découvrez les clubs et leurs équipes sur SEPPYL." }
+        document::Meta { property:"og:type", content:"website" }
+        document::Meta { property:"og:url", content:"https://seppyl.donnarieix.fr/public" }
         main { class:"page public-directory",
             div{class:"page-heading",
                 div {h1{"SEPPYL · Annuaire public"}p{"Les clubs ayant choisi d'être visibles publiquement."}}

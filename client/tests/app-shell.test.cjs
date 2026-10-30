@@ -36,3 +36,17 @@ test("global footer does not render router links outside Router",()=>{
    assert.ok(footer.includes('href:"'+url+'"'));
  }
 });
+
+test("footer layout uses one viewport for shell and only natural heights for routes",()=>{
+ const css=read("assets/main.css");
+ assert.ok(css.includes(".app { min-height: 0; }"),"Routes must not reserve their own 100vh");
+ assert.ok(css.includes(".site-root > .app{"),"Authenticated shell must flex inside root");
+ assert.ok(css.includes(".site-root > .app > main{"),"Header and content share available height");
+ assert.ok(css.includes(".site-root > main{"),"Public and print pages share the same shell");
+ assert.match(css,/\.site-root\s*>\s*\.app\{[^}]*flex:1 0 auto/);
+ assert.match(css,/\.site-root\s*>\s*main\{[^}]*flex:1 0 auto/);
+ assert.match(css,/\.site-footer\{[^}]*margin-top:auto/);
+ assert.ok(css.includes(".site-root:has(.mobile-nav) > .site-footer"));
+ assert.ok(css.includes(".site-root{padding-bottom:0!important}"));
+ assert.ok(!css.includes("min-height: 100vh; }"),"Legacy route-level viewport is forbidden");
+});

@@ -219,3 +219,64 @@ pub async fn delete_player(
     txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    use crate::{entities::{player,user},routes::authentication::login::Claims};
+    use sea_orm::{Database,ConnectionTrait,Statement,DbBackend};
+
+    async fn fresh_state()->AppState{
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        AppState{db}
+    }
+    async fn admin(state:&AppState)->Claims{
+        let id=Uuid::new_v4();
+        user::ActiveModel{
+            id:Set(id),username:Set(format!("test-{id}")),
+            password:Set("placeholder".into()),
+            role:Set(Some("administrator".into())),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        Claims{sub:id,exp:u64::MAX}
+    }
+    #[tokio::test]
+    async fn two_players_can_share_a_first_name_and_edit_surnames(){
+        let state=fresh_state().await;
+        let claims=admin(&state).await;
+        let first=create_player(&claims,&state,CreatePlayerRequest{
+            firstname:"Emma".into(),lastname:"Durand".into(),number:7,
+        }).await.unwrap();
+        let second=create_player(&claims,&state,CreatePlayerRequest{
+            firstname:"Emma".into(),lastname:"Martin".into(),number:10,
+        }).await.unwrap();
+        assert_ne!(first,second);
+        let updated=update_player(&claims,&state,UpdatePlayerRequest{
+            id:first,firstname:Some("Emma".into()),
+            lastname:Some("Petit".into()),number:Some(7),
+        }).await.unwrap();
+        assert_eq!(updated,first);
+        let after=get_player(&claims,&state,first).await.unwrap().unwrap();
+        assert_eq!(after.firstname,"Emma");
+        assert_eq!(after.lastname,"Petit");
+        let unchanged=get_player(&claims,&state,second).await.unwrap().unwrap();
+        assert_eq!(unchanged.lastname,"Martin");
+    }
+    #[tokio::test]
+    async fn schema_sync_removes_obsolete_firstname_unique_index(){
+        let state=fresh_state().await;
+        // Reproduce the old SeaORM-generated unique index on an existing DB.
+        state.db.execute(Statement::from_string(DbBackend::Sqlite,
+            "CREATE UNIQUE INDEX \"idx-players-firstname\" ON \"players\" (\"firstname\")"
+        )).await.unwrap();
+        state.db.get_schema_registry("api::entities::*")
+            .sync(&state.db).await.unwrap();
+        let claims=admin(&state).await;
+        create_player(&claims,&state,CreatePlayerRequest{
+            firstname:"Lina".into(),lastname:"A".into(),number:3,
+        }).await.unwrap();
+        create_player(&claims,&state,CreatePlayerRequest{
+            firstname:"Lina".into(),lastname:"B".into(),number:4,
+        }).await.unwrap();
+    }
+}

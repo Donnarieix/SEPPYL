@@ -2,7 +2,17 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize,Serialize};
 fn base()->&'static str{ option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000") }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
-pub struct Club{pub id:String,pub name:String,pub is_public:Option<bool>}
+pub struct Club{
+    pub id:String,pub name:String,pub is_public:Option<bool>,
+    #[serde(default)]pub description:Option<String>,
+    #[serde(default)]pub logo_url:Option<String>,
+}
+pub fn club_logo_src(logo:Option<&str>)->Option<String>{
+    let src=logo?.trim();
+    if src.starts_with("/catalog/images/"){return Some(format!("{}{}",base(),src));}
+    if src.starts_with("https://"){return Some(src.to_string());}
+    None
+}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct Team{pub id:String,pub club_id:String,pub name:String}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
@@ -22,6 +32,25 @@ fn check(status:StatusCode)->Result<(),String>{
         _ if status.is_success()=>Ok(()),
         _=>Err(format!("Erreur API (HTTP {status})")),
     }
+}
+pub async fn admin_clubs(token:&str)->Result<Vec<Club>,String>{
+    let response=Client::new().get(format!("{}/admin/clubs",base())).bearer_auth(token)
+        .send().await.map_err(|e|e.to_string())?;
+    check(response.status())?;
+    response.json().await.map_err(|e|e.to_string())
+}
+#[derive(Serialize)]
+struct ClubInformation<'a>{
+    name:&'a str,description:&'a str,logo_url:Option<&'a str>,is_public:bool,
+}
+pub async fn update_club_information(
+    token:&str,id:&str,name:&str,description:&str,logo_url:Option<&str>,is_public:bool,
+)->Result<(),String>{
+    let response=Client::new().put(format!("{}/clubs/{id}/information",base()))
+        .bearer_auth(token)
+        .json(&ClubInformation{name,description,logo_url,is_public})
+        .send().await.map_err(|e|e.to_string())?;
+    check(response.status())
 }
 pub async fn clubs(token:&str)->Result<Vec<Club>,String>{
     let r=Client::new().get(format!("{}/clubs",base())).bearer_auth(token)

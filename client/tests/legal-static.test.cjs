@@ -13,7 +13,8 @@ test("all four indexable URLs are public and login is not indexed",()=>{
  for(const route of ["/admin","/settings","/players","/login"]){
    assert.ok(!map.includes("fr"+route),"private route in sitemap: "+route);
  }
- assert.ok(robots.includes("Disallow: /login"));
+ assert.ok(robots.includes("Disallow: /")); // Default deny includes the login and private routes.
+ assert.ok(robots.includes("Allow: /public"));
  assert.ok(robots.includes("Sitemap: https://seppyl.donnarieix.fr/sitemap.xml"));
 });
 test("legal links, contact and release are in the shared footer",()=>{

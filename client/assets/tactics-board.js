@@ -290,7 +290,7 @@
     });
     // Keyboard shortcuts can be used after entering the canvas; an input
     // focused elsewhere is never overridden by hover or a wheel interaction.
-    svg.addEventListener("pointerdown",()=>{if(!isEditing())svg.focus({preventScroll:true});});
+    svg.addEventListener("pointerdown",()=>svg.focus({preventScroll:true}));
     document.addEventListener("pointerdown",event=>{
       if(!root.contains(event.target))hidePalette();
       else if(palette && !palette.contains(event.target) && !event.target.closest("[data-tactics-svg]"))hidePalette();

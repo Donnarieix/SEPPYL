@@ -21,6 +21,7 @@ mod membership;
 mod team_management;
 mod public_directory;
 mod audit;
+pub mod changelog;
 
 use home::Home;
 use login::Login;

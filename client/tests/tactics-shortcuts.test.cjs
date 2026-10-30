@@ -69,7 +69,7 @@ function fixture(){
       target:marker,shiftKey:false});
     svg.emit("pointerup",{});
   }
-  return {svg,root,palette,output,quick,document,select};
+  return {svg,root,palette,output,quick,document,select,size};
 }
 
 test("canvas wheel resizes selected object and right click changes its color",()=>{
@@ -77,6 +77,7 @@ test("canvas wheel resizes selected object and right click changes its color",()
   f.select();
   f.svg.emit("wheel",{deltaY:-1,preventDefault(){}});
   assert.equal(JSON.parse(f.output.value)[0].size,24);
+  assert.equal(f.size.value,"24");
   let prevented=false;
   f.svg.emit("contextmenu",{
     target:{closest(){return null;}},clientX:300,clientY:300,

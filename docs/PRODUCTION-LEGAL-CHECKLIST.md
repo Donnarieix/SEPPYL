@@ -1,6 +1,6 @@
 # SEPPYL — Préparation légale et SEO avant mise en ligne
 
-Les pages publiques sont disponibles sans connexion sur `/mentions-legales`, `/confidentialite` et `/cgu`. Le footer commun présente également l'email de support, la version calculée à partir de `client/Cargo.toml` (0.1.0 → v0.1), et le lien « Développé par LuDoSniper » pointant vers `https://github.com/LuDoSniper`.
+Les pages publiques sont disponibles sans connexion sur `/mentions-legales`, `/confidentialite` et `/cgu`. Le footer commun présente également l'email de support, la version calculée à partir de `client/Cargo.toml` (0.1.0 → v0.1), et le lien « Développé par Donnarieix » pointant vers `https://github.com/Donnarieix`.
 
 ## Configuration de publication : obligatoire avant diffusion publique
 

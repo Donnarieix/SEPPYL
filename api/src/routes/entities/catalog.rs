@@ -51,7 +51,7 @@ pub async fn owned(
     let role=organization::user_role(state,claims.sub).await?;
     let allowed=match item.team_id {
         Some(team_id)=>organization::can_read_team(state,claims,role,team_id).await?,
-        None=>item.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+        None=>item.user_id==claims.sub || role.is_admin(),
     };
     if allowed{Ok(item)}else{Err(StatusCode::NOT_FOUND)}
 }
@@ -64,7 +64,7 @@ pub async fn writable(claims:&Claims,state:&AppState,id:Uuid)
         if !organization::can_write_team(state,claims,role,team_id).await?{
             return Err(StatusCode::NOT_FOUND);
         }
-    } else if item.user_id!=claims.sub && role!=crate::middleware::Role::Administrator {
+    } else if item.user_id!=claims.sub && !role.is_admin() {
         return Err(StatusCode::NOT_FOUND);
     }
     Ok(item)
@@ -102,7 +102,7 @@ pub async fn list(
     for activity in all {
         let visible=match activity.team_id {
             Some(team_id)=>organization::can_read_team(&state,&claims,role,team_id).await?,
-            None=>activity.user_id==claims.sub || role==crate::middleware::Role::Administrator,
+            None=>activity.user_id==claims.sub || role.is_admin(),
         };
         if visible {activities.push(activity);}
     }

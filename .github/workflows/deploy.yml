@@ -93,7 +93,7 @@ jobs:
             echo "::error::Configure the SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH Actions secret before the initial release."
             exit 1
           fi
-          if ! printf '%s' "$BOOTSTRAP_HASH" | grep -q '^\\$argon2id\\$'; then
+          if [[ "$BOOTSTRAP_HASH" != '$argon2id$'* ]]; then
             echo "::error::Bootstrap secret must contain an Argon2id password hash."
             exit 1
           fi

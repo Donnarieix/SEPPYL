@@ -274,14 +274,15 @@ pub async fn grant_global_role(
     Json(body): Json<GrantGlobalRole>,
 ) -> ApiResult<StatusCode> {
     if !role.0.is_admin() { return Err(StatusCode::FORBIDDEN); }
-    if !matches!(body.role.as_str(),"user"|"trainer"|"manager"|"administrator") {
+    if !matches!(body.role.as_str(),"user"|"trainer"|"manager"|"administrator"|"maintainer") {
         return Err(StatusCode::BAD_REQUEST);
     }
     let user=user::Entity::find_by_id(user_id).one(&state.db).await.map_err(db_error)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    // This endpoint can never grant, demote or remove Maintainer.
-    // Promotion is exclusively performed offline via the server CLI.
-    if user.role.as_deref()==Some("maintainer"){
+    // Maintainer is the only online role allowed to promote or manage other
+    // maintainers. Administrators cannot obtain or modify this higher role.
+    if role.0!=Role::Maintainer &&
+        (body.role=="maintainer" || user.role.as_deref()==Some("maintainer")){
         return Err(StatusCode::FORBIDDEN);
     }
     let mut active:user::ActiveModel=user.into();
@@ -320,15 +321,28 @@ mod integration_tests {
             State(state.clone()),Path(user_id),
             Json(GrantGlobalRole{role:"maintainer".into()})
         ).await;
-        assert_eq!(forbidden,Err(StatusCode::BAD_REQUEST));
+        assert_eq!(forbidden,Err(StatusCode::FORBIDDEN));
         let forbidden=grant_global_role(
             Extension(claims),Extension(CurrentRole(Role::Administrator)),
             State(state.clone()),Path(maintainer),
             Json(GrantGlobalRole{role:"user".into()})
         ).await;
         assert_eq!(forbidden,Err(StatusCode::FORBIDDEN));
-        let after=user::Entity::find_by_id(maintainer).one(&state.db).await.unwrap().unwrap();
-        assert_eq!(after.role.as_deref(),Some("maintainer"));
+        let owner=Claims{sub:maintainer,exp:u64::MAX};
+        grant_global_role(
+            Extension(owner.clone()),Extension(CurrentRole(Role::Maintainer)),
+            State(state.clone()),Path(user_id),
+            Json(GrantGlobalRole{role:"maintainer".into()})
+        ).await.unwrap();
+        assert_eq!(user::Entity::find_by_id(user_id).one(&state.db).await.unwrap()
+            .unwrap().role.as_deref(),Some("maintainer"));
+        grant_global_role(
+            Extension(owner),Extension(CurrentRole(Role::Maintainer)),
+            State(state.clone()),Path(user_id),
+            Json(GrantGlobalRole{role:"administrator".into()})
+        ).await.unwrap();
+        assert_eq!(user::Entity::find_by_id(user_id).one(&state.db).await.unwrap()
+            .unwrap().role.as_deref(),Some("administrator"));
         assert!(Role::Maintainer.is_admin());
     }
     #[tokio::test]

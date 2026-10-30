@@ -19,6 +19,7 @@ pub fn Header() -> Element {
     let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
         if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
+        document::Meta { name:"robots", content:"noindex,nofollow,noarchive" }
         header { class: "topbar",
             div { class: "topbar-inner",
                 Link { to: Route::Trainings {}, class: "logo", "SEPPYL" }

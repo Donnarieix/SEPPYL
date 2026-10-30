@@ -2172,3 +2172,74 @@ button.grid-add-button:hover,
 @media(max-width:690px){
  .club-team-row>.team-manage-row{justify-content:flex-start}
 }
+
+
+/* Contrasté: a separate intentional visual system, not a stronger shadow on dark. */
+.site-root[data-theme="contrast"]{
+  --page:#05070a;
+  --surface:#10161e;
+  --surface-soft:#192430;
+  --surface-hover:#253543;
+  --line:#7c96ac;
+  --text:#ffffff;
+  --muted:#d7e5f2;
+  --accent:#85d6ff;
+  color-scheme:dark;
+}
+.site-root[data-theme="contrast"] :is(.panel,.settings-panel,.tactics-workspace,
+ .dialog-panel,.club-sidebar,.catalog-card,.workspace-team-card){
+  border-color:var(--line);box-shadow:none
+}
+.site-root[data-theme="contrast"] :is(.button.solid,.settings-choice.selected,
+ .tactic-toolbar-section button.selected){
+  background:#85d6ff!important;color:#061722!important;border-color:#85d6ff!important;
+}
+.site-root[data-theme="contrast"] :is(.button.outline,.workspace-tabs button.selected,
+ .workspace-subtabs button.selected){border-color:var(--accent);color:var(--accent)}
+.site-root[data-theme="contrast"] :is(input,textarea,select):focus-visible{
+  outline:3px solid var(--accent)!important;outline-offset:2px;
+}
+.site-root[data-theme="contrast"] a{text-underline-offset:3px}
+.site-root[data-theme="contrast"] :is(.muted-small,.workspace-hint,.panel-head p){
+  color:var(--muted)
+}
+.site-root[data-theme="contrast"] .tactics-canvas{box-shadow:inset 0 0 0 2px var(--accent)}
+/* Consistent trigger design for all dropdowns, independent of the browser popup. */
+.site-root select{
+  border-radius:10px!important;
+  padding:10px 44px 10px 15px!important;
+  min-height:44px;
+  font-weight:550;
+  box-shadow:0 1px 2px #081f3010,inset 0 1px 0 #ffffff06;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238497a7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-size:17px;
+}
+.site-root select:hover:not(:disabled){box-shadow:0 3px 12px #081f3018}
+.seppyl-select-popover{
+  position:fixed;z-index:10000;display:flex;flex-direction:column;
+  padding:5px;gap:2px;max-height:min(340px,55dvh);overflow:auto;
+  min-width:160px;box-sizing:border-box;border:1px solid var(--line);
+  border-radius:11px;background:var(--surface);color:var(--text);
+  box-shadow:0 18px 54px #08152245,0 4px 15px #09182320;
+  scrollbar-width:thin;overscroll-behavior:contain;
+  animation:select-reveal .14s cubic-bezier(.2,.7,.3,1)
+}
+.seppyl-select-popover[hidden]{display:none}
+.seppyl-select-option{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;border:0;border-radius:7px;background:transparent;color:inherit;
+  padding:10px 12px;font:inherit;font-size:13px;text-align:left;
+  cursor:pointer;min-height:36px;transition:background .1s
+}
+.seppyl-select-option:hover,.seppyl-select-option:focus-visible{
+  background:var(--surface-hover);outline:none
+}
+.seppyl-select-option[aria-selected="true"]{
+  background:var(--surface-soft);color:var(--accent);font-weight:750
+}
+.seppyl-select-option[aria-selected="true"]::after{content:"✓";font-weight:800}
+.seppyl-select-option:disabled{opacity:.5;cursor:not-allowed}
+.seppyl-select-empty{padding:11px 13px;color:var(--muted);font-size:12px}
+@keyframes select-reveal{from{opacity:0;transform:translateY(-5px) scale(.98)}
+ to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.seppyl-select-popover{animation:none}}

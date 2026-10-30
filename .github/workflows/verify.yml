@@ -27,14 +27,14 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
-      - name: Resolve dependencies
-        run: cargo generate-lockfile
+      - name: Verify production lockfile without modifying it
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Check API
-        run: cargo check -p api
+        run: cargo check -p api --locked
       - name: Check Web Client
-        run: cargo check -p client --target wasm32-unknown-unknown --no-default-features --features web
+        run: cargo check -p client --target wasm32-unknown-unknown --no-default-features --features web --locked
       - name: Test API
-        run: cargo test -p api
+        run: cargo test -p api --locked
 
       - name: Verify startup with existing SQLite data
         env:

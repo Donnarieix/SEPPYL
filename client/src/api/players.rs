@@ -28,7 +28,7 @@ pub async fn save(token:&str,id:Option<&str>,firstname:&str,lastname:&str,number
         StatusCode::BAD_REQUEST=>Err("Vérifiez le prénom, le nom et le numéro de la joueuse.".into()),
         StatusCode::FORBIDDEN=>Err("Vous n'avez pas les droits pour modifier cette joueuse dans toutes ses équipes.".into()),
         StatusCode::NOT_FOUND=>Err("Cette fiche n'existe plus ou n'est plus accessible.".into()),
-        StatusCode::CONFLICT=>Err("L'enregistrement est en conflit avec une donnée existante. Vérifiez les informations et réessayez.".into()),
+        StatusCode::CONFLICT=>Err("Une joueuse possède déjà exactement ce prénom, ce nom et ce numéro. Ouvrez sa fiche existante.".into()),
         StatusCode::INTERNAL_SERVER_ERROR=>Err("L'enregistrement a échoué côté serveur. Consultez les logs de l'API pour connaître la cause.".into()),
         status=>Err(format!("Impossible d'enregistrer la joueuse (HTTP {status}).")),
     }

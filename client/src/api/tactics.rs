@@ -9,6 +9,7 @@ pub struct DrawingObject {
     #[serde(default)] pub size:Option<f64>,
     #[serde(default)] pub control_x:Option<f64>,
     #[serde(default)] pub control_y:Option<f64>,
+    #[serde(default)] pub dashed:bool,
 }
 #[derive(Clone,Debug,PartialEq,Serialize,Deserialize)]
 pub struct Diagram { pub id:String,pub name:String,pub layout:String,pub objects:Vec<DrawingObject> }

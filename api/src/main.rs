@@ -135,7 +135,12 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    // The deployed systemd service provides SEPPYL_BIND=127.0.0.1:3101;
+    // dev instances keep their original port without additional setup.
+    let bind=std::env::var("SEPPYL_BIND").unwrap_or_else(|_|"0.0.0.0:3000".into());
+    let listener = TcpListener::bind(&bind).await
+        .expect("Unable to bind SEPPYL API to configured address");
+    tracing::info!(%bind,"SEPPYL API ready");
     axum::serve(listener, app).await.unwrap();
 }
 

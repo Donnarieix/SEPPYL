@@ -56,6 +56,15 @@ pub fn Login() -> Element {
                     label { "Mot de passe" }
                     input { r#type: "password", value: "{password}", required: true, autocomplete: if *is_registration.read() { "new-password" } else { "current-password" },
                         placeholder: "Votre mot de passe", oninput: move |e| password.set(e.value()) }
+                    if *is_registration.read(){
+                        p{class:"signup-legal",
+                            "Avant de créer votre compte, consultez nos "
+                            Link{to:crate::routes::Route::PrivacyPolicy{},"informations sur les données personnelles"}
+                            " et nos "
+                            Link{to:crate::routes::Route::TermsOfUse{},"conditions d'utilisation"}
+                            "."
+                        }
+                    }
                     if let Some(message) = error.read().as_ref() {
                         p { class: "login-error", role: "alert", "{message}" }
                     }

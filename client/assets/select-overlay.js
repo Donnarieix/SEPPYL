@@ -13,6 +13,7 @@
     ? document.fullscreenElement : el.closest(".site-root");
   function close(restoreFocus = false) {
     const previous = active;
+    if (previous) previous.removeAttribute("aria-expanded");
     panel?.remove();
     panel = null; active = null; options = []; index = -1;
     if (restoreFocus && previous?.isConnected) previous.focus({preventScroll:true});
@@ -72,12 +73,6 @@
     if(current?.scrollIntoView)current.scrollIntoView({block:"nearest"});
     el.setAttribute("aria-expanded","true");
   }
-  const originalClose=close;
-  // Keep the expanded state in sync on every close path.
-  close=function(restore=false){
-    if (active) active.removeAttribute("aria-expanded");
-    originalClose(restore);
-  };
   document.addEventListener("pointerdown",e=>{
     const el=e.target;
     if (selectable(el) && e.button===0) {

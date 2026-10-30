@@ -2513,3 +2513,26 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 @media(prefers-reduced-motion:reduce){
   .seppyl-toast{animation:none;transition:none}
 }
+
+
+/* A route tab must not establish a transformed containing block: this was
+   shifting fixed crop dialogs and introducing visible jumps on every switch. */
+.site-root .workspace-tab-panel{animation:none;contain:none}
+.site-root .club-information-panel{overflow:visible}
+.site-root .admin-club-create input,
+.site-root .club-information-form input:not([type="range"]):not([type="checkbox"]){
+  border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);color:var(--text);
+  min-height:43px;padding:10px 13px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.site-root .admin-club-create input:focus-visible,
+.site-root .club-information-form input:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px
+}
+.public-team-row{display:flex;gap:12px;align-items:center;
+  padding:12px 0;border-top:1px solid var(--line)}
+.public-team-row strong{font-size:13px}
+.public-team-row p{margin:4px 0 0;line-height:1.45}
+.public-team-row .workspace-team-icon{flex:0 0 42px;width:42px;height:42px;overflow:hidden}
+.club-team-row .club-team-name .muted-small{line-height:1.4}

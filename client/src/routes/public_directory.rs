@@ -18,7 +18,17 @@ pub fn PublicDirectory()->Element{
                         for club in items{
                             article{class:"catalog-card",key:"{club.id}",
                                 div{class:"catalog-content",
-                                    h2{"{club.name}"}
+                                    div{class:"public-club-heading",
+                                        if let Some(src)=organization::club_logo_src(club.logo_url.as_deref()){
+                                            span{class:"public-club-logo",img{src:"{src}",alt:"Logo de {club.name}"}}
+                                        }
+                                        div{
+                                            h2{"{club.name}"}
+                                            if let Some(description)=club.description.as_deref(){
+                                                p{"{description}"}
+                                            }
+                                        }
+                                    }
                                     PublicTeams{club_id:club.id.clone()}
                                 }
                             }

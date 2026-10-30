@@ -2367,3 +2367,26 @@ button.grid-add-button:hover,
  .club-information-form{padding:15px}
  .admin-roster-heading{flex-wrap:wrap}
 }
+
+
+/* Diagram CRUD stays in the header. Confirm destructive actions in an overlay
+   so both the regular editor and fullscreen keep their entire canvas height. */
+.tactics-heading-actions{position:relative}
+.tactics-delete-compact{position:relative;display:inline-flex;align-items:center;flex:0 0 auto}
+.tactics-delete-trigger{min-height:39px;white-space:nowrap}
+.tactics-delete-confirm{
+  position:absolute;top:calc(100% + 9px);right:0;z-index:80;
+  width:min(310px,calc(100vw - 32px));padding:16px;
+  box-sizing:border-box;border:1px solid var(--line);border-radius:11px;
+  background:var(--surface);color:var(--text);
+  box-shadow:0 16px 42px #07172738;
+  display:flex;flex-direction:column;align-items:stretch;gap:13px;
+}
+.tactics-delete-confirm strong{font-size:13px;line-height:1.45}
+.tactics-delete-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+.tactics-delete-confirm-actions button{min-height:34px}
+.tactics-page:fullscreen .tactics-delete-compact{flex:0 0 auto}
+@media(max-width:700px){
+  .tactics-heading-actions{justify-content:flex-start}
+  .tactics-delete-confirm{right:auto;left:0}
+}

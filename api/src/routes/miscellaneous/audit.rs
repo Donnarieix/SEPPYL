@@ -47,7 +47,7 @@ pub async fn list(
     if query.page==0 || !accepted_size(query.page_size){return Err(StatusCode::BAD_REQUEST);}
 
     let mut selection=audit_event::Entity::find();
-    if role.0!=Role::Administrator{
+    if !role.0.is_admin(){
         // Never filter after pagination: totals, page boundaries and the
         // presence of other clubs' events must remain undiscoverable.
         // Scope-less historical entries are excluded for non-admins.

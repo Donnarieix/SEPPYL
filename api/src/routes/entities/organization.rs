@@ -765,3 +765,79 @@ mod roster_lifecycle_tests{
         assert_eq!(remaining[0].id,id);
     }
 }
+
+#[cfg(test)]
+mod club_information_regression {
+    use super::*;
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn admin_inventory_is_separate_from_memberships_and_club_metadata_is_editable(){
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let admin_id=Uuid::new_v4();let guest_id=Uuid::new_v4();
+        for (id,username,role) in [(admin_id,"admin","administrator"),(guest_id,"guest","user")]{
+            user::ActiveModel{id:Set(id),username:Set(username.into()),
+                password:Set("test".into()),role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let admin=Claims{sub:admin_id,exp:u64::MAX};
+        let guest=Claims{sub:guest_id,exp:u64::MAX};
+        let role=CurrentRole(Role::Administrator);
+        let (_,first)=create_club(Extension(admin.clone()),Extension(role),State(state.clone()),
+            Json(CreateNamed{name:"Club A".into()})).await.unwrap();
+        let (_,second)=create_club(Extension(admin.clone()),Extension(role),State(state.clone()),
+            Json(CreateNamed{name:"Club B".into()})).await.unwrap();
+        let all=list_admin_clubs(Extension(role),State(state.clone())).await.unwrap().0;
+        assert_eq!(all.len(),2);
+        let personal=list_clubs(Extension(admin.clone()),Extension(role),
+            State(state.clone())).await.unwrap().0;
+        assert!(personal.is_empty(),"Global admin rights are not club membership");
+        club_membership::ActiveModel{
+            user_id:Set(admin_id),club_id:Set(first.0.id),
+            role:Set("manager".into()),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let personal=list_clubs(Extension(admin.clone()),Extension(role),
+            State(state.clone())).await.unwrap().0;
+        assert_eq!(personal.len(),1);
+        assert_eq!(personal[0].id,first.0.id);
+        let denied=list_admin_clubs(Extension(CurrentRole(Role::User)),
+            State(state.clone())).await.err();
+        assert_eq!(denied,Some(StatusCode::FORBIDDEN));
+        let invalid=update_club_information(Extension(admin.clone()),Extension(role),
+            State(state.clone()),Path(second.0.id),Json(ClubInformation{
+                name:"B".into(),description:"A".into(),
+                logo_url:Some("javascript:alert(1)".into()),is_public:true,
+            })).await.err();
+        assert_eq!(invalid,Some(StatusCode::BAD_REQUEST));
+        let forbidden=update_club_information(Extension(guest),
+            Extension(CurrentRole(Role::User)),State(state.clone()),
+            Path(second.0.id),Json(ClubInformation{
+                name:"Club B".into(),description:String::new(),logo_url:None,is_public:false,
+            })).await.err();
+        assert_eq!(forbidden,Some(StatusCode::FORBIDDEN));
+        let Json(updated)=update_club_information(
+            Extension(admin),Extension(role),State(state.clone()),
+            Path(second.0.id),Json(ClubInformation{
+                name:"Club B renommé".into(),
+                description:"Club amateur et école de sport".into(),
+                logo_url:Some("https://example.org/logo.png".into()),
+                is_public:true,
+            })
+        ).await.unwrap();
+        assert_eq!(updated.name,"Club B renommé");
+        assert_eq!(updated.description.as_deref(),Some("Club amateur et école de sport"));
+        assert_eq!(updated.logo_url.as_deref(),Some("https://example.org/logo.png"));
+        assert_eq!(updated.is_public,Some(true));
+        assert_eq!(public_clubs(State(state)).await.unwrap().0.len(),1);
+    }
+    #[test]
+    fn only_approved_logo_urls_are_accepted(){
+        assert!(valid_logo(None));
+        assert!(valid_logo(Some("https://example.com/logo.webp")));
+        assert!(valid_logo(Some(&format!("/catalog/images/{}.png",Uuid::new_v4()))));
+        for url in ["javascript:alert(1)","data:image/svg+xml;base64,AA","/catalog/images/../secret","http://example.com/test.png"]{
+            assert!(!valid_logo(Some(url)));
+        }
+    }
+}

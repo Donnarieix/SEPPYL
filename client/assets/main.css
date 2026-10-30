@@ -2266,3 +2266,38 @@ button.grid-add-button:hover,
 .admin-search-clear:hover{color:var(--text);background:var(--surface-hover)}
 .admin-search-empty{padding:28px;display:grid;gap:8px;justify-items:start}
 .admin-search-empty p{margin:0;color:var(--muted)}
+
+
+/* Compact tactical header and non-layout-shifting save feedback */
+.tactics-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px;min-width:0}
+.tactics-heading-actions .button{white-space:nowrap}
+.tactics-save-notice{display:inline-flex;max-width:min(270px,28vw);align-items:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:8px 11px;border:1px solid var(--line);border-radius:8px;
+  font-size:12px;font-weight:650;color:var(--accent);
+  animation:select-reveal .18s ease}
+.tactics-page .tactics-actions:not(:has(button)){display:none}
+.tactic-context-palette,.tactic-context-style{
+  box-sizing:border-box;flex:none!important;align-self:start;justify-self:start;
+  grid-area:unset!important;min-width:0!important;max-width:218px!important;
+  width:218px!important;min-height:0!important;height:auto!important;
+  position:absolute!important;transform:none!important;inset:auto!important
+}
+.tactic-context-palette.open{display:flex!important;flex-direction:row!important;
+  flex-wrap:wrap!important;align-content:start!important;gap:8px!important}
+.tactic-context-style{display:none;z-index:31;padding:9px;gap:6px;
+  border-radius:10px;border:1px solid var(--line);background:var(--surface);
+  box-shadow:0 14px 38px #08172845}
+.tactic-context-style.open{display:flex;flex-direction:column}
+.tactic-context-style button{border:1px solid var(--line);border-radius:7px;
+  background:var(--surface-soft);color:var(--text);padding:8px 10px;text-align:left;cursor:pointer}
+.tactic-context-style button:hover{border-color:var(--accent)}
+/* Theme-aware, discreet scrollbar treatment for all internal workspaces. */
+.site-root,.site-root *{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.site-root ::-webkit-scrollbar{width:9px;height:9px}
+.site-root ::-webkit-scrollbar-track{background:transparent;border-radius:12px}
+.site-root ::-webkit-scrollbar-thumb{background:var(--line);border:2px solid var(--surface);
+  border-radius:12px;min-height:35px}
+.site-root ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+.site-root ::-webkit-scrollbar-corner{background:transparent}
+@media(max-width:720px){.tactics-save-notice{max-width:100%;order:3}}

@@ -89,15 +89,14 @@ pub struct ClubInformation {
     pub logo_url:Option<String>,
     pub is_public:bool,
 }
-fn valid_logo(url:Option<&str>)->bool{
-    url.is_none_or(|s|s.is_empty() ||
-        (s.len()<=2000 && (s.starts_with("https://") ||
-        (s.starts_with("/catalog/images/") &&
-         s.rsplit('/').next().is_some_and(|filename|{
-            let Some((identifier,extension))=filename.rsplit_once('.') else{return false;};
-            Uuid::parse_str(identifier).is_ok() &&
-            matches!(extension,"png"|"jpg"|"webp"|"gif")
-         }))))
+fn valid_logo(url:Option<&str>)->bool {
+    let Some(url)=url else{return true;};
+    if url.is_empty(){return true;}
+    if url.len()>2000{return false;}
+    if url.starts_with("https://"){return true;}
+    let Some(filename)=url.strip_prefix("/catalog/images/") else{return false;};
+    let Some((identifier,extension))=filename.rsplit_once('.') else{return false;};
+    Uuid::parse_str(identifier).is_ok() && matches!(extension,"png"|"jpg"|"webp"|"gif")
 }
 pub async fn update_club_information(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,

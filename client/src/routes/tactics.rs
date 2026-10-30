@@ -51,6 +51,10 @@ pub fn Tactics() -> Element {
                         p { "Construisez vos exercices sur un terrain, organisez les joueurs et tracez leurs déplacements." }
                     }
                     div { class:"tactics-heading-actions",
+                        if let Some(message)=notice.read().as_ref(){
+                            span { class:"tactics-save-notice",role:"status","{message}" }
+                        }
+
                             button { class:"button solid tactics-save", disabled:*busy.read(),
                                 onclick:move |_|{
                                     if *busy.read(){return;}
@@ -84,9 +88,6 @@ pub fn Tactics() -> Element {
                                 },
                                 if *busy.read() { "Enregistrement…" } else { "Enregistrer" }
                             }
-                        if let Some(message)=notice.read().as_ref(){
-                            span { class:"tactics-save-notice",role:"status","{message}" }
-                        }
                     button { class: "button solid",
                         onclick: move |_| {
                             selected_id.set(None);

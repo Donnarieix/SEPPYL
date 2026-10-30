@@ -71,6 +71,8 @@ impl AppState {
             user.insert(&db).await.unwrap();
         }
 
+        crate::routes::miscellaneous::changelog::seed(&db).await
+            .expect("Unable to seed changelog history");
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
 

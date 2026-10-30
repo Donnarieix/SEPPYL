@@ -87,13 +87,6 @@ pub fn Tactics() -> Element {
                         if let Some(message)=notice.read().as_ref(){
                             span { class:"tactics-save-notice",role:"status","{message}" }
                         }
-                    button { class: "button outline tactics-fullscreen-toggle",
-                        r#type:"button",
-                        "data-tactics-fullscreen":"true",
-                        "aria-pressed":"false",
-                        title:"Afficher le studio sur tout l'écran (Échap pour quitter)",
-                        "Plein écran"
-                    }
                     button { class: "button solid",
                         onclick: move |_| {
                             selected_id.set(None);
@@ -105,6 +98,13 @@ pub fn Tactics() -> Element {
                             notice.set(None);
                         },
                         "+ Nouveau schéma"
+                    }
+                    button { class: "button outline tactics-fullscreen-toggle",
+                        r#type:"button",
+                        "data-tactics-fullscreen":"true",
+                        "aria-pressed":"false",
+                        title:"Afficher le studio sur tout l'écran (F pour basculer, Échap pour quitter)",
+                        "Plein écran"
                     }
                     }
                 }
@@ -180,7 +180,7 @@ pub fn Tactics() -> Element {
                                 }
                                 div { class:"tactic-toolbar-section",
                                     span { class:"tactic-toolbar-label","Trajectoires" }
-                                    button { r#type:"button","data-tactic-tool":"arrow","Droite" kbd { "F" } }
+                                    button { r#type:"button","data-tactic-tool":"arrow","Droite" kbd { "A" } }
                                     button { r#type:"button","data-tactic-tool":"curve","Courbe" kbd { "C" } }
                                 }
                                 div { class:"tactic-toolbar-section tactic-line-style",
@@ -232,8 +232,8 @@ pub fn Tactics() -> Element {
                                     div { class:"tactic-shortcuts-grid",
                                         span { "S — sélectionner" } span { "J — joueuse" }
                                         span { "B — ballon" } span { "P — plot" }
-                                        span { "G — mini-but" } span { "F — flèche droite" }
-                                        span { "C — courbe" } span { "E — gomme" }
+                                        span { "G — mini-but" } span { "A — flèche droite" }
+                                        span { "C — courbe" } span { "F — plein écran" } span { "E — gomme" }
                                         span { "Suppr / Retour — supprimer" } span { "Échap — annuler la sélection" }
                                     }
                                 }

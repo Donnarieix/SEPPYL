@@ -136,19 +136,6 @@ pub fn Organization()->Element{
                         }
                     }
                     div{class:"club-main",
-                        div{class:"club-main-toolbar",
-                            div{class:"field",
-                                label{"Équipe"}
-                                select{
-                                    value:"{team_id}",disabled:club_id.read().is_empty(),
-                                    onchange:move |e|team_id.set(e.value()),
-                                    option{value:"","Toutes les équipes"}
-                                    for team in &teams_list{
-                                        option{key:"{team.id}",value:"{team.id}","{team.name}"}
-                                    }
-                                }
-                            }
-                        }
                 if club_id.read().is_empty(){
                     div{class:"workspace-empty",
                         h2{"Sélectionnez un club"}
@@ -160,12 +147,9 @@ pub fn Organization()->Element{
                         button{class:if *tab.read()=="overview"{"selected"}else{""},
                             "aria-selected":if *tab.read()=="overview"{"true"}else{"false"},
                             onclick:move |_|tab.set("overview".into()),"Vue d’ensemble"}
-                        button{class:if *tab.read()=="roster"{"selected"}else{""},
-                            "aria-selected":if *tab.read()=="roster"{"true"}else{"false"},
-                            onclick:move |_|tab.set("roster".into()),"Effectif"}
+                        button{class:if *tab.read()=="teams"{"selected"}else{""},
+                            onclick:move |_|{team_id.set(String::new());tab.set("teams".into());},"Équipes"}
                         if can_manage{
-                            button{class:if *tab.read()=="teams"{"selected"}else{""},
-                                onclick:move |_|tab.set("teams".into()),"Équipes"}
                             button{class:if *tab.read()=="access"{"selected"}else{""},
                                 onclick:move |_|tab.set("access".into()),"Accès"}
                             button{class:if *tab.read()=="settings"{"selected"}else{""},
@@ -177,23 +161,6 @@ pub fn Organization()->Element{
                             section{class:"panel",
                                 div{class:"panel-head",
                                     div{h2{"Équipes du club"}p{"Choisissez une équipe pour consulter son effectif."}}
-                                }
-                                div{class:"club-flow-guide",
-                                    div{
-                                        span{class:"club-flow-number","1"}
-                                        strong{"Équipe"}
-                                        small{"Sélectionnez le groupe concerné."}
-                                    }
-                                    div{
-                                        span{class:"club-flow-number","2"}
-                                        strong{"Effectif"}
-                                        small{"Les joueuses sont partagées dans l'équipe."}
-                                    }
-                                    div{
-                                        span{class:"club-flow-number","3"}
-                                        strong{"Entraînement"}
-                                        small{"Préparez une séance et évaluez les présences."}
-                                    }
                                 }
                                 div{class:"workspace-card-grid",
                                     for team in &teams_list{
@@ -207,7 +174,7 @@ pub fn Organization()->Element{
                                             },
                                             span{class:"workspace-team-icon","⚽"}
                                             strong{"{team.name}"}
-                                            span{class:"muted-small","Voir l’effectif"}
+                                            span{class:"muted-small","Consulter l'effectif"}
                                         }
                                     }
                                 }
@@ -240,7 +207,10 @@ pub fn Organization()->Element{
                                 div{class:"club-roster-grid",
                                 section{class:"panel",
                                     div{class:"panel-head",
-                                        div{h2{"Joueuses de l'équipe"}p{"Effectif partagé entre les entraîneurs de cette équipe. Les présences et notes sont liées à ces joueuses."}}
+                                        div{h2{"{teams_list.iter().find(|t| t.id==*team_id.read()).map(|t|t.name.as_str()).unwrap_or("Effectif de l'équipe")}"}p{"Joueuses de cette équipe"}}
+                                        button{class:"button outline small",r#type:"button",
+                                            onclick:move |_|{team_id.set(String::new());tab.set("teams".into());},
+                                            "Retour aux équipes"}
                                     }
                                     match roster.read().clone(){
                                         Some(Ok(items))=>rsx!{
@@ -288,7 +258,7 @@ pub fn Organization()->Element{
                                             button{class:if *roster_action.read()=="create"{"selected"}else{""},
                                                 onclick:move |_|roster_action.set("create".into()),"Créer une joueuse"}
                                             button{class:if *roster_action.read()=="existing"{"selected"}else{""},
-                                                onclick:move |_|roster_action.set("existing".into()),"Rattacher une fiche existante"}
+                                                onclick:move |_|roster_action.set("existing".into()),"Ajouter une joueuse existante"}
                                         }
                                         if *roster_action.read()=="create"{
                                             CreateTeamPlayer{token:token.clone(),team_id:team_id.read().clone(),
@@ -327,46 +297,70 @@ pub fn Organization()->Element{
                                                     }
                                                 }
                                             }
-                                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Rattacher à l'équipe"}
+                                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Ajouter à l'effectif"}
                                         }
                                         }
                                     }
                                 }
                                 }
                             }
-                        }else if *tab.read()=="teams" && can_manage{
+                        }else if *tab.read()=="teams"{
                             section{class:"panel",
-                                div{class:"panel-head",div{h2{"Gestion des équipes"}p{"Renommez ou supprimez une équipe vide. Les équipes ayant un historique d’entraînements ou des activités ne peuvent pas être supprimées."}}}
+                                div{class:"panel-head",
+                                    div{h2{"Équipes"}p{"Consultez les effectifs et gérez vos équipes depuis un seul endroit."}}
+                                }
                                 div{class:"workspace-roster-list",
                                     for team in &teams_list{
-                                        TeamManagerRow{key:"{team.id}",team:team.clone(),token:token.clone(),
-                                            on_saved:move |_|{teams.restart();team_id.set(String::new());notice.set(Some("Équipe actualisée.".into()));},
-                                            on_error:move |error|notice.set(Some(error))}
-                                    }
-                                }
-                                form{class:"workspace-form",
-                                    onsubmit:{
-                                        let token=token.clone();
-                                        move |event|{
-                                            event.prevent_default();
-                                            let value=new_team.read().trim().to_string();
-                                            let club=club_id.read().clone();
-                                            if value.is_empty()||club.is_empty()||*busy.read(){return;}
-                                            let token=token.clone();
-                                            busy.set(true);
-                                            spawn(async move{
-                                                match org::create_team(&token,&club,&value).await{
-                                                    Ok(())=>{new_team.set(String::new());teams.restart();notice.set(Some("Équipe créée.".into()));}
-                                                    Err(e)=>notice.set(Some(e)),
-                                                }
-                                                busy.set(false);
-                                            });
+                                        div{class:"club-team-row",key:"{team.id}",
+                                            div{class:"club-team-name",
+                                                strong{"{team.name}"}
+                                                span{class:"muted-small","Équipe du club"}
+                                            }
+                                            button{class:"button outline small",r#type:"button",
+                                                onclick:{
+                                                    let id=team.id.clone();
+                                                    move |_|{
+                                                        team_id.set(id.clone());
+                                                        roster_action.set("create".into());
+                                                        tab.set("roster".into());
+                                                    }
+                                                },
+                                                "Voir l'effectif"
+                                            }
+                                            if can_manage{
+                                                TeamManagerRow{team:team.clone(),token:token.clone(),
+                                                    on_saved:move |_|{teams.restart();notice.set(Some("Équipe actualisée.".into()));},
+                                                    on_error:move |error|notice.set(Some(error))}
+                                            }
                                         }
-                                    },
-                                    div{class:"field",label{"Nouvelle équipe"},
-                                        input{value:"{new_team}",required:true,maxlength:"120",
-                                            placeholder:"Ex. U17 féminines",oninput:move |e|new_team.set(e.value())}}
-                                    button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Créer l'équipe"}
+                                    }
+                                    if teams_list.is_empty(){div{class:"panel-empty","Aucune équipe dans ce club."}}
+                                }
+                                if can_manage{
+                                    form{class:"workspace-form",
+                                        onsubmit:{
+                                            let token=token.clone();
+                                            move |event|{
+                                                event.prevent_default();
+                                                let value=new_team.read().trim().to_string();
+                                                let club=club_id.read().clone();
+                                                if value.is_empty()||club.is_empty()||*busy.read(){return;}
+                                                let token=token.clone();
+                                                busy.set(true);
+                                                spawn(async move{
+                                                    match org::create_team(&token,&club,&value).await{
+                                                        Ok(())=>{new_team.set(String::new());teams.restart();notice.set(Some("Équipe créée.".into()));}
+                                                        Err(e)=>notice.set(Some(e)),
+                                                    }
+                                                    busy.set(false);
+                                                });
+                                            }
+                                        },
+                                        div{class:"field",label{"Nouvelle équipe"},
+                                            input{value:"{new_team}",required:true,maxlength:"120",
+                                                placeholder:"Ex. U17 féminines",oninput:move |e|new_team.set(e.value())}}
+                                        button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Créer l'équipe"}
+                                    }
                                 }
                             }
                         }else if *tab.read()=="access" && can_manage{

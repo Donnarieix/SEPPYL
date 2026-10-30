@@ -34,6 +34,7 @@ use crate::{
 mod audit;
 mod entities;
 mod middleware;
+mod migrations;
 mod routes;
 mod services;
 mod state;

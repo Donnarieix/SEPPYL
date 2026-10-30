@@ -1,6 +1,7 @@
 name: Verify SEPPYL
 
 on:
+  workflow_call:
   push:
     branches:
       - ui-tableur

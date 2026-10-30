@@ -93,7 +93,7 @@ pub async fn migrate_legacy_player_firstname(
     if let Some(path)=backup_path{
         if !std::path::Path::new(path).exists(){
             db.execute_unprepared(&format!(
-                "VACUUM INTO '{}'",path.replace('\\'', "''")
+                "VACUUM INTO '{}'",path.replace("'", "''")
             )).await?;
             tracing::info!(path=%path,"Created pre-migration SQLite backup");
         }

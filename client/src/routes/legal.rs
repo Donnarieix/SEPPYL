@@ -55,8 +55,8 @@ pub fn SiteFooter()->Element {
                 }
                 div{class:"site-footer-meta",
                     span{class:"site-footer-version",title:"Version de SEPPYL","{version()}"}
-                    a{href:"https://github.com/LuDoSniper",target:"_blank",
-                        rel:"noopener noreferrer", "Développé par LuDoSniper"}
+                    a{href:"https://github.com/Donnarieix",target:"_blank",
+                        rel:"noopener noreferrer", "Développé par Donnarieix"}
                 }
             }
         }
@@ -113,7 +113,7 @@ pub fn LegalNotice()->Element {
                     h2{"Propriété intellectuelle"}
                     p{"L'application, son code et ses éléments graphiques sont protégés selon les droits et licences applicables. Les logos, textes, illustrations et contenus déposés par les clubs restent sous la responsabilité de leurs titulaires. Leur réutilisation nécessite l'autorisation des ayants droit, sauf exception légale ou licence le permettant."}
                     p{"Développement : "}
-                    a{href:"https://github.com/LuDoSniper",target:"_blank",rel:"noopener noreferrer","LuDoSniper sur GitHub"}
+                    a{href:"https://github.com/Donnarieix",target:"_blank",rel:"noopener noreferrer","Donnarieix sur GitHub"}
                 }
                 section{
                     h2{"Contact"}

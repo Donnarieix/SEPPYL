@@ -53,8 +53,9 @@ pub fn ChangelogHost()->Element{
     let active=history.iter().find(|item|item.version==*selected.read())
         .or_else(||history.first()).cloned();
     let is_maintainer=matches!(user.read().as_ref(),Some(Ok(value)) if value.role=="maintainer");
-    let unread=unread_status.read().as_ref()
-        .is_some_and(|value|value.as_ref().is_ok_and(|v|v.unread));
+    let unread_version=unread_status.read().as_ref()
+        .and_then(|value|value.as_ref().ok())
+        .and_then(|value|if value.unread{Some(value.version.clone())}else{None});
     rsx!{
         if *open.read() && token.is_some(){
             div{class:"changelog-backdrop",
@@ -72,14 +73,12 @@ pub fn ChangelogHost()->Element{
                                 move |_|{
                                     open.set(false);
                                     editing.set(false);creating.set(false);
-                                    if unread{
-                                        if let Some(token)=token.clone(){
+                                    if let (Some(token),Some(version))=(token.clone(),unread_version.clone()){
                                             spawn(async move{
-                                                if changelog::read(&token,"v0.1").await.is_ok(){
+                                                if changelog::read(&token,&version).await.is_ok(){
                                                     unread_status.restart();
                                                 }
                                             });
-                                        }
                                     }
                                 }
                             },

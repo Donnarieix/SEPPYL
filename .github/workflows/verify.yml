@@ -27,11 +27,11 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
-      - name: Inspect and regenerate the release lockfile for verification
+      - name: Diagnose minimal lockfile synchronization for release
         shell: bash
         run: |
           set -euo pipefail
-          cargo generate-lockfile
+          cargo metadata --format-version 1 >/dev/null
           echo "=== SEPPYL LOCKFILE PATCH START ==="
           git diff -- Cargo.lock
           echo "=== SEPPYL LOCKFILE PATCH END ==="

@@ -23,7 +23,7 @@ jobs:
           BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
         run: |
           set -euo pipefail
-          if [ -n "$BOOTSTRAP_HASH" ]; then
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -n "$BOOTSTRAP_HASH" ]; then
             export SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH="$BOOTSTRAP_HASH"
           fi
           cargo build -p api --release --locked

@@ -12,10 +12,10 @@ pub enum AttendanceView { #[default] Grid, List }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Theme { #[default] System, Light, Dark }
+pub enum Theme { #[default] System, Light, Dark, Contrast }
 impl Theme {
     pub fn as_str(self) -> &'static str {
-        match self { Self::System => "system", Self::Light => "light", Self::Dark => "dark" }
+        match self { Self::System => "system", Self::Light => "light", Self::Dark => "dark", Self::Contrast => "contrast" }
     }
 }
 

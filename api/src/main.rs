@@ -26,7 +26,7 @@ use crate::{
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes},
+        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog},
     },
     state::AppState,
 };
@@ -59,6 +59,10 @@ async fn main() {
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
+.route("/changelog",get(changelog::list))
+        .route("/changelog/status",get(changelog::status))
+        .route("/changelog/{version}/read",post(changelog::acknowledge))
+        .route("/changelog/{version}",put(changelog::save))
         .route("/admin/users", get(organization::list_users))
         .route("/admin/clubs", get(organization::list_admin_clubs))
         .route("/clubs/{id}/information", put(organization::update_club_information))

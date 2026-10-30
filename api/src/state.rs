@@ -82,49 +82,19 @@ impl AppState {
             .expect("Duplicate player identities in the existing database: resolve them on a backup before startup");
 
 
-        // Initialize the first production maintainer only when the release was
-        // compiled with the protected GitHub Actions bootstrap secret.
-        if production {
-            crate::bootstrap::initialize_if_configured(&db).await
-                .expect("Unable to initialize initial maintainer safely");
-        }
-
-        let user = entities::user::Entity::find()
-            .filter(entities::user::COLUMN.username.eq("admin".to_string()))
-            .one(&db)
-            .await
-            .unwrap();
-
-        if user.is_none() && !production {
-            let user = entities::user::ActiveModel {
-                id: Set(uuid::Uuid::new_v4()),
-                username: Set("admin".into()),
-                password: Set("$argon2id$v=19$m=19456,t=2,p=1$ko1RJ3LS7gXHMPZ8wI31QA$bEB7xXacYbfJzHuchGcSLK62pxQ7QOvgy7ikRaLgvO4".into()),
-                ..Default::default()
-            };
-            user.insert(&db).await.unwrap();
-        }
-
         crate::routes::miscellaneous::changelog::seed(&db).await
             .expect("Unable to seed changelog history");
         import_previous_training_activities(&db).await
             .expect("Unable to migrate previously created training activities");
 
-        if let Ok(admin_username) = std::env::var("SEPPYL_BOOTSTRAP_ADMIN_USERNAME") {
-            use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter};
-            if let Some(existing) = crate::entities::user::Entity::find()
-                .filter(crate::entities::user::COLUMN.username.eq(admin_username))
-                .one(&db).await.expect("Unable to load bootstrap admin")
-            {
-                if existing.role.as_deref()!=Some("administrator")
-                    && existing.role.as_deref()!=Some("maintainer") {
-                    let mut active:crate::entities::user::ActiveModel = existing.into();
-                    active.role = Set(Some("administrator".into()));
-                    active.update(&db).await.expect("Unable to bootstrap administrator");
-                    tracing::warn!("Elevated bootstrap account to administrator");
-                }
-            } else {
-                tracing::warn!("Bootstrap username was not found; no administrator elevated");
+        // Transitional release cleanup: remove the obsolete marker only.
+        // This never changes accounts, passwords, roles, SQLite or backup files.
+        // The next release removes this cleanup block itself.
+        if production {
+            match std::fs::remove_file("data/.maintainer-bootstrapped-v1") {
+                Ok(()) => tracing::info!("Obsolete bootstrap file removed"),
+                Err(err) if err.kind()==std::io::ErrorKind::NotFound => {},
+                Err(err) => tracing::warn!(%err,"Unable to remove obsolete bootstrap file"),
             }
         }
 

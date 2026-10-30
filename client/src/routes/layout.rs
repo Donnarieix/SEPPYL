@@ -14,9 +14,9 @@ pub fn Header() -> Element {
         let token=token.clone();
         async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
     });
-    let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if a.role=="administrator");
+    let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if matches!(a.role.as_str(),"administrator"|"maintainer"));
     let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
-        if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"));
+        if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
         header { class: "topbar",
             div { class: "topbar-inner",

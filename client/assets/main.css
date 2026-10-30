@@ -2536,3 +2536,48 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 .public-team-row p{margin:4px 0 0;line-height:1.45}
 .public-team-row .workspace-team-icon{flex:0 0 42px;width:42px;height:42px;overflow:hidden}
 .club-team-row .club-team-name .muted-small{line-height:1.4}
+
+
+/* Clickable public-directory preference: the entire row toggles its native input. */
+.site-root .club-public-setting{
+  cursor:pointer;user-select:none;transition:border-color .14s,background-color .14s;
+}
+.site-root .club-public-setting:hover{
+  border-color:var(--accent);background:var(--surface-hover);
+}
+.site-root .club-public-setting:focus-within{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.club-public-setting-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.club-public-setting-copy span{color:var(--muted);font-size:12px;line-height:1.5}
+.club-public-setting input[type=checkbox]{cursor:pointer}
+/* New permissions appear above the current rights list, in a predictable order. */
+.permissions-panel .permission-editor{
+  border-top:0;border-bottom:1px solid var(--line);
+}
+.permissions-panel .permission-table-wrap{max-width:100%;overflow-x:auto}
+/* Long-select search remains inside the popup, not in the collapsed trigger. */
+.seppyl-select-popover:has(.seppyl-select-search){
+  gap:0;padding:7px;max-height:min(390px,65dvh);overflow:hidden;
+}
+.site-root .seppyl-select-search{
+  width:100%;min-height:42px;flex:0 0 auto;box-sizing:border-box;
+  border:1px solid var(--line);border-radius:8px;
+  background:var(--surface-soft);color:var(--text);
+  padding:10px 13px;font:inherit;font-size:13px;
+  outline:none;margin:0 0 7px;
+}
+.site-root .seppyl-select-search:focus-visible{
+  outline:2px solid var(--accent);outline-offset:-1px;
+}
+.seppyl-select-options{
+  display:flex;flex-direction:column;gap:2px;
+  min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.seppyl-select-options .seppyl-select-option{flex:0 0 auto}
+.seppyl-select-option.is-active{
+  background:var(--surface-hover);box-shadow:inset 3px 0 0 var(--accent);
+}
+.logo-crop-stage{touch-action:none;cursor:grab}
+.logo-crop-stage:active{cursor:grabbing}

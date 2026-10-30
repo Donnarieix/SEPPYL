@@ -469,7 +469,9 @@ mod tests{
         let tid=Uuid::new_v4();let aid=Uuid::new_v4();let uid=Uuid::new_v4();
         training::ActiveModel{id:Set(tid),user_id:Set(uid),team_id:Set(None),
             name:Set("Séance du lundi".into()),
-            date:Set(chrono::NaiveDate::from_ymd_opt(2026,10,30).unwrap().and_hms_opt(9,0,0).unwrap()),
+            date:Set(sea_orm::entity::prelude::DateTime::parse_from_str(
+                "2026-10-30 09:00:00","%Y-%m-%d %H:%M:%S"
+            ).unwrap()),
             notes:Set(String::new()),..Default::default()
         }.insert(&state.db).await.unwrap();
         training_activity::ActiveModel{id:Set(aid),training_id:Set(tid),catalog_id:Set(None),

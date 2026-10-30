@@ -1954,3 +1954,107 @@ button.grid-add-button:hover,
   .club-main-toolbar .field{width:100%}
   .club-roster-grid .workspace-roster-list{max-height:380px}
 }
+
+
+/* Tactical Studio v2 — horizontal command bar and focused work surface */
+.tactics-page{max-width:1660px}
+.tactics-layout{grid-template-columns:minmax(190px,235px) minmax(0,1fr);gap:18px}
+.tactics-library,.tactics-workspace{border:1px solid var(--line);border-radius:13px}
+.tactics-workspace{background:var(--surface);box-shadow:0 10px 36px #1022350b}
+.tactics-workspace .tactics-settings{padding:16px 22px;border-bottom:1px solid var(--line)}
+.tactics-workspace .tactics-settings input{font-size:15px;font-weight:650}
+.seppyl-tactics-board{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.65fr);
+  grid-template-areas:"tools tools" "colors sizes" "canvas canvas" "hint help";
+  gap:0;background:var(--surface);position:relative;min-width:0
+}
+.seppyl-tactics-board>.tactics-tools{
+  grid-area:tools;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;
+  padding:10px 14px;gap:9px;background:var(--surface);border-right:0;
+  border-bottom:1px solid var(--line)
+}
+.tactic-toolbar-section{display:flex;align-items:center;flex-wrap:wrap;gap:5px;
+  padding:4px 12px 4px 0;border-right:1px solid var(--line)}
+.tactic-toolbar-section:last-child{border-right:0}
+.tactic-toolbar-label{font-size:10px;font-weight:750;letter-spacing:.065em;
+  color:var(--muted);text-transform:uppercase;margin-right:5px}
+.seppyl-tactics-board .tactic-toolbar-section button{
+  display:inline-flex;align-items:center;gap:6px;justify-content:center;
+  border:1px solid transparent;border-radius:7px;background:transparent;
+  padding:8px 10px;min-height:36px;color:var(--text);font-size:12px;font-weight:650;
+  transition:background .15s,border-color .15s;flex:none
+}
+.seppyl-tactics-board .tactic-toolbar-section button:hover{background:var(--surface-hover)}
+.seppyl-tactics-board .tactic-toolbar-section button.selected{
+  border-color:var(--accent);background:var(--surface-soft);color:var(--accent)}
+.seppyl-tactics-board .tactic-toolbar-section button kbd{
+  border:1px solid var(--line);border-radius:4px;padding:2px 5px;
+  font-family:inherit;font-weight:700;font-size:10px;color:var(--muted);background:var(--surface)}
+.seppyl-tactics-board>.tactic-colors{
+  grid-area:colors;border-right:0;border-bottom:1px solid var(--line);
+  padding:12px 20px;gap:7px;flex-direction:row;align-items:center;flex-wrap:wrap;
+  background:var(--surface);min-width:0
+}
+.seppyl-tactics-board .tactic-colors-heading{flex:none;max-width:180px}
+.seppyl-tactics-board .tactic-colors-heading strong{font-size:11px}
+.seppyl-tactics-board .tactic-colors-heading span{font-size:10px}
+.seppyl-tactics-board .tactic-palette{gap:6px;flex-wrap:wrap}
+.seppyl-tactics-board>.tactic-sizes{
+  grid-area:sizes;border-right:0;border-bottom:1px solid var(--line);
+  padding:11px 20px;background:var(--surface);gap:10px;flex-wrap:nowrap
+}
+.seppyl-tactics-board .tactic-sizes .tactic-colors-heading{flex:0 0 auto}
+.seppyl-tactics-board .tactic-sizes input{min-width:75px}
+.seppyl-tactics-board>.tactics-canvas{
+  grid-area:canvas;border:0;min-height:370px;max-height:none;width:100%;
+  aspect-ratio:8/5;border-radius:0;outline-offset:-3px;touch-action:none;
+  background:#467e5b;box-shadow:inset 0 0 0 1px #142f2350
+}
+.seppyl-tactics-board>.tactic-editor-hint{
+  grid-area:hint;display:flex;gap:10px 17px;flex-wrap:wrap;align-items:center;
+  border-right:0;border-top:1px solid var(--line);padding:12px 19px;
+  background:var(--surface);font-size:11px;color:var(--muted)
+}
+.seppyl-tactics-board>.tactic-shortcuts-help{
+  grid-area:help;justify-self:end;align-self:center;padding:9px 18px;
+  position:relative;background:var(--surface)
+}
+.tactic-shortcuts-help details{position:relative}
+.tactic-shortcuts-help summary{list-style:none;cursor:pointer;display:inline-flex;
+  gap:6px;align-items:center;font-size:11px;font-weight:700;color:var(--accent)}
+.tactic-shortcuts-help summary::-webkit-details-marker{display:none}
+.tactic-shortcuts-help summary::after{content:"?";display:inline-grid;place-items:center;
+  width:17px;height:17px;border:1px solid var(--line);border-radius:50%;
+  color:var(--muted);font-size:11px}
+.tactic-shortcuts-help .tactic-shortcuts-grid{
+  position:absolute;right:0;bottom:calc(100% + 12px);z-index:25;
+  display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:11px 18px;
+  min-width:380px;padding:18px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface);box-shadow:0 18px 45px #051b3240;
+  color:var(--text);font-size:12px
+}
+.tactic-context-palette{display:none;position:absolute;z-index:30;max-width:218px;
+  width:218px;padding:12px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface);box-shadow:0 16px 38px #001c3240;gap:8px;flex-wrap:wrap}
+.tactic-context-palette.open{display:flex}
+.tactic-context-palette-head{flex:1 1 100%;font-size:12px;font-weight:700;margin-bottom:4px}
+.tactic-context-palette .tactic-swatch{flex:0 0 28px;width:28px;height:28px;border-radius:50%}
+.tactics-actions{padding:12px 22px;gap:14px}
+.exercise-head-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+@media(max-width:1150px){
+  .tactics-layout{grid-template-columns:minmax(0,1fr)}
+  .tactics-library{max-height:190px}
+}
+@media(max-width:800px){
+  .seppyl-tactics-board{grid-template-columns:minmax(0,1fr);
+    grid-template-areas:"tools" "colors" "sizes" "canvas" "hint" "help"}
+  .seppyl-tactics-board>.tactics-tools{flex-direction:row;gap:6px;flex-wrap:wrap}
+  .tactic-toolbar-section{border-right:0;border-bottom:1px solid var(--line);width:100%;padding-bottom:8px}
+  .tactic-toolbar-section:last-child{border-bottom:0}
+  .seppyl-tactics-board>.tactic-colors,.seppyl-tactics-board>.tactic-sizes,
+  .seppyl-tactics-board>.tactic-editor-hint{border-right:0}
+  .seppyl-tactics-board>.tactic-shortcuts-help{justify-self:stretch;text-align:right}
+  .tactic-shortcuts-help .tactic-shortcuts-grid{right:0;min-width:min(86vw,380px);
+    grid-template-columns:repeat(2,minmax(0,1fr))}
+  .seppyl-tactics-board>.tactics-canvas{min-height:220px}
+}

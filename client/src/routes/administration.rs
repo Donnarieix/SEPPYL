@@ -115,7 +115,11 @@ pub fn Administration()->Element{
                         h1{"Administration"}
                         p{"Gestion globale des utilisateurs, de leurs droits et des clubs."}
                     }
-                    span{class:"role-pill role-admin","Administrateur"}
+                    span{class:"role-pill role-admin",
+                        if identity.read().as_ref().is_some_and(|v|v.as_ref().is_ok_and(|u|u.role=="maintainer")) {
+                            "Maintainer"
+                        }else{"Administrateur"}
+                    }
                 }
                 if let Some(message)=notice.read().as_ref(){
                     div{class:"seppyl-toast",role:"status",
@@ -138,7 +142,7 @@ pub fn Administration()->Element{
                             div{class:"panel-head",
                                 div{
                                     h2{"Comptes"}
-                                    p{"Recherchez un compte pour gérer son rôle et ses rattachements."}
+                                    p{"Sélectionnez un compte pour gérer son rôle et ses rattachements."}
                                 }
                             }
                             div{class:"admin-users",
@@ -170,6 +174,10 @@ pub fn Administration()->Element{
                                     div{h2{"Droits de {user.username}"}
                                         p{"Ce rôle détermine les permissions générales du compte."}}
                                 }
+                                if user.role=="maintainer"{
+                                    p{class:"organization-note",
+                                        "Compte Maintainer — rôle protégé. Les changements de rôle sont réservés à la commande serveur."}
+                                }else{
                                 form{class:"workspace-form",
                                     onsubmit:{
                                         let token=token.clone();
@@ -198,6 +206,7 @@ pub fn Administration()->Element{
                                         }
                                     }
                                     button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Enregistrer"}
+                                }
                                 }
                                 div{class:"account-quick-links",
                                     button{class:"button outline",

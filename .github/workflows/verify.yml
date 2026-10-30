@@ -55,3 +55,23 @@ jobs:
             exit 1
           fi
           echo "Existing SQLite copy migration and API startup succeeded"
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          old_path = Path("data/seppyl.local.db-before-player-migration")
+          new_path = Path("data/seppyl.local.db")
+          assert old_path.is_file(), "Pre-migration backup was not created"
+          with sqlite3.connect(old_path) as old, sqlite3.connect(new_path) as new:
+              old_count = old.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+              new_count = new.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+              assert new_count == old_count, "Player count changed during migration"
+              assert new.execute("PRAGMA foreign_key_check").fetchall() == [], "Broken SQLite references"
+              for idx in new.execute("PRAGMA index_list('players')"):
+                  if idx[2]:
+                      columns = [col[2] for col in new.execute(
+                          'PRAGMA index_info("' + idx[1].replace('"', '""') + '")'
+                      )]
+                      assert columns != ["firstname"], "Legacy unique first-name index remains"
+          print("Verified backup, player IDs and foreign keys after migration")
+          PY

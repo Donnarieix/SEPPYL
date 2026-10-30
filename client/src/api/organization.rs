@@ -6,6 +6,9 @@ pub struct Club{
     pub id:String,pub name:String,pub is_public:Option<bool>,
     #[serde(default)]pub description:Option<String>,
     #[serde(default)]pub logo_url:Option<String>,
+    #[serde(default)]pub logo_x:Option<i32>,
+    #[serde(default)]pub logo_y:Option<i32>,
+    #[serde(default)]pub logo_zoom:Option<i32>,
 }
 pub fn club_logo_src(logo:Option<&str>)->Option<String>{
     let src=logo?.trim();
@@ -14,7 +17,17 @@ pub fn club_logo_src(logo:Option<&str>)->Option<String>{
     None
 }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
-pub struct Team{pub id:String,pub club_id:String,pub name:String}
+pub struct Team{
+    pub id:String,pub club_id:String,pub name:String,
+    #[serde(default)]pub description:Option<String>,
+    #[serde(default)]pub logo_url:Option<String>,
+    #[serde(default)]pub logo_x:Option<i32>,
+    #[serde(default)]pub logo_y:Option<i32>,
+    #[serde(default)]pub logo_zoom:Option<i32>,
+}
+pub fn logo_style(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->String {
+    super::super::routes::logo_picker::image_style(x.unwrap_or(0),y.unwrap_or(0),zoom.unwrap_or(100))
+}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct User{pub id:String,pub username:String,pub role:String}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
@@ -42,14 +55,31 @@ pub async fn admin_clubs(token:&str)->Result<Vec<Club>,String>{
 #[derive(Serialize)]
 struct ClubInformation<'a>{
     name:&'a str,description:&'a str,logo_url:Option<&'a str>,is_public:bool,
+    logo_x:i32,logo_y:i32,logo_zoom:i32,
 }
 pub async fn update_club_information(
     token:&str,id:&str,name:&str,description:&str,logo_url:Option<&str>,is_public:bool,
+    logo_x:i32,logo_y:i32,logo_zoom:i32,
 )->Result<(),String>{
     let response=Client::new().put(format!("{}/clubs/{id}/information",base()))
         .bearer_auth(token)
-        .json(&ClubInformation{name,description,logo_url,is_public})
+        .json(&ClubInformation{name,description,logo_url,is_public,logo_x,logo_y,logo_zoom})
         .send().await.map_err(|e|e.to_string())?;
+    check(response.status())
+}
+#[derive(Serialize)]
+struct TeamInformation<'a>{
+    name:&'a str,description:&'a str,logo_url:Option<&'a str>,
+    logo_x:i32,logo_y:i32,logo_zoom:i32,
+}
+pub async fn update_team_information(
+    token:&str,id:&str,name:&str,description:&str,logo_url:Option<&str>,
+    x:i32,y:i32,zoom:i32,
+)->Result<(),String>{
+    let response=Client::new().put(format!("{}/teams/{id}/information",base()))
+        .bearer_auth(token)
+        .json(&TeamInformation{name,description,logo_url,logo_x:x,logo_y:y,logo_zoom:zoom})
+        .send().await.map_err(|error|error.to_string())?;
     check(response.status())
 }
 pub async fn clubs(token:&str)->Result<Vec<Club>,String>{
@@ -141,6 +171,9 @@ pub async fn team_players(token:&str,team_id:&str)->Result<Vec<crate::api::playe
 pub async fn add_team_player(token:&str,team_id:&str,player_id:&str)->Result<(),String>{
     let r=Client::new().put(format!("{}/teams/{team_id}/players/{player_id}",base()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    if r.status()==StatusCode::CONFLICT {
+        return Err("Cette joueuse appartient déjà à l'effectif de cette équipe.".into());
+    }
     check(r.status())
 }
 pub async fn remove_team_player(token:&str,team_id:&str,player_id:&str)->Result<(),String>{

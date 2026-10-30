@@ -48,9 +48,9 @@ pub fn SiteFooter()->Element {
                     span{"Gestion des entraînements et des équipes"}
                 }
                 nav{class:"site-footer-nav","aria-label":"Informations et assistance",
-                    Link{to:Route::LegalNotice{},"Mentions légales"}
-                    Link{to:Route::PrivacyPolicy{},"Confidentialité"}
-                    Link{to:Route::TermsOfUse{},"CGU"}
+                    a{href:"/mentions-legales","Mentions légales"}
+                    a{href:"/confidentialite","Confidentialité"}
+                    a{href:"/cgu","CGU"}
                     a{href:"mailto:seppyl@donnarieix.fr","Contact"}
                 }
                 div{class:"site-footer-meta",

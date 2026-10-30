@@ -3,3 +3,5 @@ pub mod me;
 pub mod preferences;
 pub mod account;
 pub mod audit;
+
+pub mod changelog;

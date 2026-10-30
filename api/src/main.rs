@@ -107,7 +107,7 @@ async fn main() {
         .route("/trainings/{id}", get(training::get).put(training::update))
         .route("/trainings/{id}/activities", post(training::add_activity))
         .route("/trainings/{id}/catalog/{catalog_id}", post(training::attach_catalog))
-        .route("/trainings/{id}/activities/{activity_id}", delete(training::remove_activity))
+        .route("/trainings/{id}/activities/{activity_id}", put(training::update_activity).delete(training::remove_activity))
         .route("/trainings/{id}/activities/order", put(training::reorder_activities))
         .route("/trainings/{id}/activities/{activity_id}/materials", post(training::add_material))
         .route("/trainings/{id}/activities/{activity_id}/materials/{material_id}", delete(training::remove_material))

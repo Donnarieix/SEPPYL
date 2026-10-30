@@ -292,6 +292,41 @@ pub async fn add_activity(
 }
 
 
+
+#[derive(Deserialize)]
+pub struct EditSessionActivity {
+    pub name:String,
+    pub description:String,
+    pub description_html:Option<String>,
+    pub image_url:Option<String>,
+}
+/// Only edits the copy in this training. The reusable library definition
+/// remains unchanged, so other sessions are never modified implicitly.
+pub async fn update_activity(
+    Extension(claims):Extension<Claims>,
+    State(state):State<AppState>,
+    Path((training_id,activity_id)):Path<(Uuid,Uuid)>,
+    Json(body):Json<EditSessionActivity>,
+)->Result<StatusCode,ApiError>{
+    let activity=owned_activity(&claims,&state,training_id,activity_id).await?;
+    if !valid_name(&body.name) || body.description.len()>20_000
+        || body.description_html.as_ref().is_some_and(|v|v.len()>40_000)
+        || !valid_image_url(body.image_url.as_deref()){
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut active:training_activity::ActiveModel=activity.into();
+    active.name=Set(body.name.trim().into());
+    active.description=Set(body.description);
+    active.description_html=Set(body.description_html.map(|html|ammonia::clean(&html)));
+    active.image_url=Set(body.image_url);
+    active.update(&state.db).await.map_err(|error|{
+        tracing::error!(%error,training=%training_id,activity=%activity_id,
+            "Could not update session activity");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn attach_catalog(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path((id, catalog_id)): Path<(Uuid, Uuid)>,

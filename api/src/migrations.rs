@@ -154,10 +154,32 @@ pub async fn add_club_information(db:&DatabaseConnection)->Result<(),DbErr>{
     for (name,sql) in [
         ("description","ALTER TABLE clubs ADD COLUMN description TEXT"),
         ("logo_url","ALTER TABLE clubs ADD COLUMN logo_url TEXT"),
+        ("logo_x","ALTER TABLE clubs ADD COLUMN logo_x INTEGER"),
+        ("logo_y","ALTER TABLE clubs ADD COLUMN logo_y INTEGER"),
+        ("logo_zoom","ALTER TABLE clubs ADD COLUMN logo_zoom INTEGER"),
     ]{
         if !names.iter().any(|column|column==name){
             db.execute_unprepared(sql).await?;
             tracing::info!(field=name,"Extended clubs with information field");
+        }
+    }
+    Ok(())
+}
+
+pub async fn add_team_information(db:&DatabaseConnection)->Result<(),DbErr>{
+    let columns=query_rows(db,"PRAGMA table_info('teams')").await?;
+    if columns.is_empty(){return Ok(());}
+    let names=columns.iter().map(|c|c.try_get::<String>("","name"))
+        .collect::<Result<Vec<_>,_>>()?;
+    for (name,sql) in [
+        ("description","ALTER TABLE teams ADD COLUMN description TEXT"),
+        ("logo_url","ALTER TABLE teams ADD COLUMN logo_url TEXT"),
+        ("logo_x","ALTER TABLE teams ADD COLUMN logo_x INTEGER"),
+        ("logo_y","ALTER TABLE teams ADD COLUMN logo_y INTEGER"),
+        ("logo_zoom","ALTER TABLE teams ADD COLUMN logo_zoom INTEGER"),
+    ] {
+        if !names.iter().any(|n|n==name){
+            db.execute_unprepared(sql).await?;
         }
     }
     Ok(())

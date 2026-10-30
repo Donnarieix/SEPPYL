@@ -77,7 +77,10 @@ pub fn Administration()->Element{
     let directory=users.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
     let clubs_list=clubs.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
     let teams_list=teams.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default();
-    let matching:Vec<_>=directory.iter().filter(|u|u.username.to_lowercase().contains(&query.read().to_lowercase())).cloned().collect();
+    let needle=query.read().trim().to_lowercase();
+    let matching:Vec<_>=directory.iter()
+        .filter(|u|needle.is_empty() || u.username.to_lowercase().contains(&needle))
+        .cloned().collect();
     let selected=directory.iter().find(|u|u.id==*selected_user.read()).cloned();
     let group_id=if team.read().is_empty(){club.read().clone()}else{team.read().clone()};
     let scope=if team.read().is_empty(){"club"}else{"team"};
@@ -113,10 +116,20 @@ pub fn Administration()->Element{
                                 }
                             }
                             div{class:"workspace-search",
-                                input{value:"{query}",placeholder:"Rechercher un utilisateur…",
-                                    "aria-label":"Rechercher un utilisateur",
-                                    oninput:move |e|query.set(e.value())}
-                                span{class:"muted-small","{matching.len()} compte(s)"}
+                                div{class:"admin-search-field",
+                                    span{class:"admin-search-icon","aria-hidden":"true","⌕"}
+                                    input{value:"{query}",r#type:"search",
+                                        autocomplete:"off",
+                                        placeholder:"Nom du compte…",
+                                        "aria-label":"Filtrer les comptes par nom",
+                                        oninput:move |e|query.set(e.value())}
+                                    if !query.read().is_empty(){
+                                        button{class:"admin-search-clear",r#type:"button",
+                                            "aria-label":"Effacer la recherche",
+                                            onclick:move |_|query.set(String::new()),"Effacer"}
+                                    }
+                                }
+                                span{class:"muted-small","{matching.len()} sur {directory.len()} compte(s)"}
                             }
                             div{class:"admin-users",
                                 for user in matching{
@@ -135,6 +148,14 @@ pub fn Administration()->Element{
                                             small{"{user.role}"}}
                                         span{class:"admin-user-arrow","›"}
                                     }
+                                }
+                            }
+                            if matching.is_empty() && users.read().as_ref().is_some_and(|r|r.is_ok()) {
+                                div{class:"workspace-empty admin-search-empty",
+                                    strong{"Aucun compte trouvé"}
+                                    p{"Essayez un autre nom de compte."}
+                                    button{class:"button outline small",r#type:"button",
+                                        onclick:move |_|query.set(String::new()),"Réinitialiser la recherche"}
                                 }
                             }
                             if let Some(Err(message))=users.read().clone(){

@@ -158,6 +158,24 @@ pub async fn add_activity(
         .send().await.map_err(|e| e.to_string())?;
     success(response).await
 }
+#[derive(Serialize)]
+struct EditActivityRequest<'a> {
+    name:&'a str,
+    description:&'a str,
+    description_html:Option<&'a str>,
+    image_url:Option<&'a str>,
+}
+pub async fn update_activity(
+    token:&str,training_id:&str,activity_id:&str,name:&str,
+    description:&str,description_html:Option<&str>,image_url:Option<&str>
+)->Result<(),String>{
+    let response=client()
+        .put(format!("{}/trainings/{training_id}/activities/{activity_id}",base_url()))
+        .bearer_auth(token)
+        .json(&EditActivityRequest{name,description,description_html,image_url})
+        .send().await.map_err(|e|e.to_string())?;
+    success(response).await
+}
 pub async fn remove_activity(token: &str, id: &str, activity_id: &str) -> Result<(), String> {
     let response = client().delete(format!("{}/trainings/{id}/activities/{activity_id}", base_url()))
         .bearer_auth(token).send().await.map_err(|e| e.to_string())?;

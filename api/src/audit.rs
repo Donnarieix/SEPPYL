@@ -264,6 +264,24 @@ pub async fn capture(
                 else{return Context::admin(generic)};
             let name=quoted(&t.name);
             let desc=match *tail {
+                ["information"]=>{
+                    let mut fields=Vec::new();
+                    if let Some(new_name)=body_string(payload,"name"){
+                        if new_name.trim()!=t.name {fields.push(format!("nom : {} → {}",quoted(&t.name),quoted(new_name.trim())));}
+                    }
+                    if let Some(desc)=body_string(payload,"description"){
+                        if t.description.as_deref().unwrap_or("")!=desc.trim(){
+                            fields.push("description modifiée".into());
+                        }
+                    }
+                    if let Some(img)=payload.and_then(|value|value.get("logo_url")){
+                        if img.as_str().unwrap_or("")!=t.logo_url.as_deref().unwrap_or(""){
+                            fields.push("logo modifié".into());
+                        }
+                    }
+                    format!("Modification des informations de l'équipe {name}{}",
+                        if fields.is_empty(){String::new()}else{format!(" — {}",fields.join(", "))})
+                },
                 [] if *method==Method::PUT=>format!("Renommage de l'équipe {name}"),
                 [] if *method==Method::DELETE=>format!("Suppression de l'équipe {name}"),
                 ["players",player_id]=>{

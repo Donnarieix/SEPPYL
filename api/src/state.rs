@@ -1,5 +1,5 @@
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, Database, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ConnectOptions, Database, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
 };
 
 use crate::entities;
@@ -22,7 +22,19 @@ impl AppState {
                 .expect("Unable to initialize local database from existing data/sappyl.db");
         }
 
-        let db = Database::connect("sqlite://data/seppyl.local.db?mode=rwc")
+        let url = "sqlite://data/seppyl.local.db?mode=rwc";
+        // Run SQLite table rebuilds on a dedicated single connection so
+        // connection-local foreign-key PRAGMAs cannot leak across pool workers.
+        let mut migration_options=ConnectOptions::new(url);
+        migration_options.max_connections(1);
+        let migration_db=Database::connect(migration_options).await
+            .expect("Unable to connect for database migration");
+        crate::migrations::migrate_legacy_player_firstname(&migration_db)
+            .await.expect("Unable to safely migrate the players table; restore the backup and inspect SQLite schema");
+        migration_db.close().await
+            .expect("Unable to close migration connection");
+
+        let db = Database::connect(url)
             .await
             .unwrap();
 

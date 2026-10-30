@@ -295,12 +295,12 @@ pub async fn capture(
                     format!("Ajout de l'activité {} à la séance {}",quoted(&name),quoted(&t.name))
                 },
                 ["activities","order"]=>format!("Réorganisation des activités de la séance {}",quoted(&t.name)),
-                ["activities",aid,rest @ ..]=>{
+                ["activities",aid, ..]=>{
                     let name=if let Some(aid)=id(aid){
                         training_activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
                             .map(|a|a.name).unwrap_or_else(||"activité introuvable".into())
                     }else{"activité".into()};
-                    match *rest{
+                    match &rest[2..]{
                         [] if *method==Method::DELETE=>
                             format!("Retrait de l'activité {} de la séance {}",quoted(&name),quoted(&t.name)),
                         []=>{

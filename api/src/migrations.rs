@@ -143,6 +143,26 @@ pub async fn migrate_legacy_player_firstname(
 }
 
 
+/// Add club information without rewriting clubs, memberships or foreign keys.
+/// Works for existing SQLite databases; new installations use the model schema.
+pub async fn add_club_information(db:&DatabaseConnection)->Result<(),DbErr>{
+    let columns=query_rows(db,"PRAGMA table_info('clubs')").await?;
+    if columns.is_empty(){return Ok(());}
+    let names=columns.iter()
+        .map(|column|column.try_get::<String>("","name"))
+        .collect::<Result<Vec<_>,_>>()?;
+    for (name,sql) in [
+        ("description","ALTER TABLE clubs ADD COLUMN description TEXT"),
+        ("logo_url","ALTER TABLE clubs ADD COLUMN logo_url TEXT"),
+    ]{
+        if !names.iter().any(|column|column==name){
+            db.execute_unprepared(sql).await?;
+            tracing::info!(field=name,"Extended clubs with information field");
+        }
+    }
+    Ok(())
+}
+
 pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
     // A migration must never arbitrarily merge existing player IDs.
     let duplicates=query_rows(db,

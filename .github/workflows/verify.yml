@@ -36,6 +36,9 @@ jobs:
       - name: Test API
         run: cargo test -p api --locked
 
+      - name: Create safe synthetic legacy data for migration tests
+        run: python3 scripts/create-legacy-fixture.py data/sappyl.db
+
       - name: Verify startup with existing SQLite data
         env:
           JWT_SECRET: development-ci-only-secret

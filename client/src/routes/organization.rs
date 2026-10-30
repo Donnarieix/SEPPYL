@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::{organization as org,players};
-use super::{Route,layout::Header,membership::MembershipPanel,team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor};
+use super::{Route,layout::Header,membership::MembershipPanel,team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor,team_information::TeamInformationEditor};
 
 #[component]
 pub fn Organization()->Element{
@@ -130,7 +130,8 @@ pub fn Organization()->Element{
                                     },
                                     span{class:"club-sidebar-avatar",
                                         if let Some(src)=org::club_logo_src(club.logo_url.as_deref()){
-                                            img{src:"{src}",alt:""}
+                                            img{src:"{src}",alt:"",
+                                                style:"{org::logo_style(club.logo_x,club.logo_y,club.logo_zoom)}"}
                                         }else{"{club.name.chars().next().unwrap_or('C').to_uppercase()}"}
                                     }
                                     span{class:"club-sidebar-name","{club.name}"}
@@ -179,8 +180,10 @@ pub fn Organization()->Element{
                                                 }
                                             },
                                             span{class:"workspace-team-icon",
-                                                if let Some(src)=org::club_logo_src(current_club.as_ref().and_then(|c|c.logo_url.as_deref())){
-                                                    img{src:"{src}",alt:""}
+                                                if let Some(src)=org::club_logo_src(team.logo_url.as_deref()
+                                                    .or_else(||current_club.as_ref().and_then(|c|c.logo_url.as_deref()))){
+                                                    img{src:"{src}",alt:"",
+                                                        style:"{org::logo_style(team.logo_x.or_else(||current_club.as_ref().and_then(|c|c.logo_x)),team.logo_y.or_else(||current_club.as_ref().and_then(|c|c.logo_y)),team.logo_zoom.or_else(||current_club.as_ref().and_then(|c|c.logo_zoom)))}"}
                                                 }else{"⚽"}
                                             }
                                             strong{"{team.name}"}
@@ -314,6 +317,18 @@ pub fn Organization()->Element{
                                 }
                                 }
                             }
+                        }else if *tab.read()=="team-info" && can_manage{
+                            div{class:"admin-roster-heading",
+                                button{class:"button outline small",r#type:"button",
+                                    onclick:move |_|tab.set("teams".into()),"Retour aux équipes"}
+                            }
+                            if let Some(selected)=teams_list.iter().find(|t|t.id==*team_id.read()).cloned(){
+                                TeamInformationEditor{key:"{selected.id}",
+                                    token:token.clone(),team:selected,
+                                    on_saved:move |_|{teams.restart();notice.set(Some("Informations de l'équipe enregistrées.".into()));},
+                                    on_error:move |error|notice.set(Some(error))
+                                }
+                            }
                         }else if *tab.read()=="teams"{
                             section{class:"panel",
                                 div{class:"panel-head",
@@ -338,6 +353,11 @@ pub fn Organization()->Element{
                                                 "Voir l'effectif"
                                             }
                                             if can_manage{
+                                                button{class:"button outline small",r#type:"button",
+                                                    onclick:{
+                                                        let id=team.id.clone();
+                                                        move |_|{team_id.set(id.clone());tab.set("team-info".into());}
+                                                    },"Informations"}
                                                 TeamManagerRow{team:team.clone(),token:token.clone(),
                                                     on_saved:move |_|{teams.restart();notice.set(Some("Équipe actualisée.".into()));},
                                                     on_error:move |error|notice.set(Some(error))}

@@ -45,6 +45,8 @@ function fixture(){
   const counter=new FakeNode();
   const quick=new FakeNode();quick.dataset.tacticQuickColor="#c6403c";
   const size=new FakeNode();size.value="22";
+  const solid=new FakeNode();solid.dataset.tacticDash="solid";
+  const dashed=new FakeNode();dashed.dataset.tacticDash="dashed";
   const root=new FakeNode();
   root.dataset.tacticsInitial=JSON.stringify([{
     id:"one",kind:"player",x:200,y:200,color:"#2455b6",size:22,
@@ -57,7 +59,9 @@ function fixture(){
     "[data-tactic-menu]":palette,"[data-selection-count]":counter,
     "[data-tactic-size]":size
   })[selector]??null;
-  root.querySelectorAll=selector=>selector==="[data-tactic-quick-color]"?[quick]:[];
+  root.querySelectorAll=selector=>
+    selector==="[data-tactic-quick-color]"?[quick]:
+    selector==="[data-tactic-dash]"?[solid,dashed]:[];
   const window={};
   vm.runInNewContext(source,{window,document,MutationObserver:class{observe(){}},Event,
     setTimeout:()=>1,clearTimeout:()=>{}});
@@ -69,7 +73,7 @@ function fixture(){
       target:marker,shiftKey:false});
     svg.emit("pointerup",{});
   }
-  return {svg,root,palette,output,quick,document,select,size};
+  return {svg,root,palette,output,quick,document,select,size,solid,dashed};
 }
 
 test("canvas wheel resizes selected object and right click changes its color",()=>{
@@ -108,4 +112,24 @@ test("Delete and Escape handle selection only while keyboard focus is outside in
   f.select();
   f.root.emit("keydown",{target:f.svg,key:"Delete",ctrlKey:false,metaKey:false,altKey:false,preventDefault(){}});
   assert.deepEqual(JSON.parse(f.output.value),[]);
+});
+
+test("selected arrows retain a dashed stroke on save, and solid mode reverses it",()=>{
+  const f=fixture();
+  f.root.dataset.tacticsInitial=JSON.stringify([{
+    id:"one",kind:"arrow",x:200,y:200,end_x:340,end_y:240,
+    size:22,color:"#2455b6",dashed:false,label:null
+  }]);
+  f.root.dataset.tacticsRevision="1";
+  f.root.__tacticsReload();
+  f.select();
+  f.dashed.emit("click",{});
+  let items=JSON.parse(f.output.value);
+  assert.equal(items.length,1);
+  assert.equal(items[0].dashed,true);
+  assert.equal(f.dashed.classList.contains("selected"),true);
+  f.solid.emit("click",{});
+  items=JSON.parse(f.output.value);
+  assert.equal(items[0].dashed,false);
+  assert.equal(f.solid.classList.contains("selected"),true);
 });

@@ -467,6 +467,9 @@ mod tests{
         db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
         let state=AppState{db};
         let tid=Uuid::new_v4();let aid=Uuid::new_v4();let uid=Uuid::new_v4();
+        user::ActiveModel{id:Set(uid),username:Set("audit-coach".into()),
+            password:Set("test".into()),..Default::default()
+        }.insert(&state.db).await.unwrap();
         training::ActiveModel{id:Set(tid),user_id:Set(uid),team_id:Set(None),
             name:Set("Séance du lundi".into()),
             date:Set(sea_orm::entity::prelude::DateTime::parse_from_str(

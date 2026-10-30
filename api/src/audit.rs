@@ -1,11 +1,11 @@
 //! Safe, human-readable audit snapshots. The scope is captured before mutations,
 //! so deleting an entity cannot silently erase its club association.
 use axum::http::{Method,StatusCode};
-use sea_orm::{ActiveModelTrait,ActiveValue::Set,EntityTrait};
+use sea_orm::{ActiveModelTrait,ActiveValue::Set,EntityTrait,QueryFilter};
 use serde_json::Value;
 use std::time::{SystemTime,UNIX_EPOCH};
 use uuid::Uuid;
-use crate::{entities::{audit_event,club,team,training,catalog_activity,player,user},state::AppState};
+use crate::{entities::{audit_event,club,team,training,catalog_activity,player,user,club_player,team_player,training_activity,catalog_material,training_material,tactical_diagram,activity},state::AppState};
 
 #[derive(Clone,Debug)]
 pub struct Context {
@@ -37,15 +37,162 @@ fn operation(method:&Method)->&'static str {
     }
 }
 fn quoted(value:&str)->String { format!("« {value} »") }
+fn body_string<'a>(payload:Option<&'a Value>,key:&str)->Option<&'a str>{
+    payload?.get(key)?.as_str()
+}
+fn id(value:&str)->Option<Uuid>{Uuid::parse_str(value).ok()}
+fn body_id(payload:Option<&Value>,key:&str)->Option<Uuid>{
+    body_string(payload,key).and_then(id)
+}
+fn label_player(p:&player::Model)->String{
+    format!("{} {} (n° {})",p.firstname,p.lastname,p.number)
+}
+fn change_text(old:&str,new:Option<&str>,field:&str)->Option<String>{
+    new.filter(|value|*value!=old)
+        .map(|value|format!("{field} : {} → {}",quoted(old),quoted(value)))
+}
+async fn scope_player(state:&AppState,actor:Uuid,pid:Uuid,description:String)->Context{
+    let relations=club_player::Entity::find()
+        .filter(club_player::COLUMN.player_id.eq(pid)).all(&state.db).await;
+    if let Ok(mut links)=relations{
+        links.dedup_by_key(|l|l.club_id);
+        if links.len()==1 {
+            let club_id=links[0].club_id;
+            if let Ok(teams)=team_player::Entity::find()
+                .filter(team_player::COLUMN.player_id.eq(pid)).all(&state.db).await {
+                if teams.len()==1 {
+                    if let Ok(Some(t))=team::Entity::find_by_id(teams[0].team_id).one(&state.db).await{
+                        return Context::team(t.id,t.club_id,description);
+                    }
+                }
+            }
+            return Context::club(club_id,description);
+        }
+        if links.len()>1{return Context::admin(description);}
+    }
+    // Personal players only appear to their owner in the audit feed;
+    // a missing/ambiguous scope must never leak across clubs.
+    let _=actor;
+    Context::personal(description)
+}
 fn payload_team(payload:Option<&Value>)->Option<Uuid> {
     payload?.get("team_id")?.as_str().and_then(|v|Uuid::parse_str(v).ok())
 }
 pub async fn capture(
-    state:&AppState, method:&Method, path:&str, payload:Option<&Value>,
+    state:&AppState, actor:Uuid, method:&Method, path:&str, payload:Option<&Value>,
 )->Context{
     let parts:Vec<&str>=path.trim_matches('/').split('/').collect();
     let generic=format!("{} de données",operation(method));
     match parts.as_slice(){
+        ["player","create"]=>{
+            let who=match (body_string(payload,"firstname"),body_string(payload,"lastname")){
+                (Some(first),Some(last))=>quoted(&format!("{first} {last}")),
+                _=>"une joueuse".into()
+            };
+            let n=payload.and_then(|v|v.get("number")).and_then(Value::as_u64);
+            Context::personal(format!("Création de la fiche de {who}{}",n.map(|v|format!(" (n° {v})")).unwrap_or_default()))
+        }
+        ["player","update"]=>{
+            let Some(pid)=body_id(payload,"id") else{
+                return Context::admin("Modification d'une fiche de joueuse (identité non déterminée)".into())
+            };
+            let Ok(Some(p))=player::Entity::find_by_id(pid).one(&state.db).await else{
+                return Context::admin("Modification d'une fiche de joueuse introuvable".into())
+            };
+            let old=label_player(&p);
+            let mut differences=Vec::new();
+            if let Some(text)=change_text(&p.firstname,body_string(payload,"firstname"),"prénom"){differences.push(text);}
+            if let Some(text)=change_text(&p.lastname,body_string(payload,"lastname"),"nom"){differences.push(text);}
+            if let Some(n)=payload.and_then(|v|v.get("number")).and_then(Value::as_u64){
+                if n!=p.number as u64{differences.push(format!("numéro : {} → {n}",p.number));}
+            }
+            let detail=if differences.is_empty(){"aucun changement".into()}else{differences.join(", ")};
+            scope_player(state,actor,pid,format!("Modification de la joueuse {} — {detail}",quoted(&old))).await
+        }
+        ["player","delete",pid]=>{
+            let Some(pid)=id(pid) else{return Context::admin("Suppression d'une fiche de joueuse".into())};
+            match player::Entity::find_by_id(pid).one(&state.db).await{
+                Ok(Some(p))=>scope_player(state,actor,pid,
+                    format!("Suppression de la fiche de la joueuse {}",quoted(&label_player(&p)))).await,
+                _=>Context::admin("Suppression d'une fiche de joueuse introuvable".into()),
+            }
+        }
+        ["matrix","result"]|["activity_player","update"]=>{
+            let who=if let Some(pid)=body_id(payload,"player_id"){
+                player::Entity::find_by_id(pid).one(&state.db).await.ok().flatten()
+                    .map(|p|quoted(&label_player(&p))).unwrap_or_else(||"une joueuse".into())
+            }else{"une joueuse".into()};
+            let act=if let Some(aid)=body_id(payload,"activity_id"){
+                if let Ok(Some(a))=catalog_activity::Entity::find_by_id(aid).one(&state.db).await{
+                    quoted(&a.name)
+                }else if let Ok(Some(a))=activity::Entity::find_by_id(aid).one(&state.db).await{
+                    quoted(&a.name)
+                }else{"une activité".into()}
+            }else{"une activité".into()};
+            Context::personal(format!("Mise à jour de l'évaluation de {who} pour {act}"))
+        }
+        ["matrix","select"]=>{
+            let name=if let Some(aid)=body_id(payload,"activity_id"){
+                catalog_activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
+                    .map(|a|quoted(&a.name)).unwrap_or_else(||"une activité".into())
+            }else{"une activité".into()};
+            Context::personal(format!("Sélection de {name} dans le tableur"))
+        }
+        ["matrix","activity"]=>Context::personal("Ajout d'une activité au tableur".into()),
+        ["activity","create"]=>{
+            let name=body_string(payload,"name").unwrap_or("sans nom");
+            Context::personal(format!("Création de l'activité personnelle {}",quoted(name)))
+        }
+        ["activity","update"]=>{
+            let old=if let Some(aid)=body_id(payload,"id"){
+                activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
+                    .map(|a|a.name).unwrap_or_else(||"inconnue".into())
+            }else{"inconnue".into()};
+            let next=body_string(payload,"name");
+            let detail=change_text(&old,next,"nom").unwrap_or_else(||"consignes ou date modifiées".into());
+            Context::personal(format!("Modification de l'activité {} — {detail}",quoted(&old)))
+        }
+        ["activity","delete",activity_id]=>{
+            let name=if let Some(aid)=id(activity_id){
+                activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()
+                    .map(|a|a.name).unwrap_or_else(||"inconnue".into())
+            }else{"inconnue".into()};
+            Context::personal(format!("Suppression de l'activité {}",quoted(&name)))
+        }
+        ["catalog","upload"]=>Context::personal("Téléversement d'une illustration d'activité".into()),
+        ["tactics"]=>{
+            let name=body_string(payload,"name").unwrap_or("sans nom");
+            Context::personal(format!("Création du schéma tactique {}",quoted(name)))
+        }
+        ["tactics",diagram_id]=>{
+            let existing=id(diagram_id).and_then(|id|Some(id));
+            let old=if let Some(id)=existing{
+                tactical_diagram::Entity::find_by_id(id).one(&state.db).await.ok().flatten()
+                    .map(|d|d.name).unwrap_or_else(||"inconnu".into())
+            }else{"inconnu".into()};
+            let detail=change_text(&old,body_string(payload,"name"),"nom")
+                .unwrap_or_else(||"objets ou trajectoires modifiés".into());
+            Context::personal(if *method==Method::DELETE{
+                format!("Suppression du schéma tactique {}",quoted(&old))
+            }else{format!("Modification du schéma tactique {} — {detail}",quoted(&old))})
+        }
+        ["admin","users",target,"role"]=>{
+            let username=if let Some(uid)=id(target){
+                user::Entity::find_by_id(uid).one(&state.db).await.ok().flatten()
+                    .map(|u|u.username).unwrap_or_else(||"inconnu".into())
+            }else{"inconnu".into()};
+            let role=body_string(payload,"role").unwrap_or("non précisé");
+            Context::admin(format!("Attribution du rôle {role} au compte {}",quoted(&username)))
+        }
+        ["account","profile"]=>{
+            let old=user::Entity::find_by_id(actor).one(&state.db).await.ok().flatten()
+                .map(|u|u.username).unwrap_or_else(||"compte".into());
+            let detail=change_text(&old,body_string(payload,"username"),"identifiant")
+                .unwrap_or_else(||"profil personnel modifié".into());
+            Context::personal(format!("Modification du profil de {} — {detail}",quoted(&old)))
+        }
+        ["account","password"]=>Context::personal("Changement du mot de passe du compte".into()),
+        ["preferences"]=>Context::personal("Mise à jour des préférences d'affichage".into()),
         ["clubs"] if *method==Method::POST=>{
             let name=payload.and_then(|v|v.get("name")).and_then(Value::as_str);
             Context::admin(match name{

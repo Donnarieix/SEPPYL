@@ -93,7 +93,7 @@ pub struct ClubInformation {
     pub is_public:bool,
 }
 fn valid_crop(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->bool {
-    x.unwrap_or(0).abs()<=100 && y.unwrap_or(0).abs()<=100
+    (-100..=100).contains(&x.unwrap_or(0)) && (-100..=100).contains(&y.unwrap_or(0))
         && (100..=300).contains(&zoom.unwrap_or(100))
 }
 fn valid_logo(url:Option<&str>)->bool {

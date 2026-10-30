@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 use crate::api::{account,changelog};
-use crate::session;
 
 #[component]
 pub fn ChangelogHost()->Element{
@@ -138,7 +137,9 @@ pub fn ChangelogHost()->Element{
                                                 notice.set(Some("Renseignez la version, le titre et le contenu.".into()));
                                                 return;
                                             }
-                                            let token=token.clone();
+                                            let Some(token)=token.clone() else{
+                                                notice.set(Some("Connexion requise.".into()));return;
+                                            };
                                             busy.set(true);notice.set(None);
                                             spawn(async move{
                                                 match changelog::save(&token,&version,&label,&description).await{

@@ -221,9 +221,17 @@ pub async fn capture(
                             .flatten().map(|u|u.username)
                     }else{None};
                     let account=username.map(|u|quoted(&u)).unwrap_or_else(||"un compte".into());
-                    format!("{} des accès de {account} au club {name}",operation(method))
+                    format!("{} des accès de {account} au club {name}{}",operation(method),
+                        body_string(payload,"role").map(|r|format!(" (rôle : {r})")).unwrap_or_default())
                 },
-                ["visibility"]=>format!("Modification de la visibilité du club {name}"),
+                ["visibility"]=>{
+                    let visible=payload.and_then(|v|v.get("is_public")).and_then(Value::as_bool);
+                    match visible{
+                        Some(true)=>format!("Publication du club {name} dans l'annuaire public"),
+                        Some(false)=>format!("Retrait du club {name} de l'annuaire public"),
+                        None=>format!("Modification de la visibilité du club {name}"),
+                    }
+                },
                 _=>format!("{} du club {name}",operation(method)),
             };
             Context::club(id,desc)
@@ -261,7 +269,8 @@ pub async fn capture(
                             .flatten().map(|u|u.username)
                     }else{None};
                     let account=username.map(|v|quoted(&v)).unwrap_or_else(||"un compte".into());
-                    format!("{} des accès de {account} à l'équipe {name}",operation(method))
+                    format!("{} des accès de {account} à l'équipe {name}{}",operation(method),
+                        body_string(payload,"role").map(|r|format!(" (rôle : {r})")).unwrap_or_default())
                 },
                 _=>format!("{} dans l'équipe {name}",operation(method))
             };
@@ -278,15 +287,25 @@ pub async fn capture(
                     Method::PUT=>format!("Modification de la séance {}",quoted(&t.name)),
                     _=>format!("{} de la séance {}",operation(method),quoted(&t.name)),
                 },
-                ["attendance"]=>format!("Modification des présences de la séance {}",quoted(&t.name)),
+                ["attendance"]=>{
+                    let total=payload.and_then(|v|v.get("player_ids")).and_then(Value::as_array)
+                        .map(|items|items.len());
+                    format!("Enregistrement des présences de la séance {}{}",quoted(&t.name),
+                        total.map(|n|format!(" — {n} joueuse(s) présente(s)")).unwrap_or_default())
+                },
                 ["scores"]=>{
                     let who=if let Some(pid)=body_id(payload,"player_id"){
                         player::Entity::find_by_id(pid).one(&state.db).await.ok().flatten()
                             .map(|p|quoted(&label_player(&p))).unwrap_or_else(||"une joueuse".into())
                     }else{"une joueuse".into()};
-                    format!("Notation de {who} dans la séance {}",quoted(&t.name))
+                    format!("Notation de {who} dans la séance {}{}",quoted(&t.name),
+                        payload.and_then(|v|v.get("score")).and_then(Value::as_i64)
+                            .map(|n|format!(" — {n}/5")).unwrap_or_default())
                 },
-                ["activities"]=>format!("Ajout d'une activité à la séance {}",quoted(&t.name)),
+                ["activities"]=>{
+                    let name=body_string(payload,"name").unwrap_or("sans nom");
+                    format!("Ajout de l'activité {} à la séance {}",quoted(name),quoted(&t.name))
+                },
                 ["catalog",catalog_id]=>{
                     let name=if let Some(aid)=id(catalog_id){
                         catalog_activity::Entity::find_by_id(aid).one(&state.db).await.ok().flatten()

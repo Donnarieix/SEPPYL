@@ -207,6 +207,28 @@ pub async fn capture(
                 else{return Context::admin(generic)};
             let name=quoted(&c.name);
             let desc=match *tail {
+                ["information"]=>{
+                    let mut fields=Vec::new();
+                    if let Some(new_name)=body_string(payload,"name"){
+                        if new_name.trim()!=c.name{fields.push(format!("nom : {} → {}",quoted(&c.name),quoted(new_name.trim())));}
+                    }
+                    if let Some(new_description)=body_string(payload,"description"){
+                        if c.description.as_deref().unwrap_or("")!=new_description.trim(){
+                            fields.push("description modifiée".into());
+                        }
+                    }
+                    if let Some(new_logo)=payload.and_then(|v|v.get("logo_url")){
+                        let existing=c.logo_url.as_deref().unwrap_or("");
+                        if new_logo.as_str().unwrap_or("")!=existing{fields.push("logo modifié".into());}
+                    }
+                    if let Some(public)=payload.and_then(|v|v.get("is_public")).and_then(Value::as_bool){
+                        if public!=c.is_public.unwrap_or(false){
+                            fields.push(if public{"club rendu public".into()}else{"club rendu privé".into()});
+                        }
+                    }
+                    format!("Modification des informations du club {name}{}",
+                        if fields.is_empty(){String::new()}else{format!(" — {}",fields.join(", "))})
+                },
                 ["teams"]=>{
                     let new_name=payload.and_then(|v|v.get("name")).and_then(Value::as_str);
                     match new_name{

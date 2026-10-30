@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /public
+Allow: /mentions-legales
+Allow: /confidentialite
+Allow: /cgu
+Disallow: /spreadsheet
+Disallow: /players
+Disallow: /activities
+Disallow: /tactics
+Disallow: /club
+Disallow: /admin
+Disallow: /audit
+Disallow: /settings
+Disallow: /trainings/
+Disallow: /login
+
+Sitemap: https://seppyl.donnarieix.fr/sitemap.xml

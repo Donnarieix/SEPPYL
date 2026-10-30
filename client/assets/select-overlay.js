@@ -5,6 +5,7 @@
   if (window.__seppylSelectOverlayInstalled) return;
   window.__seppylSelectOverlayInstalled = true;
   let active=null, panel=null, list=null, input=null, options=[], visible=[], index=-1;
+  let serial=0,menuId="";
   const coarse=()=>!!window.matchMedia?.("(pointer: coarse)").matches;
   const withinApp=el=>!!el?.closest?.(".site-root");
   const searchable=el=>el?.getAttribute?.("data-seppyl-searchable")==="true" ||
@@ -22,7 +23,7 @@
     const previous=active;
     if(previous)previous.removeAttribute("aria-expanded");
     panel?.remove();
-    panel=null;list=null;input=null;active=null;options=[];visible=[];index=-1;
+    panel=null;list=null;input=null;active=null;options=[];visible=[];index=-1;menuId="";
     if(restoreFocus&&previous?.isConnected)previous.focus({preventScroll:true});
   }
   function place(){
@@ -65,12 +66,14 @@
       button.setAttribute("role","option");
       button.setAttribute("aria-selected",String(option.value===active.value));
       button.setAttribute("data-select-index",String(i));
+      button.id=menuId+"-option-"+i;
       button.disabled=option.disabled;
       button.tabIndex=-1;
       if(i===index)button.classList.add("is-active");
       button.addEventListener("click",()=>choose(option));
       list.append(button);
     }
+    if(input&&index>=0)input.setAttribute("aria-activedescendant",menuId+"-option-"+index);
   }
   function setIndex(next){
     if(!visible.length)return;
@@ -82,7 +85,7 @@
       item.classList?.toggle("is-active",i===index);
     });
     list.children[index]?.scrollIntoView?.({block:"nearest"});
-    if(input)input.setAttribute("aria-activedescendant",String(index));
+    if(input)input.setAttribute("aria-activedescendant",menuId+"-option-"+index);
   }
   function open(el){
     if(active===el){close();return;}
@@ -90,6 +93,7 @@
     const host=rootFor(el);
     if(!host){close();return;}
     const isSearch=searchable(el);
+    menuId="seppyl-select-"+(++serial);
     options=Array.from(el.options).filter(o=>!o.hidden&&
       (!isSearch||!isPlaceholder(o,el)));
     index=Math.max(0,options.findIndex(o=>o.value===el.value&&!o.disabled));
@@ -102,7 +106,10 @@
       input.type="search";input.className="seppyl-select-search";
       input.placeholder="Rechercher…";
       input.setAttribute("aria-label","Rechercher une option");
+      input.setAttribute("role","combobox");
       input.setAttribute("aria-autocomplete","list");
+      input.setAttribute("aria-controls",menuId);
+      input.setAttribute("aria-expanded","true");
       input.setAttribute("autocomplete","off");
       input.addEventListener("input",()=>{
         index=-1;render();place();
@@ -110,6 +117,7 @@
       panel.append(input);
       list=document.createElement("div");list.className="seppyl-select-options";
       list.setAttribute("role","listbox");
+      list.id=menuId;
       panel.append(list);
     }else{
       list=panel;

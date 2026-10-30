@@ -18,7 +18,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build API
-        run: cargo build -p api --release --locked
+        shell: bash
+        env:
+          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
+        run: |
+          set -euo pipefail
+          # Pull requests never need a bootstrap secret; only production releases do.
+          if [ -n "$BOOTSTRAP_HASH" ]; then
+            export SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH="$BOOTSTRAP_HASH"
+          fi
+          cargo build -p api --release --locked
       - run: tar czf "$RUNNER_TEMP/seppyl-api.tar.gz" -C target/release api
       - uses: actions/upload-artifact@v4
         with:
@@ -75,6 +84,49 @@ jobs:
     needs: [build-api, build-web]
     runs-on: ubuntu-latest
     steps:
+      - name: Verify production bootstrap has been configured
+        shell: bash
+        env:
+          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
+        run: |
+          if [ -z "$BOOTSTRAP_HASH" ]; then
+            echo "::error::Configure the SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH Actions secret before the initial release."
+            exit 1
+          fi
+          case "$BOOTSTRAP_HASH" in
+            '\$argon2id\
+          path: ${{ runner.temp }}/api
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-web
+          path: ${{ runner.temp }}/web
+      - name: Configure SSH
+        env:
+          SSH_API_KEY: ${{ secrets.DEPLOY_API_SSH_KEY }}
+          SSH_WEB_KEY: ${{ secrets.DEPLOY_WEB_SSH_KEY }}
+          SSH_HOST_KEYS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_API_KEY" > ~/.ssh/api_key
+          printf '%s\n' "$SSH_WEB_KEY" > ~/.ssh/web_key
+          printf '%s\n' "$SSH_HOST_KEYS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/*_key ~/.ssh/known_hosts
+      - name: Deploy API
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          cat "$RUNNER_TEMP/api/seppyl-api.tar.gz" | ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/api_key -p "$PORT" "lud@$HOST"
+      - name: Deploy Web
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          cat "$RUNNER_TEMP/web/seppyl-web.tar.gz" | ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/web_key -p "$PORT" "lud@$HOST"
+*) ;;
+            *) echo "::error::Bootstrap secret must contain a valid Argon2id hash."; exit 1 ;;
+          esac
       - uses: actions/download-artifact@v4
         with:
           name: seppyl-api

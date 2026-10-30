@@ -2301,3 +2301,56 @@ button.grid-add-button:hover,
 .site-root ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
 .site-root ::-webkit-scrollbar-corner{background:transparent}
 @media(max-width:720px){.tactics-save-notice{max-width:100%;order:3}}
+
+
+/* Club identity and administrative management */
+.club-sidebar-avatar{overflow:hidden}
+.club-sidebar-avatar img,.workspace-team-icon img,.club-logo-preview img,
+.public-club-logo img{display:block;width:100%;height:100%;object-fit:contain}
+.club-sidebar-avatar:has(img){background:var(--surface)!important}
+.workspace-team-icon:has(img){background:var(--surface)}
+.club-information-panel{min-width:0}
+.club-information-form{display:flex;flex-direction:column;gap:18px;padding:22px}
+.club-information-identity{display:grid;grid-template-columns:108px minmax(0,1fr);gap:22px;align-items:start}
+.club-logo-preview{display:grid;place-items:center;aspect-ratio:1/1;width:108px;
+  border:1px solid var(--line);border-radius:13px;background:var(--surface-soft);
+  font-size:38px;color:var(--accent);font-weight:750;overflow:hidden}
+.club-logo-preview img{padding:7px;box-sizing:border-box}
+.club-logo-controls{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-width:0}
+.club-logo-controls label{font-size:12px;font-weight:700}
+.club-logo-controls input{max-width:100%;width:100%;box-sizing:border-box}
+.club-logo-controls input[type=file]{padding:8px 0;font-size:12px}
+.club-logo-controls small{color:var(--muted);font-size:11px}
+.club-information-form .field{display:flex;flex-direction:column;gap:8px}
+.club-information-form .field :is(input,textarea){width:100%;box-sizing:border-box}
+.club-information-form textarea{resize:vertical;min-height:100px}
+.club-public-setting{display:flex;align-items:center;justify-content:space-between;
+  gap:20px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}
+.club-public-setting strong{font-size:13px}
+.club-public-setting p{margin:5px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.club-public-setting input[type=checkbox]{width:21px;height:21px;flex:0 0 21px;accent-color:var(--accent)}
+.club-information-actions{display:flex;justify-content:flex-end;gap:12px}
+.admin-club-layout{grid-template-columns:minmax(205px,260px) minmax(0,1fr)}
+.admin-club-create{padding:15px;border-top:1px solid var(--line);display:grid;gap:10px}
+.admin-club-create strong{font-size:12px}
+.admin-club-create .workspace-form{padding:0;margin:0;display:grid;gap:9px}
+.admin-club-create input{min-width:0;width:100%;box-sizing:border-box}
+.admin-club-header{padding:8px 0 14px}
+.admin-club-header h2{font-size:21px;margin:0}
+.admin-club-header p{color:var(--muted);font-size:12px;margin:6px 0 0}
+.admin-create-team{display:flex;flex-wrap:wrap;align-items:end;padding:16px;gap:10px}
+.admin-create-team .field{flex:1 1 200px}
+.admin-create-team button{align-self:end}
+.admin-roster-heading{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.admin-roster-heading h2{margin:0;font-size:18px}
+.public-club-logo{width:65px;height:65px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface-soft);display:grid;place-items:center;overflow:hidden}
+.public-club-heading{display:flex;align-items:center;gap:16px}
+.public-club-heading p{white-space:pre-wrap;margin:6px 0;color:var(--muted)}
+@media(max-width:760px){
+ .admin-club-layout{grid-template-columns:minmax(0,1fr)}
+ .club-information-identity{grid-template-columns:74px minmax(0,1fr);gap:13px}
+ .club-logo-preview{width:74px}
+ .club-information-form{padding:15px}
+ .admin-roster-heading{flex-wrap:wrap}
+}

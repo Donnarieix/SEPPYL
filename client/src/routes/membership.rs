@@ -35,7 +35,6 @@ pub fn MembershipPanel(
     });
     let mut selected=use_signal(||default_user.unwrap_or_default());
     let mut role=use_signal(||if scope=="club"{"user".to_string()}else{"trainer".to_string()});
-    let mut search=use_signal(String::new);
     let mut notice=use_signal(||None::<String>);
     let mut busy=use_signal(||false);
     let is_club=scope=="club";
@@ -145,15 +144,10 @@ pub fn MembershipPanel(
                             }
                         },
                         div{class:"field",
-                            label{"Rechercher un compte"}
-                            input{value:"{search}",placeholder:"Rechercher par nom…",
-                                oninput:move |e|search.set(e.value())}
-                        }
-                        div{class:"field",
                             label{"Compte"}
                             select{value:"{selected}",required:true,onchange:move |e|selected.set(e.value()),
                                 option{value:"","Choisir un utilisateur"}
-                                for item in names.iter().filter(|user|user.username.to_lowercase().contains(&search.read().to_lowercase())){
+                                for item in &names{
                                     option{key:"{item.id}",value:"{item.id}","{item.username}"}
                                 }
                             }

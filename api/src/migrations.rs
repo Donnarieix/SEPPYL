@@ -1,0 +1,163 @@
+//! One-time, transactional migration for the original SQLite player table.
+//! Older versions stored firstname UNIQUE inline, backed by sqlite_autoindex.
+//! SQLite cannot DROP INDEX for this inline constraint: recreate the table while
+//! preserving its primary keys and all external references.
+use sea_orm::{
+    ConnectionTrait, DatabaseConnection, DbBackend, DbErr, QueryResult, Statement,
+    TransactionTrait,
+};
+
+fn raw(sql:impl Into<String>)->Statement{
+    Statement::from_string(DbBackend::Sqlite,sql.into())
+}
+fn missing(message:&str)->DbErr {DbErr::Custom(message.to_string())}
+async fn query_rows(db:&impl ConnectionTrait,sql:impl Into<String>)->Result<Vec<QueryResult>,DbErr>{
+    db.query_all_raw(raw(sql)).await
+}
+async fn integer(db:&impl ConnectionTrait,sql:&str,column:&str)->Result<i64,DbErr>{
+    db.query_one_raw(raw(sql)).await?
+        .ok_or_else(||missing("Résultat SQLite manquant"))?
+        .try_get("",column)
+}
+fn quote_identifier(value:&str)->String{
+    format!("\"{}\"",value.replace('"',"\"\""))
+}
+
+pub async fn migrate_legacy_player_firstname(db:&DatabaseConnection)->Result<bool,DbErr>{
+    let indexes=query_rows(db,"PRAGMA index_list('players')").await?;
+    let mut inline_unique=false;
+    let mut named_unique=Vec::<String>::new();
+    for row in indexes{
+        let unique:i64=row.try_get("","unique")?;
+        if unique!=1 {continue;}
+        let index:String=row.try_get("","name")?;
+        let origin:String=row.try_get("","origin")?;
+        let info=query_rows(db,format!("PRAGMA index_info('{}')",index.replace('\'',"''"))).await?;
+        let cols=info.iter().map(|r|r.try_get::<Option<String>>("","name"))
+            .collect::<Result<Vec<_>,_>>()?;
+        if cols!=vec![Some("firstname".into())]{continue;}
+        match origin.as_str(){
+            "u"=>inline_unique=true,
+            "c"=>named_unique.push(index),
+            _=>{},
+        }
+    }
+    if !inline_unique {
+        // The normal SeaORM index may be removed without rebuilding the table.
+        for index in &named_unique{
+            db.execute_unprepared(&format!("DROP INDEX IF EXISTS {}",quote_identifier(index)))
+                .await?;
+        }
+        return Ok(!named_unique.is_empty());
+    }
+
+    let table_info=query_rows(db,"PRAGMA table_info('players')").await?;
+    let names=table_info.iter().map(|r|r.try_get::<String>("","name"))
+        .collect::<Result<Vec<_>,_>>()?;
+    if names!=["id","firstname","lastname","number"]{
+        return Err(missing("Migration annulée : la table players contient des colonnes inattendues"));
+    }
+    let mut definitions=Vec::new();
+    for row in table_info{
+        let name:String=row.try_get("","name")?;
+        let data_type:String=row.try_get("","type")?;
+        let notnull:i64=row.try_get("","notnull")?;
+        let pk:i64=row.try_get("","pk")?;
+        let default:Option<String>=row.try_get("","dflt_value")?;
+        if default.is_some() || !data_type.chars().all(|c|
+            c.is_ascii_alphanumeric()||matches!(c,'_'|'('|')'|' ')
+        ){
+            return Err(missing("Migration annulée : déclaration de colonne inattendue"));
+        }
+        let mut declaration=format!("{} {}",quote_identifier(&name),data_type);
+        if notnull!=0 {declaration.push_str(" NOT NULL");}
+        if pk!=0 {declaration.push_str(" PRIMARY KEY");}
+        definitions.push(declaration);
+    }
+    let objects=query_rows(db,
+        "SELECT type,name,sql FROM sqlite_master WHERE tbl_name='players' AND sql IS NOT NULL AND type IN ('index','trigger')"
+    ).await?;
+    let mut recreate=Vec::new();
+    for obj in objects{
+        let kind:String=obj.try_get("","type")?;
+        let name:String=obj.try_get("","name")?;
+        let sql:String=obj.try_get("","sql")?;
+        if kind=="index" && named_unique.iter().any(|i|i==&name){continue;}
+        recreate.push(sql);
+    }
+
+    // Use a dedicated single-connection pool: PRAGMA foreign_keys is
+    // connection-local and must be switched off BEFORE BEGIN.
+    let previous_fk=integer(db,"PRAGMA foreign_keys","foreign_keys").await?;
+    db.execute_unprepared("PRAGMA foreign_keys=OFF").await?;
+    let attempt=async{
+        let txn=db.begin().await?;
+        let result=async{
+            let before=integer(&txn,"SELECT COUNT(*) AS count FROM players","count").await?;
+            txn.execute_unprepared(&format!(
+                "CREATE TABLE \"players__seppyl_upgrade\" ({})",definitions.join(", ")
+            )).await?;
+            txn.execute_unprepared(
+                "INSERT INTO players__seppyl_upgrade (id,firstname,lastname,number) SELECT id,firstname,lastname,number FROM players"
+            ).await?;
+            txn.execute_unprepared("DROP TABLE players").await?;
+            txn.execute_unprepared(
+                "ALTER TABLE players__seppyl_upgrade RENAME TO players"
+            ).await?;
+            for stmt in &recreate{
+                txn.execute_unprepared(stmt).await?;
+            }
+            let after=integer(&txn,"SELECT COUNT(*) AS count FROM players","count").await?;
+            if before!=after {return Err(missing("Migration annulée : nombre de joueuses modifié"));}
+            if !query_rows(&txn,"PRAGMA foreign_key_check").await?.is_empty(){
+                return Err(missing("Migration annulée : références SQLite invalides"));
+            }
+            Ok::<_,DbErr>(())
+        }.await;
+        match result{
+            Ok(())=>txn.commit().await,
+            Err(err)=>{txn.rollback().await?;Err(err)},
+        }
+    }.await;
+    // Always restore the exact FK setting after commit or rollback.
+    let restore=db.execute_unprepared(if previous_fk==0{
+        "PRAGMA foreign_keys=OFF"
+    }else{"PRAGMA foreign_keys=ON"}).await;
+    restore?;
+    attempt?;
+    tracing::info!("Migrated legacy players table; retained player IDs and references");
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    use sea_orm::{ConnectOptions,Database};
+
+    #[tokio::test]
+    async fn old_inline_unique_constraint_is_removed_without_losing_links(){
+        let mut opt=ConnectOptions::new("sqlite::memory:");
+        opt.max_connections(1);
+        let db=Database::connect(opt).await.unwrap();
+        db.execute_unprepared(
+            "CREATE TABLE players (id uuid_text NOT NULL PRIMARY KEY, firstname varchar NOT NULL UNIQUE, lastname varchar NOT NULL, number integer NOT NULL)"
+        ).await.unwrap();
+        db.execute_unprepared(
+            "CREATE TABLE player_refs (player_id uuid_text NOT NULL REFERENCES players(id))"
+        ).await.unwrap();
+        db.execute_unprepared(
+            "INSERT INTO players VALUES ('test-1','Emma','Durand',7)"
+        ).await.unwrap();
+        db.execute_unprepared(
+            "INSERT INTO player_refs VALUES ('test-1')"
+        ).await.unwrap();
+        assert!(migrate_legacy_player_firstname(&db).await.unwrap());
+        assert!(!migrate_legacy_player_firstname(&db).await.unwrap());
+        db.execute_unprepared(
+            "INSERT INTO players VALUES ('test-2','Emma','Martin',9)"
+        ).await.unwrap();
+        assert_eq!(integer(&db,"SELECT COUNT(*) AS count FROM players","count").await.unwrap(),2);
+        assert_eq!(integer(&db,"SELECT COUNT(*) AS count FROM player_refs","count").await.unwrap(),1);
+        assert!(query_rows(&db,"PRAGMA foreign_key_check").await.unwrap().is_empty());
+    }
+}

@@ -43,6 +43,10 @@ fn App() -> Element {
         .theme;
     rsx! {
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
+        document::Title { "SEPPYL — Gestion des entraînements sportifs" }
+        document::Meta { name:"description",
+            content:"SEPPYL aide les clubs et entraîneurs à préparer les séances, organiser les activités et suivre les entraînements." }
+        document::Meta { name:"theme-color", content:"#101f2a" }
         document::Stylesheet { href: asset!("/assets/main.css") }
         document::Script { src: asset!("/assets/theme-transition.js") }
         document::Script { src: asset!("/assets/auth-guard.js") }
@@ -59,6 +63,7 @@ fn App() -> Element {
             "data-density": current.density.as_str(),
             Router::<routes::Route> {}
             routes::changelog::ChangelogHost {}
+            routes::legal::SiteFooter {}
         }
     }
 }

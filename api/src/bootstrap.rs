@@ -2,7 +2,7 @@
 //! The password hash is injected into the API build by a GitHub Actions secret.
 //! No default login, plaintext password or reusable setup HTTP endpoint is shipped.
 use std::{fs::OpenOptions, io::Write, path::Path};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use crate::entities::user;
 
 /// Intentionally does nothing when the build contains no bootstrap secret.

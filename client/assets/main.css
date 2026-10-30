@@ -2713,3 +2713,89 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 .changelog-body.rich-description p{margin:.6em 0}
 .changelog-body.rich-description :is(ul,ol){padding-left:1.5em;margin:10px 0}
 .changelog-body.rich-description li{margin:.25em 0}
+
+
+/* Release footer and public legal content: remains unobtrusive in the app. */
+.site-root{display:flex;flex-direction:column;min-height:100dvh}
+.site-root>main{width:100%;flex:1 0 auto}
+.site-footer{
+  flex:0 0 auto;margin-top:auto;position:relative;z-index:1;
+  width:100%;border-top:1px solid var(--line);background:var(--surface);
+  color:var(--muted);
+}
+.site-footer-inner{
+  width:100%;max-width:1800px;margin:0 auto;
+  min-height:82px;padding:16px 32px;
+  display:flex;flex-wrap:wrap;align-items:center;
+  justify-content:space-between;gap:18px 30px;
+}
+.site-footer-brand{display:flex;flex-direction:column;gap:4px}
+.site-footer-brand strong{color:var(--text);font-weight:800;letter-spacing:.035em;font-size:12px}
+.site-footer-brand span{font-size:11px}
+.site-footer-nav{display:flex;align-items:center;gap:11px 18px;flex-wrap:wrap}
+.site-footer a{
+  color:var(--muted);font-size:12px;font-weight:550;
+  text-decoration:none;text-underline-offset:4px;
+  border-radius:4px;transition:color .15s;
+}
+.site-footer a:hover,.site-footer a:focus-visible{
+  color:var(--accent);text-decoration:underline;
+}
+.site-footer a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.site-footer-meta{display:flex;align-items:center;justify-content:flex-end;gap:10px 16px;flex-wrap:wrap}
+.site-footer-version{
+  display:inline-flex;align-items:center;border:1px solid var(--line);
+  color:var(--muted);background:var(--surface-soft);
+  padding:5px 8px;font-size:11px;font-weight:750;
+  border-radius:7px;font-variant-numeric:tabular-nums;
+}
+.legal-page{width:100%;max-width:1000px;padding:44px 32px 90px}
+.legal-heading{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-bottom:29px}
+.legal-return{font-size:12px;color:var(--muted);text-decoration:none;margin-bottom:13px}
+.legal-return:hover{color:var(--accent)}
+.legal-eyebrow{
+  font-size:10px;font-weight:750;color:var(--accent);
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.legal-heading h1{font-size:clamp(26px,3vw,38px);line-height:1.15;
+  font-weight:750;letter-spacing:-.03em;margin:0;color:var(--text)}
+.legal-heading>p{margin:0;max-width:70ch;color:var(--muted);font-size:13px;line-height:1.6}
+.legal-article{
+  padding:14px clamp(20px,3vw,38px);border:1px solid var(--line);
+  background:var(--surface);border-radius:12px;box-shadow:0 3px 16px #08152308;
+}
+.legal-article>section{padding:25px 0;border-bottom:1px solid var(--line)}
+.legal-article>section:last-child{border-bottom:0}
+.legal-article h2{font-size:17px;letter-spacing:-.02em;
+  margin:0 0 13px;font-weight:720;color:var(--text)}
+.legal-article p,.legal-article li{font-size:13px;line-height:1.8;color:var(--text)}
+.legal-article p{margin:0 0 10px;max-width:76ch}
+.legal-article p:last-child{margin-bottom:0}
+.legal-article a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}
+.legal-article ul{margin:10px 0;padding-left:23px}
+.legal-article li+li{margin-top:7px}
+.legal-article dl{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);
+  gap:10px 17px;font-size:13px;line-height:1.65}
+.legal-article dt{color:var(--muted);font-weight:600}
+.legal-article dd{margin:0;color:var(--text);overflow-wrap:anywhere}
+@media(max-width:830px){
+  .site-footer-inner{padding:17px 22px;gap:16px}
+  .site-footer-brand{flex:1 0 100%}
+  .site-footer-meta{justify-content:flex-start}
+  .legal-page{padding:32px 18px 70px}
+}
+@media(max-width:680px){
+  .site-footer{padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+  .site-footer-inner{min-height:0;gap:18px;align-items:flex-start}
+  .site-footer-nav{gap:12px 15px}
+  .site-footer-meta{width:100%;justify-content:flex-start}
+  .legal-article{padding:8px 18px;border-radius:10px}
+  .legal-article>section{padding:20px 0}
+  .legal-article dl{grid-template-columns:minmax(0,1fr);gap:3px}
+  .legal-article dd{margin-bottom:10px}
+}
+@media print{
+  .site-footer,.legal-return{display:none!important}
+  .legal-page{max-width:none;padding:0}
+  .legal-article{border:0;box-shadow:none;padding:0}
+}

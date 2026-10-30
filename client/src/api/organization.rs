@@ -18,6 +18,7 @@ struct RolePayload<'a>{role:&'a str}
 fn check(status:StatusCode)->Result<(),String>{
     match status {
         StatusCode::FORBIDDEN=>Err("Vous ne disposez pas des droits nécessaires.".into()),
+        StatusCode::CONFLICT=>Err("Une fiche avec le même prénom, nom et numéro existe déjà, ou une autre opération empêche la modification.".into()),
         _ if status.is_success()=>Ok(()),
         _=>Err(format!("Erreur API (HTTP {status})")),
     }

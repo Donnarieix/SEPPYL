@@ -1,38 +1,43 @@
 use dioxus::prelude::*;
 use crate::api::{account,changelog};
+use super::rich_editor::RichTextEditor;
 
 #[component]
 pub fn ChangelogHost()->Element{
     let mut open=use_context::<Signal<bool>>();
     let session=use_context::<Signal<Option<String>>>();
     let token=session.read().clone();
-    let entries_token=token.clone();
+    // Read the session signal INSIDE each resource so login/logout and account
+    // switching trigger a new fetch. Capturing an initial None produced empty
+    // lists for ordinary accounts after signing in.
     let mut entries=use_resource(move ||{
-        let token=entries_token.clone();
-        async move{
-            match token{Some(token)=>changelog::list(&token).await,
-                None=>Ok(Vec::new())}
-        }
+        let token=session.read().clone();
+        async move{match token{
+            Some(token)=>changelog::list(&token).await,
+            None=>Ok(Vec::new())
+        }}
     });
-    let status_token=token.clone();
     let mut unread_status=use_resource(move ||{
-        let token=status_token.clone();
-        async move{
-            match token{Some(token)=>changelog::status(&token).await,
-                None=>Ok(changelog::Status{version:"v0.1".into(),unread:false})}
-        }
+        let token=session.read().clone();
+        async move{match token{
+            Some(token)=>changelog::status(&token).await,
+            None=>Ok(changelog::Status{version:"v0.1".into(),unread:false})
+        }}
     });
-    let role_token=token.clone();
     let user=use_resource(move ||{
-        let token=role_token.clone();
-        async move{match token{Some(token)=>account::get(&token).await,
-            None=>Err("Connexion requise.".into())}}
+        let token=session.read().clone();
+        async move{match token{
+            Some(token)=>account::get(&token).await,
+            None=>Err("Connexion requise.".into())
+        }}
     });
     let mut prompted=use_signal(||None::<String>);
     let mut selected=use_signal(||"v0.1".to_string());
     let mut editing=use_signal(||false);
     let mut title=use_signal(String::new);
     let mut body=use_signal(String::new);
+    let mut body_html=use_signal(||None::<String>);
+    let mut is_hidden=use_signal(||false);
     let mut creating=use_signal(||false);
     let mut new_version=use_signal(String::new);
     let mut busy=use_signal(||false);
@@ -91,18 +96,26 @@ pub fn ChangelogHost()->Element{
                             for item in &history{
                                 button{
                                     key:"{item.version}",
-                                    class:if active.as_ref().is_some_and(|v|v.version==item.version){"changelog-version active"}else{"changelog-version"},
+                                    class:if active.as_ref().is_some_and(|v|v.version==item.version){
+                                        if item.is_hidden{"changelog-version active changelog-version-hidden"}
+                                        else{"changelog-version active"}
+                                    }else if item.is_hidden{"changelog-version changelog-version-hidden"}
+                                    else{"changelog-version"},
                                     r#type:"button",
                                     onclick:{
                                         let item=item.clone();
                                         move |_|{
                                             selected.set(item.version.clone());
                                             title.set(item.title.clone());body.set(item.body.clone());
+                                            body_html.set(item.body_html.clone());is_hidden.set(item.is_hidden);
                                             editing.set(false);creating.set(false);notice.set(None);
                                         }
                                     },
                                     strong{"{item.version}"}
                                     span{"{item.title}"}
+                                    if item.is_hidden{
+                                        small{class:"changelog-draft-indicator","Masqué"}
+                                    }
                                 }
                             }
                             if is_maintainer{
@@ -110,6 +123,7 @@ pub fn ChangelogHost()->Element{
                                     onclick:move |_|{
                                         new_version.set(String::new());
                                         title.set(String::new());body.set(String::new());
+                                        body_html.set(None);is_hidden.set(false);
                                         editing.set(true);creating.set(true);notice.set(None);
                                     },"+ Nouvelle version"}
                             }
@@ -132,6 +146,8 @@ pub fn ChangelogHost()->Element{
                                                 else{selected.read().clone()};
                                             let label=title.read().clone();
                                             let description=body.read().clone();
+                                            let html=body_html.read().clone();
+                                            let hidden=*is_hidden.read();
                                             if version.is_empty()||label.trim().is_empty()||description.trim().is_empty(){
                                                 notice.set(Some("Renseignez la version, le titre et le contenu.".into()));
                                                 return;
@@ -141,7 +157,7 @@ pub fn ChangelogHost()->Element{
                                             };
                                             busy.set(true);notice.set(None);
                                             spawn(async move{
-                                                match changelog::save(&token,&version,&label,&description).await{
+                                                match changelog::save(&token,&version,&label,&description,html.as_deref(),hidden).await{
                                                     Ok(_)=>{
                                                         selected.set(version);
                                                         entries.restart();
@@ -164,10 +180,33 @@ pub fn ChangelogHost()->Element{
                                     div{class:"field",label{"Titre"},
                                         input{value:"{title}",required:true,maxlength:"150",
                                             oninput:move |e|title.set(e.value())}}
-                                    div{class:"field",label{"Notes de version"},
-                                        textarea{rows:"14",value:"{body}",required:true,maxlength:"30000",
-                                            placeholder:"Décrivez les changements de cette version…",
-                                            oninput:move |e|body.set(e.value())}}
+                                    label{class:"changelog-visibility",
+                                        span{
+                                            strong{"Masquer cette version"}
+                                            small{"Les autres utilisateurs ne verront pas ce changelog tant qu'il est masqué."}
+                                        }
+                                        input{r#type:"checkbox",checked:*is_hidden.read(),
+                                            onchange:move |event|is_hidden.set(event.checked())}
+                                    }
+                                    if *is_hidden.read(){
+                                        div{class:"changelog-hidden-warning",role:"alert",
+                                            strong{"Attention — changelog masqué"}
+                                            p{"Cette version est invisible pour les autres utilisateurs et ne déclenchera aucune annonce tant qu'elle reste masquée."}
+                                        }
+                                    }
+                                    div{class:"field",
+                                        label{"Notes de version"}
+                                        RichTextEditor{
+                                            key:if *creating.read(){format!("new-{}",new_version.read())}else{selected.read().clone()},
+                                            initial_html:body_html.read().clone(),
+                                            initial_plain:body.read().clone(),
+                                            aria_label:Some("Notes de version".into()),
+                                            placeholder:Some("Décrivez les nouveautés de cette version…".into()),
+                                            on_html:move |html:String|body_html.set(Some(html)),
+                                            on_plain:move |plain:String|body.set(plain),
+                                        }
+                                        small{"Mise en forme : gras, italique, titres et listes."}
+                                    }
                                     div{class:"changelog-editor-actions",
                                         button{class:"button outline",r#type:"button",
                                             onclick:move |_|{editing.set(false);creating.set(false);},"Annuler"}
@@ -179,6 +218,9 @@ pub fn ChangelogHost()->Element{
                                 div{class:"changelog-detail-heading",
                                     span{class:"changelog-tag","{item.version}"}
                                     h3{"{item.title}"}
+                                    if item.is_hidden{
+                                        span{class:"changelog-hidden-pill","Masqué · réservé aux mainteneurs"}
+                                    }
                                     if is_maintainer{
                                         button{class:"button outline small",r#type:"button",
                                             onclick:{
@@ -186,13 +228,19 @@ pub fn ChangelogHost()->Element{
                                                 move |_|{
                                                     title.set(item.title.clone());
                                                     body.set(item.body.clone());
+                                                    body_html.set(item.body_html.clone());
+                                                    is_hidden.set(item.is_hidden);
                                                     editing.set(true);creating.set(false);
                                                     notice.set(None);
                                                 }
                                             },"Modifier"}
                                     }
                                 }
-                                div{class:"changelog-body","{item.body}"}
+                                if let Some(html)=item.body_html.as_deref(){
+                                    div{class:"changelog-body rich-description",dangerous_inner_html:html}
+                                }else{
+                                    div{class:"changelog-body","{item.body}"}
+                                }
                             }else{
                                 div{class:"panel-empty","Aucune version disponible."}
                             }

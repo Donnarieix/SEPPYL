@@ -119,37 +119,27 @@ pub fn Tactics() -> Element {
                             "data-tactics-initial": "{initial_objects}",
                             "data-tactics-revision": "{revision}",
 
-                            div { class: "tactics-tools", role:"toolbar", "aria-label":"Outils de dessin",
-                                details { class:"tactic-category",open:true,
-                                    summary { "Sélection" }
-                                    div { class:"tactic-category-actions",
-                                        button { class:"selected", r#type:"button", "data-tactic-tool":"select", "↖ Sélectionner" }
-                                        button { r#type:"button", "data-tactic-tool":"erase", "Effacer" }
-                                        button { r#type:"button", "data-tactic-remove":"true", "Supprimer la sélection" }
-                                        span { class:"tactic-selection-count", "data-selection-count":"true", "0 sélectionné(s)" }
-                                    }
+                            div { class:"tactics-tools",role:"toolbar","aria-label":"Outils de dessin",
+                                div { class:"tactic-toolbar-section",
+                                    span { class:"tactic-toolbar-label","Mode" }
+                                    button { class:"selected",r#type:"button","data-tactic-tool":"select",
+                                        title:"Sélectionner — S","Sélection" kbd { "S" } }
+                                    button { r#type:"button","data-tactic-tool":"erase",
+                                        title:"Gomme — E","Gomme" kbd { "E" } }
+                                    button { r#type:"button","data-tactic-remove":"true",
+                                        title:"Supprimer la sélection — Suppr","Supprimer" }
                                 }
-                                details { class:"tactic-category", open:true,
-                                    summary { "Joueurs" }
-                                    div { class:"tactic-category-actions",
-                                        button { r#type:"button", "data-tactic-tool":"player", "Joueuse" }
-
-                                    }
+                                div { class:"tactic-toolbar-section",
+                                    span { class:"tactic-toolbar-label","Éléments" }
+                                    button { r#type:"button","data-tactic-tool":"player","Joueuse" kbd { "J" } }
+                                    button { r#type:"button","data-tactic-tool":"ball","Ballon" kbd { "B" } }
+                                    button { r#type:"button","data-tactic-tool":"cone","Plot" kbd { "P" } }
+                                    button { r#type:"button","data-tactic-tool":"goal","But" kbd { "G" } }
                                 }
-                                details { class:"tactic-category", open:true,
-                                    summary { "Matériel" }
-                                    div { class:"tactic-category-actions",
-                                        button { r#type:"button", "data-tactic-tool":"ball", "Ballon" }
-                                        button { r#type:"button", "data-tactic-tool":"cone", "Plot" }
-                                        button { r#type:"button", "data-tactic-tool":"goal", "Mini-but" }
-                                    }
-                                }
-                                details { class:"tactic-category", open:true,
-                                    summary { "Trajets" }
-                                    div { class:"tactic-category-actions",
-                                        button { r#type:"button", "data-tactic-tool":"arrow", "Flèche droite" }
-                                        button { r#type:"button", "data-tactic-tool":"curve", "Flèche courbe" }
-                                    }
+                                div { class:"tactic-toolbar-section",
+                                    span { class:"tactic-toolbar-label","Trajectoires" }
+                                    button { r#type:"button","data-tactic-tool":"arrow","Droite" kbd { "F" } }
+                                    button { r#type:"button","data-tactic-tool":"curve","Courbe" kbd { "C" } }
                                 }
                             }
                             div { class:"tactic-colors",
@@ -180,13 +170,38 @@ pub fn Tactics() -> Element {
                                 output { "data-tactic-size-label":"true", "22" }
                             }
                             div { class:"tactic-editor-hint",
-                                span { "Sélectionnez plusieurs éléments avec Shift ou par encadrement." }
-                                span { "Une flèche courbe possède un point de contrôle déplaçable." }
+                                span { class:"tactic-selection-count","data-selection-count":"true","0 sélectionné(s)" }
+                                span { "Clic droit : couleurs" }
+                                span { "Molette : taille" }
+                                span { "Suppr / Retour : effacer" }
+                                span { "Échap : désélectionner" }
+                                span { "Maj + clic : multi-sélection" }
+                            }
+                            div { class:"tactic-shortcuts-help",
+                                details { summary { "Raccourcis clavier" }
+                                    div { class:"tactic-shortcuts-grid",
+                                        span { "S — sélectionner" } span { "J — joueuse" }
+                                        span { "B — ballon" } span { "P — plot" }
+                                        span { "G — mini-but" } span { "F — flèche droite" }
+                                        span { "C — courbe" } span { "E — gomme" }
+                                        span { "Suppr / Retour — supprimer" } span { "Échap — annuler la sélection" }
+                                    }
+                                }
                             }
                             svg { class:"tactics-canvas",
                                 "data-tactics-svg":"true",
                                 view_box:"0 0 800 500",
+                                tabindex:"0",
                                 "aria-label":"Terrain tactique interactif",
+                            }
+                            div { class:"tactic-context-palette","data-tactic-menu":"true",
+                                role:"group","aria-label":"Couleur de l'objet",
+                                div { class:"tactic-context-palette-head","Couleur" }
+                                for color in ["#2455b6","#c6403c","#f8f8f5","#ee9228","#21a179","#7d4cc2","#f2c94c","#202f43"]{
+                                    button { r#type:"button",class:"tactic-swatch",
+                                        "data-tactic-quick-color":"{color}",style:"--swatch:{color}",
+                                        title:"Appliquer {color}","aria-label":"Appliquer {color}" }
+                                }
                             }
                             textarea { class:"rich-hidden-input", "data-tactics-output":"true",
                                 "aria-hidden":"true", tabindex:"-1",

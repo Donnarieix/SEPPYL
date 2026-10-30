@@ -9,6 +9,10 @@ pub struct Model{
     pub version:String,
     pub title:String,
     pub body:String,
+    // Null means visible for all pre-existing changelogs.
+    pub is_hidden:Option<bool>,
+    // Legacy plain-text entries remain readable without conversion.
+    pub body_html:Option<String>,
     pub published_at:i64,
     pub updated_at:i64,
 }

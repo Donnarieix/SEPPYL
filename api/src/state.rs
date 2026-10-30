@@ -33,6 +33,8 @@ impl AppState {
             &migration_db,Some("data/seppyl.local.db-before-player-migration")
         )
             .await.expect("Unable to safely migrate the players table; restore the backup and inspect SQLite schema");
+        crate::migrations::add_club_information(&migration_db).await
+            .expect("Unable to migrate club information columns");
         migration_db.close().await
             .expect("Unable to close migration connection");
 

@@ -12,6 +12,8 @@ pub fn Login() -> Element {
     let mut error = use_signal(|| None::<String>);
 
     rsx! {
+        document::Title { "Connexion | SEPPYL" }
+        document::Meta { name:"robots", content:"noindex,nofollow,noarchive" }
         div { class: "login-screen",
             div { class: "login-card",
                 div { class: "login-brand", "SEPPYL" }

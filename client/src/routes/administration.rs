@@ -71,7 +71,7 @@ pub fn Administration()->Element{
         };
     }
     match identity.read().clone(){
-        Some(Ok(value)) if value.role=="administrator"=>{},
+        Some(Ok(value)) if matches!(value.role.as_str(),"administrator"|"maintainer")=>{},
         Some(Ok(_))=>return rsx!{
             div{class:"app",Header{}
                 main{class:"page",div{class:"workspace-empty",

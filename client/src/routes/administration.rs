@@ -104,6 +104,8 @@ pub fn Administration()->Element{
     let matching=directory.clone();
     let selected_club=clubs_list.iter().find(|item|item.id==*club.read()).cloned();
     let selected=directory.iter().find(|u|u.id==*selected_user.read()).cloned();
+    let is_maintainer=identity.read().as_ref()
+        .is_some_and(|v|v.as_ref().is_ok_and(|u|u.role=="maintainer"));
     let group_id=if team.read().is_empty(){club.read().clone()}else{team.read().clone()};
     let scope=if team.read().is_empty(){"club"}else{"team"};
     rsx!{
@@ -174,9 +176,9 @@ pub fn Administration()->Element{
                                     div{h2{"Droits de {user.username}"}
                                         p{"Ce rôle détermine les permissions générales du compte."}}
                                 }
-                                if user.role=="maintainer"{
+                                if user.role=="maintainer" && !is_maintainer{
                                     p{class:"organization-note",
-                                        "Compte Maintainer — rôle protégé. Les changements de rôle sont réservés à la commande serveur."}
+                                        "Compte Mainteneur — seul un autre Mainteneur peut modifier ce rôle."}
                                 }else{
                                 form{class:"workspace-form",
                                     onsubmit:{
@@ -203,6 +205,9 @@ pub fn Administration()->Element{
                                             option{value:"trainer","Entraîneur"}
                                             option{value:"manager","Gestionnaire"}
                                             option{value:"administrator","Administrateur"}
+                                            if is_maintainer{
+                                                option{value:"maintainer","Mainteneur"}
+                                            }
                                         }
                                     }
                                     button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Enregistrer"}

@@ -13,7 +13,11 @@ pub fn RichTextEditor(
     initial_plain: String,
     on_html: EventHandler<String>,
     on_plain: EventHandler<String>,
+    aria_label: Option<String>,
+    placeholder: Option<String>,
 ) -> Element {
+    let area_label=aria_label.unwrap_or_else(||"Description de l'activité".into());
+    let hint=placeholder.unwrap_or_else(||"Objectifs, déroulement et consignes…".into());
     let rendered = initial_html.clone()
         .unwrap_or_else(|| escape(&initial_plain));
     rsx! {
@@ -35,8 +39,8 @@ pub fn RichTextEditor(
             div { class: "rich-surface", "data-rich-area":"true",
                 contenteditable:"true", role:"textbox",
                 "aria-multiline":"true",
-                "aria-label":"Description de l'activité",
-                "data-placeholder":"Objectifs, déroulement et consignes…",
+                "aria-label":"{area_label}",
+                "data-placeholder":"{hint}",
                 dangerous_inner_html: rendered
             }
             textarea { "data-rich-html":"true", class:"rich-hidden-input",

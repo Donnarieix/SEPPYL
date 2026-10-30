@@ -15,6 +15,7 @@ test('production never builds the emergency maintainer provisioner again', () =>
     assert.ok(!source.includes('initialize_if_configured'), 'bootstrap initializer still invoked');
   }
   assert.ok(!state.includes('password: Set("$argon2id'), 'no embedded test admin account');
+  assert.ok(!state.includes('maintainer-bootstrapped-v1'), 'no marker references remain in production source');
 });
 
 test('a push can only deploy on main after tests, artifacts and browser E2E succeed', () => {

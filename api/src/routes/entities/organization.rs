@@ -894,6 +894,36 @@ mod club_information_regression {
         assert_eq!(updated.description.as_deref(),Some("Club amateur et école de sport"));
         assert_eq!(updated.logo_url.as_deref(),Some("https://example.org/logo.png"));
         assert_eq!(updated.is_public,Some(true));
+        assert_eq!(updated.logo_x,Some(12));
+        assert_eq!(updated.logo_y,Some(-8));
+        assert_eq!(updated.logo_zoom,Some(140));
+
+        let (_,created_team)=create_team(
+            Extension(Claims{sub:admin_id,exp:u64::MAX}),Extension(role),
+            State(state.clone()),Path(first.0.id),
+            Json(CreateNamed{name:"U15".into()})
+        ).await.unwrap();
+        let edited=update_team_information(
+            Extension(Claims{sub:admin_id,exp:u64::MAX}),Extension(role),
+            State(state.clone()),Path(created_team.0.id),
+            Json(TeamInformation{name:"U15 féminines".into(),
+                description:"Entraînement les mercredis".into(),
+                logo_url:Some("https://example.org/team.png".into()),
+                logo_x:Some(-20),logo_y:Some(15),logo_zoom:Some(175)})
+        ).await.unwrap().0;
+        assert_eq!(edited.description.as_deref(),Some("Entraînement les mercredis"));
+        assert_eq!(edited.logo_x,Some(-20));
+        assert_eq!(edited.logo_y,Some(15));
+        assert_eq!(edited.logo_zoom,Some(175));
+        let denied=update_team_information(
+            Extension(Claims{sub:guest_id,exp:u64::MAX}),
+            Extension(CurrentRole(Role::User)),State(state.clone()),
+            Path(created_team.0.id),Json(TeamInformation{
+                name:"Intrusion".into(),description:String::new(),logo_url:None,
+                logo_x:None,logo_y:None,logo_zoom:None,
+            })
+        ).await.err();
+        assert_eq!(denied,Some(StatusCode::FORBIDDEN));
         assert_eq!(public_clubs(State(state)).await.unwrap().0.len(),1);
     }
     #[test]

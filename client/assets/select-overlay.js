@@ -43,7 +43,7 @@
     el.value=option.value;
     el.dispatchEvent(new Event("input",{bubbles:true}));
     el.dispatchEvent(new Event("change",{bubbles:true}));
-    close(true);
+    close(!coarse());
   }
   function render(){
     if(!panel||!list)return;

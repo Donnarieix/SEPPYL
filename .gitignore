@@ -1,9 +1,15 @@
 /target
 
+# Never commit production, development or backup SQLite databases.
 /data/*.db
 /data/*.db-*
 *.sqlite
 *.sqlite3
+
+# User-uploaded content stays exclusively on the server.
+/data/uploads/
+
+# Secrets belong to the runtime environment, not Git.
 .env
 .env.*
 !.env.example

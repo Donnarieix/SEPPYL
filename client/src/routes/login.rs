@@ -12,6 +12,8 @@ pub fn Login() -> Element {
     let mut error = use_signal(|| None::<String>);
 
     rsx! {
+        document::Title { "Connexion | SEPPYL" }
+        document::Meta { name:"robots", content:"noindex,nofollow,noarchive" }
         div { class: "login-screen",
             div { class: "login-card",
                 div { class: "login-brand", "SEPPYL" }
@@ -54,6 +56,15 @@ pub fn Login() -> Element {
                     label { "Mot de passe" }
                     input { r#type: "password", value: "{password}", required: true, autocomplete: if *is_registration.read() { "new-password" } else { "current-password" },
                         placeholder: "Votre mot de passe", oninput: move |e| password.set(e.value()) }
+                    if *is_registration.read(){
+                        p{class:"signup-legal",
+                            "Avant de créer votre compte, consultez nos "
+                            Link{to:crate::routes::Route::PrivacyPolicy{},"informations sur les données personnelles"}
+                            " et nos "
+                            Link{to:crate::routes::Route::TermsOfUse{},"conditions d'utilisation"}
+                            "."
+                        }
+                    }
                     if let Some(message) = error.read().as_ref() {
                         p { class: "login-error", role: "alert", "{message}" }
                     }
@@ -70,8 +81,10 @@ pub fn Login() -> Element {
                     },
                     if *is_registration.read() { "Déjà un compte ? Se connecter" } else { "Créer un nouveau compte" }
                 }
+                Link { to: crate::routes::Route::PublicDirectory {},
+                    class:"public-login-link","Explorer les clubs publics sans compte" }
                 if *is_registration.read() {
-                    p { class: "registration-note", "Chaque compte possède pour l'instant ses propres joueuses et entraînements. Le partage entre entraîneurs sera ajouté ultérieurement." }
+                    p { class: "registration-note", "Après inscription, votre compte est en lecture seule jusqu’à son rattachement à un club ou une équipe et l’attribution des droits adaptés." }
                 }
             }
         }

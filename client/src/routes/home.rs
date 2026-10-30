@@ -76,6 +76,7 @@ pub fn Home() -> Element {
                             div { class: "picker-fields",
                                 select {
                                     value: "{catalog_selection}",
+                                    "data-seppyl-searchable":"true",
                                     onchange: move |e| catalog_selection.set(e.value()),
                                     option { value: "", "Choisir une activité…" }
                                     for item in items {

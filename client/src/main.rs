@@ -12,6 +12,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     let session = use_context_provider(|| Signal::new(session::restore()));
+    let _changelog_open=use_context_provider(||Signal::new(false));
     let mut appearance = use_context_provider(|| Signal::new(UserPreferences::default()));
     let token = session.read().clone();
     let preferences = use_resource(move || {
@@ -42,13 +43,27 @@ fn App() -> Element {
         .theme;
     rsx! {
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
+        document::Title { "SEPPYL — Gestion des entraînements sportifs" }
+        document::Meta { name:"description",
+            content:"SEPPYL aide les clubs et entraîneurs à préparer les séances, organiser les activités et suivre les entraînements." }
+        document::Meta { name:"theme-color", content:"#101f2a" }
         document::Stylesheet { href: asset!("/assets/main.css") }
         document::Script { src: asset!("/assets/theme-transition.js") }
+        document::Script { src: asset!("/assets/auth-guard.js") }
+        document::Script { src: asset!("/assets/audit-dates.js") }
+        document::Script { src: asset!("/assets/rich-editor.js") }
+        document::Script { src: asset!("/assets/tactics-board.js") }
+        document::Script { src: asset!("/assets/tactics-fullscreen.js") }
+        document::Script { src: asset!("/assets/select-overlay.js") }
+        document::Script { src: asset!("/assets/logo-crop.js") }
+        document::Script { src: asset!("/assets/toast.js") }
         div {
             class: "site-root",
             "data-theme": initial_theme.as_str(),
             "data-density": current.density.as_str(),
             Router::<routes::Route> {}
+            routes::changelog::ChangelogHost {}
+            routes::legal::SiteFooter {}
         }
     }
 }

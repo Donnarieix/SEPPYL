@@ -1,0 +1,9 @@
+# Only deliberately public pages are intended for search engines.
+User-agent: *
+Disallow: /
+Allow: /public
+Allow: /mentions-legales
+Allow: /confidentialite
+Allow: /cgu
+
+Sitemap: https://seppyl.donnarieix.fr/sitemap.xml

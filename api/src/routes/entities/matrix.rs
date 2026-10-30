@@ -211,7 +211,9 @@ pub async fn create_matrix_activity(
     let activity = catalog::insert(&claims, &state, catalog::ActivityPayload {
         name: payload.name,
         description: String::new(),
+        description_html: None,
         image_url: None,
+        team_id: None,
     }).await?;
     entities::catalog_selection::ActiveModel {
         user_id: Set(claims.sub),
@@ -278,7 +280,7 @@ mod shared_catalog_tests {
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let (_, tid) = training::create(
             Extension(claims.clone()), State(state.clone()),
-            Json(training::CreateTraining { name: "Séance".into(), date })
+            Json(training::CreateTraining { name: "Séance".into(), date, team_id: None })
         ).await.unwrap();
         let tid = Uuid::parse_str(&tid).unwrap();
 
@@ -314,7 +316,9 @@ mod shared_catalog_tests {
             Json(catalog::ActivityPayload {
                 name: "Circuit corrigé".into(),
                 description: "Nouvelle consigne".into(),
-                image_url: None
+                description_html: None,
+                image_url: None,
+                team_id: None
             })
         ).await.unwrap();
         let training_detail = training::get(

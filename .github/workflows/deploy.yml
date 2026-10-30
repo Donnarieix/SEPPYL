@@ -18,7 +18,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build API
-        run: cargo build -p api --release --locked
+        shell: bash
+        env:
+          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -n "$BOOTSTRAP_HASH" ]; then
+            export SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH="$BOOTSTRAP_HASH"
+          fi
+          cargo build -p api --release --locked
       - run: tar czf "$RUNNER_TEMP/seppyl-api.tar.gz" -C target/release api
       - uses: actions/upload-artifact@v4
         with:
@@ -75,6 +83,20 @@ jobs:
     needs: [build-api, build-web]
     runs-on: ubuntu-latest
     steps:
+      - name: Verify production bootstrap has been configured
+        shell: bash
+        env:
+          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BOOTSTRAP_HASH" ]; then
+            echo "::error::Configure the SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH Actions secret before the initial release."
+            exit 1
+          fi
+          if [[ "$BOOTSTRAP_HASH" != '$argon2id$'* ]]; then
+            echo "::error::Bootstrap secret must contain an Argon2id password hash."
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         with:
           name: seppyl-api

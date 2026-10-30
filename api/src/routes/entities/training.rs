@@ -18,23 +18,31 @@ use crate::{
     },
     routes::authentication::login::Claims,
     services,
-    routes::entities::catalog,
+    routes::entities::{catalog, organization},
     state::AppState,
 };
 
 type ApiError = StatusCode;
 
-async fn owned_training(
-    claims: &Claims,
-    state: &AppState,
-    id: Uuid,
-) -> Result<training::Model, ApiError> {
-    training::Entity::find_by_id(id)
-        .filter(training::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+async fn access_training(
+    claims:&Claims, state:&AppState, id:Uuid, write:bool,
+) -> Result<training::Model,ApiError> {
+    let found=training::Entity::find_by_id(id).one(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let role=organization::user_role(state,claims.sub).await?;
+    let allowed=match found.team_id {
+        Some(team_id) if write =>
+            role.can_write() && organization::can_write_team(state,claims,role,team_id).await?,
+        Some(team_id) => organization::can_read_team(state,claims,role,team_id).await?,
+        None if write => role.can_write() && (found.user_id==claims.sub || role.is_admin()),
+        None => found.user_id==claims.sub || role.is_admin(),
+    };
+    if !allowed{return Err(StatusCode::NOT_FOUND);}
+    Ok(found)
+}
+async fn owned_training(claims:&Claims,state:&AppState,id:Uuid)->Result<training::Model,ApiError>{
+    access_training(claims,state,id,true).await
 }
 
 async fn owned_activity(
@@ -66,6 +74,7 @@ pub struct TrainingDetail {
 pub struct CreateTraining {
     pub name: String,
     pub date: DateTime,
+    pub team_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -118,13 +127,19 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<training::Model>>, ApiError> {
-    let trainings = training::Entity::find()
-        .filter(training::COLUMN.user_id.eq(claims.sub))
-        .order_by_desc(training::COLUMN.date)
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(trainings))
+    let role=organization::user_role(&state,claims.sub).await?;
+    let all=training::Entity::find()
+        .order_by_desc(training::COLUMN.date).all(&state.db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut allowed=Vec::new();
+    for session in all {
+        let visible=match session.team_id {
+            Some(id) => organization::can_read_team(&state,&claims,role,id).await?,
+            None => session.user_id==claims.sub || role.is_admin(),
+        };
+        if visible {allowed.push(session);}
+    }
+    Ok(Json(allowed))
 }
 
 pub async fn create(
@@ -135,9 +150,17 @@ pub async fn create(
     if !valid_name(&body.name) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let role=organization::user_role(&state,claims.sub).await?;
+    if !role.can_write(){return Err(StatusCode::FORBIDDEN);}
+    if let Some(team_id)=body.team_id {
+        if !organization::can_write_team(&state,&claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     let new = training::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(body.team_id),
         name: Set(body.name.trim().to_string()),
         date: Set(body.date),
         notes: Set(String::new()),
@@ -152,8 +175,12 @@ pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<TrainingDetail>, ApiError> {
-    let training = owned_training(&claims, &state, id).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let training = access_training(&claims, &state, id, false).await?;
+    let players = if let Some(team_id)=training.team_id {
+        organization::list_team_players_internal(&state,team_id).await?
+    } else {
+        services::player::get_players(&claims,&state).await?
+    };
     let attendance = training_attendance::Entity::find()
         .filter(training_attendance::COLUMN.training_id.eq(id))
         .all(&state.db)
@@ -189,10 +216,10 @@ pub async fn get(
     for activity in &mut activities {
         let Some(catalog_id) = activity.catalog_id else { continue; };
         let Some(definition) = catalog_activity::Entity::find_by_id(catalog_id)
-            .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else { continue };
         activity.name = definition.name;
         activity.description = definition.description;
+        activity.description_html = definition.description_html;
         activity.image_url = definition.image_url;
         let equipment = catalog_material::Entity::find()
             .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
@@ -245,7 +272,9 @@ pub async fn add_activity(
     let definition = catalog::insert(&claims, &state, catalog::ActivityPayload {
         name: body.name.clone(),
         description: body.description.clone(),
+        description_html: None,
         image_url: body.image_url.clone(),
+        team_id: access_training(&claims,&state,id,true).await?.team_id,
     }).await?;
     let new = training_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -253,6 +282,7 @@ pub async fn add_activity(
         catalog_id: Set(Some(definition.id)),
         name: Set(definition.name),
         description: Set(definition.description),
+        description_html: Set(definition.description_html),
         image_url: Set(definition.image_url),
         sort_order: Set(count as i32),
         ..Default::default()
@@ -262,12 +292,52 @@ pub async fn add_activity(
 }
 
 
+
+#[derive(Deserialize)]
+pub struct EditSessionActivity {
+    pub name:String,
+    pub description:String,
+    pub description_html:Option<String>,
+    pub image_url:Option<String>,
+}
+/// Only edits the copy in this training. The reusable library definition
+/// remains unchanged, so other sessions are never modified implicitly.
+pub async fn update_activity(
+    Extension(claims):Extension<Claims>,
+    State(state):State<AppState>,
+    Path((training_id,activity_id)):Path<(Uuid,Uuid)>,
+    Json(body):Json<EditSessionActivity>,
+)->Result<StatusCode,ApiError>{
+    let activity=owned_activity(&claims,&state,training_id,activity_id).await?;
+    if !valid_name(&body.name) || body.description.len()>20_000
+        || body.description_html.as_ref().is_some_and(|v|v.len()>40_000)
+        || !valid_image_url(body.image_url.as_deref()){
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut active:training_activity::ActiveModel=activity.into();
+    active.name=Set(body.name.trim().into());
+    active.description=Set(body.description);
+    active.description_html=Set(body.description_html.map(|html|ammonia::clean(&html)));
+    active.image_url=Set(body.image_url);
+    active.update(&state.db).await.map_err(|error|{
+        tracing::error!(%error,training=%training_id,activity=%activity_id,
+            "Could not update session activity");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn attach_catalog(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path((id, catalog_id)): Path<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, String), ApiError> {
     owned_training(&claims, &state, id).await?;
     let def = catalog::owned(&claims, &state, catalog_id).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    // Do not attach a catalog entry shared with some other team.
+    if let Some(activity_team)=def.team_id {
+        if training.team_id!=Some(activity_team) {return Err(StatusCode::FORBIDDEN);}
+    }
     let existing = training_activity::Entity::find()
         .filter(training_activity::COLUMN.training_id.eq(id))
         .filter(training_activity::COLUMN.catalog_id.eq(catalog_id))
@@ -282,11 +352,45 @@ pub async fn attach_catalog(
         catalog_id: Set(Some(catalog_id)),
         name: Set(def.name),
         description: Set(def.description),
+        description_html: Set(def.description_html),
         image_url: Set(def.image_url),
         sort_order: Set(count as i32),
         ..Default::default()
     }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED, linked.id.to_string()))
+}
+
+
+#[derive(Deserialize)]
+pub struct ReorderActivities {
+    pub activity_ids: Vec<Uuid>,
+}
+pub async fn reorder_activities(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ReorderActivities>,
+) -> Result<StatusCode, ApiError> {
+    owned_training(&claims, &state, id).await?;
+    let activities = training_activity::Entity::find()
+        .filter(training_activity::COLUMN.training_id.eq(id))
+        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let actual: HashSet<Uuid> = activities.iter().map(|a| a.id).collect();
+    let proposed: HashSet<Uuid> = body.activity_ids.iter().copied().collect();
+    if actual != proposed || body.activity_ids.len() != activities.len() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let txn = state.db.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (index, activity_id) in body.activity_ids.iter().enumerate() {
+        let item = activities.iter().find(|a| a.id == *activity_id)
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let mut active: training_activity::ActiveModel = item.clone().into();
+        active.sort_order = Set(index as i32);
+        active.update(&txn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    txn.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!(actor=%claims.sub, training=%id, count=body.activity_ids.len(), action="training.reorder");
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove_activity(
@@ -319,6 +423,7 @@ pub async fn add_material(
         return Err(StatusCode::BAD_REQUEST);
     }
     if let Some(catalog_id) = activity.catalog_id {
+        catalog::writable(&claims,&state,catalog_id).await?;
         let material = catalog_material::ActiveModel {
             id: Set(Uuid::new_v4()),
             activity_id: Set(catalog_id),
@@ -346,6 +451,7 @@ pub async fn remove_material(
 ) -> Result<StatusCode, ApiError> {
     let activity = owned_activity(&claims, &state, training_id, activity_id).await?;
     if let Some(catalog_id) = activity.catalog_id {
+        catalog::writable(&claims,&state,catalog_id).await?;
         let item = catalog_material::Entity::find_by_id(material_id)
             .filter(catalog_material::COLUMN.activity_id.eq(catalog_id))
             .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -370,8 +476,12 @@ pub async fn set_attendance(
     Path(id): Path<Uuid>,
     Json(body): Json<AttendanceUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
-    let players = services::player::get_players(&claims, &state).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    let players=if let Some(team_id)=training.team_id {
+        organization::list_team_players_internal(&state,team_id).await?
+    } else {
+        services::player::get_players(&claims,&state).await?
+    };
     let allowed: HashSet<Uuid> = players.iter().map(|p| p.id).collect();
     let present: HashSet<Uuid> = body.player_ids.into_iter().collect();
 
@@ -411,7 +521,13 @@ pub async fn set_score(
     Path(id): Path<Uuid>,
     Json(body): Json<ScoreUpdate>,
 ) -> Result<StatusCode, ApiError> {
-    owned_training(&claims, &state, id).await?;
+    let training=owned_training(&claims,&state,id).await?;
+    if let Some(team_id)=training.team_id {
+        let roster=organization::list_team_players_internal(&state,team_id).await?;
+        if !roster.iter().any(|p|p.id==body.player_id) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     if !valid_score(body.score) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -506,12 +622,18 @@ mod integration_tests {
             password: Set("not-used-in-this-test".into()),
             ..Default::default()
         }.insert(&state.db).await.unwrap();
+        // The authenticated stranger also exists in the user table:
+        // the real middleware never issues Claims for deleted users.
+        user::ActiveModel {
+            id: Set(other), username: Set("other-coach".into()),
+            password: Set("not-used-in-this-test".into()), ..Default::default()
+        }.insert(&state.db).await.unwrap();
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let (created, id_string) = create(
             Extension(claims.clone()),
             State(state.clone()),
-            Json(CreateTraining { name: "Entraînement test".into(), date }),
+            Json(CreateTraining { name: "Entraînement test".into(), date, team_id: None }),
         ).await.unwrap();
         assert_eq!(created, StatusCode::CREATED);
         let id = Uuid::parse_str(&id_string).unwrap();
@@ -547,6 +669,41 @@ mod integration_tests {
             })
         ).await.unwrap();
         let activity_id = Uuid::parse_str(&activity_id).unwrap();
+        let original_catalog_id=training_activity::Entity::find_by_id(activity_id)
+            .one(&state.db).await.unwrap().unwrap().catalog_id.unwrap();
+        let refused=update_activity(
+            Extension(Claims{sub:other,exp:u64::MAX}),State(state.clone()),
+            Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Tentative".into(),description:"".into(),description_html:None,image_url:None
+            })
+        ).await;
+        assert!(matches!(refused,Err(StatusCode::NOT_FOUND)));
+        update_activity(
+            Extension(claims.clone()),State(state.clone()),Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Passes corrigées".into(),
+                description:"Description corrigée".into(),
+                description_html:Some("<p><strong>Consigne</strong></p>".into()),
+                image_url:None,
+            })
+        ).await.unwrap();
+        let modified=training_activity::Entity::find_by_id(activity_id)
+            .one(&state.db).await.unwrap().unwrap();
+        assert_eq!(modified.name,"Passes corrigées");
+        assert_eq!(modified.description,"Description corrigée");
+        let original=catalog_activity::Entity::find_by_id(original_catalog_id)
+            .one(&state.db).await.unwrap().unwrap();
+        assert_eq!(original.name,"Passes");
+        // Restore the label used by the remaining existing assertions.
+        update_activity(
+            Extension(claims.clone()),State(state.clone()),Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Passes".into(),
+                description:"En binôme, pendant 10 minutes.".into(),
+                description_html:None,image_url:None,
+            })
+        ).await.unwrap();
 
         add_material(
             Extension(claims.clone()), State(state.clone()), Path((id, activity_id)),
@@ -617,5 +774,97 @@ mod integration_tests {
             Json(ScoreUpdate { player_id, activity_id: None, score: Some(6) }),
         ).await;
         assert!(matches!(invalid, Err(StatusCode::BAD_REQUEST)));
+    }
+}
+
+
+#[cfg(test)]
+mod reorder_tests {
+    use super::*;
+    use crate::entities::user;
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn activity_order_is_persisted_and_must_be_a_permutation() {
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let uid=Uuid::new_v4();
+        user::ActiveModel{id:Set(uid),username:Set("trainer".into()),password:Set("test".into()),
+            ..Default::default()}.insert(&state.db).await.unwrap();
+        let claims=Claims{sub:uid,exp:u64::MAX};
+        let date=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
+        let (_,id)=create(Extension(claims.clone()),State(state.clone()),
+            Json(CreateTraining{name:"Training".into(),date,team_id:None})).await.unwrap();
+        let tid=Uuid::parse_str(&id).unwrap();
+        for name in ["Échauffement","Passes","Match"] {
+            add_activity(Extension(claims.clone()),State(state.clone()),Path(tid),
+                Json(CreateActivity{name:name.into(),description:String::new(),image_url:None}))
+            .await.unwrap();
+        }
+        let initial=get(Extension(claims.clone()),State(state.clone()),Path(tid)).await.unwrap().0;
+        let mut order:Vec<Uuid>=initial.activities.iter().map(|a|a.id).collect();
+        order.reverse();
+        reorder_activities(Extension(claims.clone()),State(state.clone()),Path(tid),
+            Json(ReorderActivities{activity_ids:order.clone()})).await.unwrap();
+        let updated=get(Extension(claims.clone()),State(state.clone()),Path(tid)).await.unwrap().0;
+        assert_eq!(updated.activities.iter().map(|a|a.id).collect::<Vec<_>>(),order);
+        let invalid=reorder_activities(Extension(claims),State(state),Path(tid),
+            Json(ReorderActivities{activity_ids:vec![order[0],order[0],order[1]]})).await;
+        assert!(matches!(invalid,Err(StatusCode::BAD_REQUEST)));
+    }
+}
+
+
+#[cfg(test)]
+mod team_scope_regression {
+    use super::*;
+    use crate::entities::{user,club,team,team_membership};
+    use sea_orm::Database;
+    #[tokio::test]
+    async fn assigned_team_is_shared_but_unauthorized_teams_remain_private() {
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let creator=Uuid::new_v4();
+        let teammate=Uuid::new_v4();
+        let outsider=Uuid::new_v4();
+        for (id,name,role) in [(creator,"coach1","trainer"),(teammate,"coach2","user"),(outsider,"other","trainer")] {
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("test".into()),
+                role:Set(Some(role.into())),..Default::default()
+            }.insert(&state.db).await.unwrap();
+        }
+        let club_id=Uuid::new_v4();
+        club::ActiveModel{id:Set(club_id),name:Set("Club".into()),
+            is_public:Set(Some(false)),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        let team_id=Uuid::new_v4();
+        team::ActiveModel{id:Set(team_id),club_id:Set(club_id),
+            name:Set("Équipe".into()),..Default::default()}
+            .insert(&state.db).await.unwrap();
+        for (id,role) in [(creator,"trainer"),(teammate,"user")] {
+            team_membership::ActiveModel{user_id:Set(id),team_id:Set(team_id),
+                role:Set(role.into()),..Default::default()}
+                .insert(&state.db).await.unwrap();
+        }
+        let now=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
+        let claims=Claims{sub:creator,exp:u64::MAX};
+        let (_,created_id)=create(Extension(claims.clone()),State(state.clone()),
+            Json(CreateTraining{name:"Séance partagée".into(),date:now,team_id:Some(team_id)}))
+            .await.unwrap();
+        let id=Uuid::parse_str(&created_id).unwrap();
+        let reader=Claims{sub:teammate,exp:u64::MAX};
+        assert!(get(Extension(reader.clone()),State(state.clone()),Path(id)).await.is_ok());
+        let their_sessions=list(Extension(reader.clone()),State(state.clone())).await.unwrap().0;
+        assert_eq!(their_sessions.len(),1);
+        let forbidden=update(Extension(reader),State(state.clone()),Path(id),
+            Json(UpdateTraining{name:"Interdit".into(),date:now,notes:String::new()})).await;
+        assert!(matches!(forbidden,Err(StatusCode::NOT_FOUND)));
+        let stranger=Claims{sub:outsider,exp:u64::MAX};
+        assert!(matches!(
+            get(Extension(stranger.clone()),State(state.clone()),Path(id)).await,
+            Err(StatusCode::NOT_FOUND)
+        ));
+        assert!(list(Extension(stranger),State(state)).await.unwrap().0.is_empty());
     }
 }

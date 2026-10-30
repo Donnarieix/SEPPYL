@@ -1,22 +1,19 @@
-//! API endpoint configuration shared by all browser requests.
-//! reqwest requires absolute URLs, including on wasm32.
-//! SEPPYL_API_URL can override the default at compile time (dev, staging, CI).
-pub(crate) fn base_url() -> &'static str {
-    option_env!("SEPPYL_API_URL").unwrap_or(if cfg!(debug_assertions) {
+//! Shared API base used by every browser request.
+//! Release artifacts are served behind https://seppyl.donnarieix.fr/api;
+//! local development keeps the existing loopback endpoint.
+pub(crate) fn base_url()->&'static str{
+    option_env!("SEPPYL_API_URL").unwrap_or(if cfg!(debug_assertions){
         "http://127.0.0.1:3000"
-    } else {
+    }else{
         "https://seppyl.donnarieix.fr/api"
     })
 }
-
 #[cfg(test)]
-mod tests {
+mod endpoint_tests{
     #[test]
-    fn api_endpoint_is_an_absolute_http_url() {
-        let url = reqwest::Url::parse(&format!("{}/login", super::base_url()))
-            .expect("reqwest needs an absolute API URL");
-        assert!(matches!(url.scheme(), "http" | "https"));
-        assert_eq!(url.path().ends_with("/login"), true);
+    fn release_base_is_absolute(){
+        let uri=reqwest::Url::parse(&format!("{}/health",super::base_url())).unwrap();
+        assert!(matches!(uri.scheme(),"http"|"https"));
     }
 }
 
@@ -27,3 +24,8 @@ pub mod catalog;
 pub mod players;
 pub mod preferences;
 pub mod account;
+pub mod tactics;
+pub mod organization;
+pub mod audit;
+
+pub mod changelog;

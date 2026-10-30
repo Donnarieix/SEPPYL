@@ -14,7 +14,7 @@
     const root = document.querySelector(".site-root");
     if (!root || button.disabled) return;
     const next = button.getAttribute("data-theme-option");
-    if (!["system", "light", "dark"].includes(next)) return;
+    if (!["system", "light", "dark", "contrast"].includes(next)) return;
     if (root.dataset.theme === next) return;
 
     // The browser paints; Dioxus owns selected state and persistence.

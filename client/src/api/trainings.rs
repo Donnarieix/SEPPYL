@@ -11,6 +11,7 @@ pub struct Training {
     pub name: String,
     pub date: String,
     pub notes: String,
+    pub team_id: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Player {
@@ -31,6 +32,7 @@ pub struct Activity {
     pub training_id: String,
     pub name: String,
     pub description: String,
+    pub description_html: Option<String>,
     pub image_url: Option<String>,
     pub sort_order: i32,
 }
@@ -61,6 +63,7 @@ pub struct Detail {
 struct TrainingRequest<'a> {
     name: &'a str,
     date: String,
+    team_id: Option<&'a str>,
 }
 #[derive(Serialize)]
 struct UpdateTrainingRequest<'a> {
@@ -126,10 +129,10 @@ pub async fn get(token: &str, id: &str) -> Result<Detail, String> {
     }
     response.json::<Detail>().await.map_err(|e| e.to_string())
 }
-pub async fn create(token: &str, name: &str, date: &str) -> Result<String, String> {
+pub async fn create(token: &str, name: &str, date: &str, team_id: Option<&str>) -> Result<String, String> {
     let response = client().post(format!("{}/trainings", base_url()))
         .bearer_auth(token)
-        .json(&TrainingRequest { name, date: date_time(date) })
+        .json(&TrainingRequest { name, date: date_time(date), team_id })
         .send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         success(response).await?;
@@ -153,6 +156,24 @@ pub async fn add_activity(
         .bearer_auth(token)
         .json(&ActivityRequest { name, description, image_url })
         .send().await.map_err(|e| e.to_string())?;
+    success(response).await
+}
+#[derive(Serialize)]
+struct EditActivityRequest<'a> {
+    name:&'a str,
+    description:&'a str,
+    description_html:Option<&'a str>,
+    image_url:Option<&'a str>,
+}
+pub async fn update_activity(
+    token:&str,training_id:&str,activity_id:&str,name:&str,
+    description:&str,description_html:Option<&str>,image_url:Option<&str>
+)->Result<(),String>{
+    let response=client()
+        .put(format!("{}/trainings/{training_id}/activities/{activity_id}",base_url()))
+        .bearer_auth(token)
+        .json(&EditActivityRequest{name,description,description_html,image_url})
+        .send().await.map_err(|e|e.to_string())?;
     success(response).await
 }
 pub async fn remove_activity(token: &str, id: &str, activity_id: &str) -> Result<(), String> {
@@ -188,5 +209,18 @@ pub async fn save_score(
         .bearer_auth(token)
         .json(&ScoreRequest { player_id, activity_id, score })
         .send().await.map_err(|e| e.to_string())?;
+    success(response).await
+}
+
+
+#[derive(Serialize)]
+struct ReorderRequest<'a> { activity_ids: &'a [String] }
+
+pub async fn reorder_activities(token: &str, id: &str, activity_ids: &[String]) -> Result<(), String> {
+    let response = Client::new()
+        .put(format!("{}/trainings/{id}/activities/order", base_url()))
+        .bearer_auth(token)
+        .json(&ReorderRequest { activity_ids })
+        .send().await.map_err(|e|e.to_string())?;
     success(response).await
 }

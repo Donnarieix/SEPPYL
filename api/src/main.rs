@@ -22,15 +22,20 @@ use crate::{
             matrix::{create_matrix_activity, get_matrix, update_matrix_result, select_activity},
             catalog,
             training,
+            organization,
+            tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account},
+        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog},
     },
     state::AppState,
 };
 
+mod audit;
+mod bootstrap;
 mod entities;
 mod middleware;
+mod migrations;
 mod routes;
 mod services;
 mod state;
@@ -38,9 +43,11 @@ mod state;
 #[tokio::main]
 async fn main() {
     let _ = dotenvy::dotenv();
-    let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET is required");
-    assert!(secret.len() >= 32 && secret != "SECRET", "JWT_SECRET must be at least 32 bytes and non-default");
-    let bind = std::env::var("SEPPYL_BIND").unwrap_or_else(|_| "127.0.0.1:3101".to_string());
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "api=info,tower_http=warn".into()))
+        .init();
+    tracing::info!("SEPPYL API initializing");
 
     // dx serve may choose a different local port on every run.
     // Permit HTTP loopback origins for development without allowing arbitrary websites.
@@ -53,6 +60,30 @@ async fn main() {
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
+.route("/changelog",get(changelog::list))
+        .route("/changelog/status",get(changelog::status))
+        .route("/changelog/{version}/read",post(changelog::acknowledge))
+        .route("/changelog/{version}",put(changelog::save))
+        .route("/admin/users", get(organization::list_users))
+        .route("/admin/clubs", get(organization::list_admin_clubs))
+        .route("/clubs/{id}/information", put(organization::update_club_information))
+        .route("/clubs", get(organization::list_clubs).post(organization::create_club))
+        .route("/clubs/{id}/members", get(organization::list_club_members))
+        .route("/clubs/{id}/eligible-users", get(organization::eligible_users))
+        .route("/clubs/{id}/capabilities", get(organization::capabilities))
+        .route("/clubs/{id}/players", get(organization::list_club_players))
+        .route("/teams/{id}/members", get(organization::list_team_members))
+        .route("/teams/{id}/information", put(organization::update_team_information))
+        .route("/teams/{id}/players", get(organization::list_team_players).post(organization::create_team_player))
+        .route("/teams/{id}", put(organization::rename_team).delete(organization::delete_team))
+        .route("/teams/{id}/players/{player_id}",
+            put(organization::assign_team_player).delete(organization::remove_team_player))
+        .route("/clubs/{id}/teams", get(organization::list_teams).post(organization::create_team))
+        .route("/clubs/{id}/visibility", put(organization::update_public_visibility))
+        .route("/clubs/{id}/members/{user_id}", put(organization::grant_club_membership).delete(organization::remove_club_member))
+        .route("/teams/{id}/members/{user_id}", put(organization::grant_team_membership).delete(organization::remove_team_member))
+        .route("/admin/users/{user_id}/role", put(organization::grant_global_role))
+        .route("/admin/audit", get(audit_routes::list))
         .route("/me", get(me))
         .route("/preferences", get(preferences::get).put(preferences::update))
         .route("/account", get(account::get))
@@ -73,24 +104,29 @@ async fn main() {
         .route("/matrix/activity", post(create_matrix_activity))
         .route("/matrix/result", put(update_matrix_result))
         .route("/matrix/select", post(select_activity))
+        .route("/tactics", get(tactics::list).post(tactics::create))
+        .route("/tactics/{id}", put(tactics::update).delete(tactics::delete))
         .route("/catalog", get(catalog::list).post(catalog::create))
         .route("/catalog/{id}", put(catalog::update).delete(catalog::delete))
         .route("/catalog/{id}/materials", post(catalog::add_material))
-        .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material))
+        .route("/catalog/{id}/materials/{material_id}", delete(catalog::remove_material).put(catalog::update_material))
         .route("/catalog/upload", post(catalog::upload_image).layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)))
         .route("/trainings", get(training::list).post(training::create))
         .route("/trainings/{id}", get(training::get).put(training::update))
         .route("/trainings/{id}/activities", post(training::add_activity))
         .route("/trainings/{id}/catalog/{catalog_id}", post(training::attach_catalog))
-        .route("/trainings/{id}/activities/{activity_id}", delete(training::remove_activity))
+        .route("/trainings/{id}/activities/{activity_id}", put(training::update_activity).delete(training::remove_activity))
+        .route("/trainings/{id}/activities/order", put(training::reorder_activities))
         .route("/trainings/{id}/activities/{activity_id}/materials", post(training::add_material))
         .route("/trainings/{id}/activities/{activity_id}/materials/{material_id}", delete(training::remove_material))
         .route("/trainings/{id}/attendance", put(training::set_attendance))
         .route("/trainings/{id}/scores", put(training::set_score))
-        .route_layer(axum_middleware::from_fn(auth));
+        .route_layer(axum_middleware::from_fn_with_state(state.clone(), auth));
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/public/clubs", get(organization::public_clubs))
+        .route("/public/clubs/{id}/teams", get(organization::public_teams))
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))
@@ -100,7 +136,12 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    let listener = TcpListener::bind(&bind).await.expect("Cannot bind API listener");
+    // The deployed systemd service provides SEPPYL_BIND=127.0.0.1:3101;
+    // dev instances keep their original port without additional setup.
+    let bind=std::env::var("SEPPYL_BIND").unwrap_or_else(|_|"0.0.0.0:3000".into());
+    let listener = TcpListener::bind(&bind).await
+        .expect("Unable to bind SEPPYL API to configured address");
+    tracing::info!(%bind,"SEPPYL API ready");
     axum::serve(listener, app).await.unwrap();
 }
 

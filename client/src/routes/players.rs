@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::players::{self,Player};
+use crate::api::organization as org;
 use super::{Route,layout::Header};
 
 #[component]
@@ -11,6 +12,23 @@ pub fn Players() -> Element {
     let mut data=use_resource(move||{let token=fetch.clone();async move {
         match token {Some(t)=>players::list(&t).await,None=>Err("Connexion requise.".into())}
     }});
+    let scope_token=token.clone();
+    let allowed_teams=use_resource(move ||{
+        let token=scope_token.clone();
+        async move{
+            let Some(token)=token else{return Ok::<Vec<(String,String)>,String>(Vec::new());};
+            let mut choices=Vec::new();
+            for club in org::clubs(&token).await?{
+                let caps=org::capabilities(&token,&club.id).await?;
+                for team in org::teams(&token,&club.id).await?{
+                    if caps.can_write_teams.contains(&team.id){
+                        choices.push((team.id,format!("{} · {}",club.name,team.name)));
+                    }
+                }
+            }
+            Ok::<Vec<(String,String)>,String>(choices)
+        }
+    });
     let mut adding=use_signal(||false);
     let mut error=use_signal(||None::<String>);
     if token.is_none(){return rsx!{div{class:"centered",p{"Connectez-vous."}
@@ -21,12 +39,15 @@ pub fn Players() -> Element {
             Header{}
             main{class:"page",
                 div{class:"page-heading",
-                    div{h1{"Joueuses"} p{"Gérez l'effectif et les numéros de maillot."}}
-                    button{class:"button solid",onclick:move |_|adding.set(true),"+ Ajouter une joueuse"}
+                    div{h1{"Joueuses"} p{"Retrouvez les joueuses de vos équipes et les fiches de votre espace personnel."}}
+                    div{class:"heading-actions",
+                        Link{to:Route::Organization{},class:"button outline","Effectifs par équipe"}
+                        button{class:"button solid",onclick:move |_|adding.set(true),"+ Ajouter une joueuse"}
+                    }
                 }
                 if let Some(message)=error.read().as_ref(){p{class:"form-error",role:"alert","{message}"}}
                 div{class:"sheet players-sheet",
-                    div{class:"sheet-toolbar",strong{"Effectif"}}
+                    div{class:"sheet-toolbar",strong{"Joueuses visibles"},span{class:"muted-small","Les équipes contrôlent le partage entre entraîneurs."}}
                     match data.read().clone(){
                         Some(Ok(list))=>rsx!{
                             if list.is_empty(){
@@ -51,6 +72,7 @@ pub fn Players() -> Element {
             }
             if *adding.read(){
                 PlayerEditor{token:token.clone(),player:None,
+                    teams:allowed_teams.read().as_ref().and_then(|v|v.as_ref().ok()).cloned().unwrap_or_default(),
                     on_cancel:move |_|adding.set(false),
                     on_saved:move |_|{adding.set(false);data.restart();},
                     on_error:move |message|error.set(Some(message))}
@@ -96,7 +118,7 @@ fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:Event
             }
         }
         if *editing.read(){
-            PlayerEditor{token:token.clone(),player:Some(player.clone()),
+            PlayerEditor{token:token.clone(),player:Some(player.clone()),teams:Vec::new(),
                 on_cancel:move |_|editing.set(false),
                 on_saved:move |_|{editing.set(false);on_saved.call(());},
                 on_error}
@@ -106,7 +128,7 @@ fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:Event
 
 #[component]
 fn PlayerEditor(
-    token:String,player:Option<Player>,
+    token:String,player:Option<Player>,teams:Vec<(String,String)>,
     on_cancel:EventHandler<()>,on_saved:EventHandler<()>,on_error:EventHandler<String>
 )->Element{
     let mut firstname=use_signal(||player.as_ref().map(|p|p.firstname.clone()).unwrap_or_default());
@@ -114,6 +136,7 @@ fn PlayerEditor(
     let mut number=use_signal(||player.as_ref().map(|p|p.number.to_string()).unwrap_or_default());
     let mut busy=use_signal(||false);
     let mut error=use_signal(||None::<String>);
+    let mut team_target=use_signal(String::new);
     let editing=player.is_some();
     let id=player.as_ref().map(|p|p.id.clone());
     rsx!{
@@ -132,10 +155,19 @@ fn PlayerEditor(
                         if first.is_empty()||last.is_empty()||parsed.is_err(){
                             error.set(Some("Renseignez un prénom, un nom et un numéro valide.".into()));return;
                         }
+                        let selected=team_target.read().clone();
+                        if id.is_none()&&!teams.is_empty()&&selected.is_empty(){
+                            error.set(Some("Sélectionnez l'équipe de la joueuse.".into()));return;
+                        }
                         let token=token.clone();let id=id.clone();let num=parsed.unwrap();
                         busy.set(true);
                         spawn(async move{
-                            match players::save(&token,id.as_deref(),&first,&last,num).await{
+                            let result=if id.is_none()&&!selected.is_empty(){
+                                org::create_team_player(&token,&selected,&first,&last,num).await
+                            }else{
+                                players::save(&token,id.as_deref(),&first,&last,num).await
+                            };
+                            match result{
                                 Ok(())=>on_saved.call(()),
                                 Err(e)=>{error.set(Some(e.clone()));on_error.call(e);}
                             }
@@ -148,7 +180,23 @@ fn PlayerEditor(
                             div{class:"field",label{"Nom"}input{value:"{lastname}",required:true,oninput:move |e|lastname.set(e.value())}}
                         }
                         div{class:"field",label{"Numéro"}
-                            input{r#type:"number",min:"0",max:"9999",value:"{number}",required:true,oninput:move |e|number.set(e.value())}
+                            input{r#type:"number",min:"0",max:"999",value:"{number}",required:true,oninput:move |e|number.set(e.value())}
+                        }
+                        if !editing{
+                            if teams.is_empty(){
+                                p{class:"workspace-hint","Aucune équipe modifiable. La fiche restera personnelle jusqu’à son rattachement à une équipe."}
+                            }else{
+                                div{class:"field",
+                                    label{"Équipe"}
+                                    select{value:"{team_target}",required:true,onchange:move |e|team_target.set(e.value()),
+                                        option{value:"","Choisir une équipe"}
+                                        for (id,label) in &teams{
+                                            option{key:"{id}",value:"{id}","{label}"}
+                                        }
+                                    }
+                                    small{"La joueuse sera visible par les membres autorisés de cette équipe."}
+                                }
+                            }
                         }
                         if let Some(message)=error.read().as_ref(){p{class:"form-error",role:"alert","{message}"}}
                     }

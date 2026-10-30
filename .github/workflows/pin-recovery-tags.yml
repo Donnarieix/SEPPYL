@@ -1,0 +1,34 @@
+name: Pin recovery tags
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create immutable rollback references
+        env:
+          PROD_SHA: 0fccb1693647483643539ebddb2763fe48e350d5
+          WORK_SHA: e8decff50e92f8dcb68f824a3aa9fae95a803580
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in "seppyl-prod-2026-10-29:$PROD_SHA" "seppyl-ui-tableur-2026-10-29:$WORK_SHA"; do
+            name="${spec%%:*}"
+            sha="${spec#*:}"
+            existing="$(git ls-remote --refs --tags origin "refs/tags/$name" | awk '{print $1}')"
+            if [ -n "$existing" ]; then
+              echo "Tag $name already exists. Refusing to overwrite it."
+              continue
+            fi
+            git -c user.name='SEPPYL Release Bot' -c user.email='noreply@github.com' tag -a "$name" "$sha" -m "Recovery point at $sha (before club/role redesign)"
+            git push origin "refs/tags/$name"
+          done

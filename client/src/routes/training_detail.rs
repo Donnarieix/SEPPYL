@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use crate::api::trainings::{self, Activity, Detail, Material};
 use crate::api::catalog;
 use crate::api::preferences::{self, AttendanceView};
-use super::{Route, dialogs::PlayerDialog, layout::Header};
+use super::{Route, dialogs::PlayerDialog, layout::Header, rich_editor::RichTextEditor};
 
 #[component]
 pub fn TrainingDetail(id: String) -> Element {
@@ -319,6 +319,7 @@ fn Notes(
                 div { class: "score-toolbar",
                     label { "Type de note" }
                     select { value: "{selected_activity}",
+                        "data-seppyl-searchable":"true",
                         onchange: move |event| selected_activity.set(event.value()),
                         option { value: "", "Note générale" }
                         for item in &detail.activities {
@@ -407,6 +408,7 @@ fn Preparation(
         async move { catalog::list(&token).await }
     });
     let mut selected = use_signal(String::new);
+    let drag_source = use_signal(|| None::<String>);
 
     let mut totals = BTreeMap::<String, i32>::new();
     for material in &detail.materials {
@@ -436,6 +438,7 @@ fn Preparation(
                             div { class: "picker-fields",
                                 select {
                                     value: "{selected}",
+                                    "data-seppyl-searchable":"true",
                                     onchange: move |e| selected.set(e.value()),
                                     option { value: "", "Choisir une activité existante…" }
                                     for item in available {
@@ -527,11 +530,14 @@ fn Preparation(
                 if detail.activities.is_empty() {
                     div { class: "panel-empty", "Aucune activité. Ajoutez un exercice pour préparer la séance." }
                 }
-                for activity in &detail.activities {
-                    ActivityCard {
+                for (position, activity) in detail.activities.iter().enumerate() {
+                    SortableActivity {
                         key: "{activity.id}",
                         activity: activity.clone(),
                         materials: detail.materials.iter().filter(|m| m.activity_id == activity.id).cloned().collect(),
+                        all_ids: detail.activities.iter().map(|a| a.id.clone()).collect(),
+                        position,
+                        drag_source,
                         token: token.clone(),
                         training_id: training_id.clone(),
                         on_saved,
@@ -564,6 +570,130 @@ fn Preparation(
     }
 }
 
+fn updated_order(ids: &[String], source: &str, target: &str) -> Option<Vec<String>> {
+    let from = ids.iter().position(|id| id == source)?;
+    let to = ids.iter().position(|id| id == target)?;
+    if from == to { return None; }
+    let mut moved = ids.to_vec();
+    let item = moved.remove(from);
+    moved.insert(to, item);
+    Some(moved)
+}
+fn request_reorder(
+    mut busy: Signal<bool>,
+    ids: Vec<String>,
+    source: String,
+    target: String,
+    token: String,
+    training_id: String,
+    on_saved: EventHandler<()>,
+    on_error: EventHandler<String>,
+) {
+    if *busy.read() { return; }
+    let Some(next) = updated_order(&ids, &source, &target) else { return; };
+    busy.set(true);
+    spawn(async move {
+        match trainings::reorder_activities(&token, &training_id, &next).await {
+            Ok(()) => on_saved.call(()),
+            Err(message) => on_error.call(message),
+        }
+        busy.set(false);
+    });
+}
+
+#[component]
+fn SortableActivity(
+    activity: Activity,
+    materials: Vec<Material>,
+    all_ids: Vec<String>,
+    position: usize,
+    mut drag_source: Signal<Option<String>>,
+    token: String,
+    training_id: String,
+    on_saved: EventHandler<()>,
+    on_error: EventHandler<String>,
+) -> Element {
+    let busy = use_signal(|| false);
+    let activity_id_for_drag = activity.id.clone();
+    let activity_id_for_drop = activity.id.clone();
+    let activity_id_for_up = activity.id.clone();
+    let activity_id_for_down = activity.id.clone();
+    let total = all_ids.len();
+    let order_for_drop = all_ids.clone();
+    let order_for_up = all_ids.clone();
+    let order_for_down = all_ids.clone();
+    let token_drop = token.clone();
+    let token_up = token.clone();
+    let token_down = token.clone();
+    let training_drop = training_id.clone();
+    let training_up = training_id.clone();
+    let training_down = training_id.clone();
+
+    rsx! {
+        div {
+            class: "sortable-exercise",
+            draggable: "true",
+            ondragstart: move |_| drag_source.set(Some(activity_id_for_drag.clone())),
+            ondragend: move |_| drag_source.set(None),
+            ondragover: move |event| event.prevent_default(),
+            ondrop: move |event| {
+                event.prevent_default();
+                let from = drag_source.read().clone();
+                drag_source.set(None);
+                if let Some(from) = from {
+                    request_reorder(
+                        busy, order_for_drop.clone(), from, activity_id_for_drop.clone(),
+                        token_drop.clone(), training_drop.clone(), on_saved, on_error,
+                    );
+                }
+            },
+            div { class: "sortable-controls",
+                span { class: "sort-grip", title: "Glisser pour réordonner", "aria-hidden": "true", "⋮⋮" }
+                span { class: "sort-index", "{position + 1}" }
+                span { class: "sort-help", "Glisser pour réordonner" }
+                button {
+                    class: "button quiet small", r#type: "button",
+                    title: "Monter l'activité", "aria-label": "Monter l'activité",
+                    disabled: position == 0 || *busy.read(),
+                    onclick: move |_| {
+                        if position > 0 {
+                            request_reorder(
+                                busy, order_for_up.clone(), activity_id_for_up.clone(),
+                                order_for_up[position - 1].clone(), token_up.clone(),
+                                training_up.clone(), on_saved, on_error,
+                            );
+                        }
+                    },
+                    "↑"
+                }
+                button {
+                    class: "button quiet small", r#type: "button",
+                    title: "Descendre l'activité", "aria-label": "Descendre l'activité",
+                    disabled: position + 1 >= total || *busy.read(),
+                    onclick: move |_| {
+                        if position + 1 < order_for_down.len() {
+                            request_reorder(
+                                busy, order_for_down.clone(), activity_id_for_down.clone(),
+                                order_for_down[position + 1].clone(), token_down.clone(),
+                                training_down.clone(), on_saved, on_error,
+                            );
+                        }
+                    },
+                    "↓"
+                }
+            }
+            ActivityCard {
+                activity: activity.clone(),
+                materials: materials.clone(),
+                token: token.clone(),
+                training_id: training_id.clone(),
+                on_saved,
+                on_error,
+            }
+        }
+    }
+}
+
 #[component]
 fn ActivityCard(
     activity: Activity,
@@ -576,10 +706,20 @@ fn ActivityCard(
     let mut material_name = use_signal(String::new);
     let mut quantity = use_signal(|| "1".to_string());
     let mut busy = use_signal(|| false);
+    let mut editing=use_signal(||false);
+    let mut edit_name=use_signal(||activity.name.clone());
+    let mut edit_description=use_signal(||activity.description.clone());
+    let mut edit_html=use_signal(||activity.description_html.clone());
+    let mut edit_image=use_signal(||activity.image_url.clone().unwrap_or_default());
     rsx! {
         article { class: "exercise",
             div { class: "exercise-head",
                 h3 { "{activity.name}" }
+                div { class:"exercise-head-actions",
+                    button { class:"button outline small",r#type:"button",
+                        disabled:*busy.read(),onclick:move |_|editing.set(true),
+                        "Modifier"
+                    }
                 button { class: "remove-link", title: "Supprimer cet exercice", disabled: *busy.read(),
                     onclick: {
                         let token = token.clone();
@@ -602,8 +742,11 @@ fn ActivityCard(
                     },
                     "Supprimer"
                 }
+                }
             }
-            if !activity.description.trim().is_empty() {
+            if let Some(html)=activity.description_html.as_deref() {
+                div { class: "exercise-description rich-description", dangerous_inner_html: html }
+            } else if !activity.description.trim().is_empty() {
                 p { class: "exercise-description", "{activity.description}" }
             }
             if let Some(url) = activity.image_url.as_ref() {
@@ -679,6 +822,72 @@ fn ActivityCard(
                     input { "aria-label": "Quantité", r#type: "number", min: "1", max: "100000",
                         value: "{quantity}", oninput: move |e| quantity.set(e.value()) }
                     button { class: "button outline small", r#type: "submit", disabled: *busy.read(), "Ajouter" }
+                }
+            }
+        }
+        if *editing.read(){
+            div { class:"dialog-backdrop",
+                div { class:"dialog-panel activity-dialog",role:"dialog","aria-modal":"true",
+                    div { class:"dialog-header",
+                        div { h2 { "Modifier l'activité de la séance" }
+                            p { "Cette modification concerne uniquement cette séance, pas la bibliothèque." }
+                        }
+                        button { class:"icon-button",r#type:"button",
+                            onclick:move |_|editing.set(false),"×" }
+                    }
+                    form { onsubmit:{
+                        let token=token.clone();let training_id=training_id.clone();
+                        let activity_id=activity.id.clone();
+                        move |event|{
+                            event.prevent_default();
+                            if *busy.read(){return;}
+                            let name=edit_name.read().trim().to_string();
+                            if name.is_empty(){on_error.call("Le nom est obligatoire.".into());return;}
+                            let description=edit_description.read().clone();
+                            let html=edit_html.read().clone();
+                            let image=edit_image.read().trim().to_string();
+                            let token=token.clone();let training_id=training_id.clone();
+                            let activity_id=activity_id.clone();
+                            busy.set(true);
+                            spawn(async move{
+                                let result=trainings::update_activity(
+                                    &token,&training_id,&activity_id,&name,&description,
+                                    html.as_deref(),if image.is_empty(){None}else{Some(&image)}
+                                ).await;
+                                match result{
+                                    Ok(())=>{editing.set(false);on_saved.call(());},
+                                    Err(error)=>on_error.call(error),
+                                }
+                                busy.set(false);
+                            });
+                        }
+                    },
+                        div { class:"dialog-body",
+                            div { class:"field",label { "Nom" }
+                                input { value:"{edit_name}",required:true,maxlength:"150",
+                                    oninput:move |e|edit_name.set(e.value()) }
+                            }
+                            div { class:"field",label { "Description et consignes" }
+                                RichTextEditor{
+                                    initial_html:activity.description_html.clone(),
+                                    initial_plain:activity.description.clone(),
+                                    on_html:move |v:String|edit_html.set(Some(v)),
+                                    on_plain:move |v:String|edit_description.set(v),
+                                }
+                            }
+                            div { class:"field",label { "URL de l'image (facultatif)" }
+                                input { value:"{edit_image}",placeholder:"https://…",
+                                    oninput:move |e|edit_image.set(e.value()) }
+                            }
+                        }
+                        div { class:"dialog-footer",
+                            button { class:"button quiet",r#type:"button",
+                                onclick:move |_|editing.set(false),"Annuler" }
+                            button { class:"button solid",r#type:"submit",disabled:*busy.read(),
+                                if *busy.read(){"Enregistrement…"}else{"Enregistrer les modifications"}
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,14 +1,25 @@
 use dioxus::prelude::*;
 use super::Route;
+use crate::api::account;
 
 /// Desktop navigation stays in the header. On touch devices, primary routes
 /// move to a bottom navigation bar with comfortable touch targets.
 #[component]
 pub fn Header() -> Element {
     let mut session = use_context::<Signal<Option<String>>>();
+    let mut changelog_open=use_context::<Signal<bool>>();
     let navigator = use_navigator();
     let current = use_route::<Route>();
+    let token=session.read().clone();
+    let info=use_resource(move ||{
+        let token=token.clone();
+        async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
+    });
+    let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if matches!(a.role.as_str(),"administrator"|"maintainer"));
+    let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
+        if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
+        document::Meta { name:"robots", content:"noindex,nofollow,noarchive" }
         header { class: "topbar",
             div { class: "topbar-inner",
                 Link { to: Route::Trainings {}, class: "logo", "SEPPYL" }
@@ -25,8 +36,29 @@ pub fn Header() -> Element {
                     Link { to: Route::Activities {},
                         class: if matches!(&current, Route::Activities {}) { "active" } else { "" },
                         "Activités" }
+                    Link { to: Route::Tactics {},
+                        class: if matches!(&current, Route::Tactics {}) { "active" } else { "" },
+                        "Tactiques" }
                 }
                 div { class: "topbar-utilities",
+                    button{class:"topbar-changelog",r#type:"button",
+                        title:"Historique des versions",
+                        onclick:move |_|changelog_open.set(true),
+                        "Nouveautés"
+                    }
+                    if can_audit {
+                        Link { to: Route::AuditLog {},
+                            class: if matches!(&current,Route::AuditLog{}){"topbar-account active"}else{"topbar-account"},
+                            "Journal d'activité" }
+                    }
+                    Link { to: Route::Organization {},
+                        class: if matches!(&current,Route::Organization{}){"topbar-account active"}else{"topbar-account"},
+                        "Mon club" }
+                    if is_admin {
+                        Link{to:Route::Administration{},
+                            class:if matches!(&current,Route::Administration{}){"topbar-account active"}else{"topbar-account"},
+                            "Administration"}
+                    }
                     Link {
                         to: Route::AccountPage {},
                         class: if matches!(&current, Route::AccountPage {}) { "topbar-account active" } else { "topbar-account" },
@@ -73,6 +105,44 @@ pub fn Header() -> Element {
                     path { d: "M8 9h8M8 13h8M8 17h5" }
                 }
                 span { "Activités" }
+            }
+            Link { to: Route::Tactics {},
+                class: if matches!(&current, Route::Tactics {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                svg { width:"21", height:"21", view_box:"0 0 24 24",
+                    fill:"none", stroke:"currentColor", stroke_width:"1.8",
+                    circle { cx:"12", cy:"12", r:"9" }
+                    path { d:"M12 3v18M3 12h18" }
+                }
+                span { "Tactiques" }
+            }
+            Link { to: Route::Organization {},
+                class: if matches!(&current, Route::Organization {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                svg { width:"21", height:"21", view_box:"0 0 24 24",
+                    fill:"none", stroke:"currentColor", stroke_width:"1.8",
+                    path { d:"M3 21V9l9-6 9 6v12M9 21v-8h6v8" }
+                }
+                span { "Club" }
+            }
+            if is_admin {
+                Link { to: Route::Administration {},
+                    class: if matches!(&current, Route::Administration {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                    svg { width:"21",height:"21",view_box:"0 0 24 24",
+                        fill:"none",stroke:"currentColor",stroke_width:"1.8",
+                        rect { x:"4",y:"4",width:"16",height:"16",rx:"2" }
+                        path { d:"M9 9h6M9 13h6M9 17h4" }
+                    }
+                    span { "Admin" }
+                }
+            }
+            if can_audit {
+                Link { to: Route::AuditLog {},
+                    class: if matches!(&current, Route::AuditLog {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
+                    svg { width: "21", height: "21", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "1.8",
+                        path { d: "M8 3h10a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V7" }
+                        path { d: "M8 9h8M8 13h8M8 17h6" }
+                    }
+                    span { "Journal" }
+                }
             }
             Link { to: Route::AccountPage {},
                 class: if matches!(&current, Route::AccountPage {}) { "mobile-nav-link active" } else { "mobile-nav-link" },

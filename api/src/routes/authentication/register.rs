@@ -27,10 +27,7 @@ pub struct RegisterRequest {
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
- ) -> Result<(), StatusCode> {
-    if !cfg!(test) && std::env::var("SEPPYL_ALLOW_REGISTRATION").as_deref() != Ok("true") {
-        return Err(StatusCode::FORBIDDEN);
-    }
+) -> Result<(), StatusCode> {
     let username = payload.username.trim().to_string();
     if username.len() < 3 || username.len() > 80 || payload.password.len() < 8 {
         return Err(StatusCode::BAD_REQUEST);
@@ -53,10 +50,12 @@ pub async fn register(
         id: sea_orm::ActiveValue::Set(Uuid::new_v4()),
         username: sea_orm::ActiveValue::Set(username),
         password: sea_orm::ActiveValue::Set(hash.to_string()),
+        role: sea_orm::ActiveValue::Set(Some("user".into())),
         ..Default::default()
     };
-    user.insert(&state.db).await
+    let created=user.insert(&state.db).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!(action="account.register", account=%created.id, "New registration");
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-//! Shared activity library. All mutations are scoped to the authenticated owner.
+//! Activity library. Personal definitions remain private; team definitions are shared only with their assigned team.
 use axum::{
     Extension, Json, body::Bytes, extract::{Path, State},
     http::{StatusCode, header, HeaderMap}, response::IntoResponse,
@@ -6,7 +6,7 @@ use axum::{
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::authentication::login::Claims, state::AppState};
+use crate::{entities::{catalog_activity, catalog_material, catalog_selection, catalog_result, training_activity}, routes::{authentication::login::Claims,entities::organization}, state::AppState};
 
 #[derive(Serialize)]
 pub struct CatalogEntry {
@@ -18,7 +18,9 @@ pub struct CatalogEntry {
 pub struct ActivityPayload {
     pub name: String,
     pub description: String,
+    pub description_html: Option<String>,
     pub image_url: Option<String>,
+    pub team_id: Option<Uuid>,
 }
 #[derive(Deserialize)]
 pub struct MaterialPayload {
@@ -36,25 +38,54 @@ pub fn valid_image(value: Option<&str>) -> bool {
 }
 pub fn valid_payload(body: &ActivityPayload) -> bool {
     !body.name.trim().is_empty() && body.name.len() <= 150 &&
-        body.description.len() <= 20_000 && valid_image(body.image_url.as_deref())
+        body.description.len() <= 20_000 &&
+        body.description_html.as_ref().is_none_or(|html| html.len() <= 40_000) &&
+        valid_image(body.image_url.as_deref())
 }
 pub async fn owned(
     claims: &Claims, state: &AppState, id: Uuid
 ) -> Result<catalog_activity::Model, StatusCode> {
-    catalog_activity::Entity::find_by_id(id)
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)
+    let item=catalog_activity::Entity::find_by_id(id)
+        .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let role=organization::user_role(state,claims.sub).await?;
+    let allowed=match item.team_id {
+        Some(team_id)=>organization::can_read_team(state,claims,role,team_id).await?,
+        None=>item.user_id==claims.sub || role.is_admin(),
+    };
+    if allowed{Ok(item)}else{Err(StatusCode::NOT_FOUND)}
+}
+pub async fn writable(claims:&Claims,state:&AppState,id:Uuid)
+    ->Result<catalog_activity::Model,StatusCode>{
+    let item=owned(claims,state,id).await?;
+    let role=organization::user_role(state,claims.sub).await?;
+    if !role.can_write(){return Err(StatusCode::FORBIDDEN);}
+    if let Some(team_id)=item.team_id {
+        if !organization::can_write_team(state,claims,role,team_id).await?{
+            return Err(StatusCode::NOT_FOUND);
+        }
+    } else if item.user_id!=claims.sub && !role.is_admin() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(item)
 }
 pub async fn insert(
     claims: &Claims, state: &AppState, body: ActivityPayload
 ) -> Result<catalog_activity::Model, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
+    if let Some(team_id)=body.team_id {
+        let role=organization::user_role(state,claims.sub).await?;
+        if !role.can_write() || !organization::can_write_team(state,claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     catalog_activity::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(claims.sub),
+        team_id: Set(body.team_id),
         name: Set(body.name.trim().into()),
         description: Set(body.description),
+        description_html: Set(body.description_html.map(|html| ammonia::clean(&html))),
         image_url: Set(body.image_url.filter(|s| !s.is_empty())),
         ..Default::default()
     }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
@@ -64,9 +95,17 @@ pub async fn list(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CatalogEntry>>, StatusCode> {
-    let activities = catalog_activity::Entity::find()
-        .filter(catalog_activity::COLUMN.user_id.eq(claims.sub))
-        .all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let all=catalog_activity::Entity::find().all(&state.db)
+        .await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let role=organization::user_role(&state,claims.sub).await?;
+    let mut activities=Vec::new();
+    for activity in all {
+        let visible=match activity.team_id {
+            Some(team_id)=>organization::can_read_team(&state,&claims,role,team_id).await?,
+            None=>activity.user_id==claims.sub || role.is_admin(),
+        };
+        if visible {activities.push(activity);}
+    }
     let ids: Vec<Uuid> = activities.iter().map(|a| a.id).collect();
     let materials = if ids.is_empty() { Vec::new() } else {
         catalog_material::Entity::find()
@@ -90,10 +129,21 @@ pub async fn update(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>, Json(body): Json<ActivityPayload>
 ) -> Result<StatusCode, StatusCode> {
     if !valid_payload(&body) { return Err(StatusCode::BAD_REQUEST); }
-    let activity = owned(&claims, &state, id).await?;
+    let activity = writable(&claims, &state, id).await?;
+    if let Some(team_id)=body.team_id {
+        let role=organization::user_role(&state,claims.sub).await?;
+        if !organization::can_write_team(&state,&claims,role,team_id).await? {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     let mut active: catalog_activity::ActiveModel = activity.into();
+    if let Some(team_id)=body.team_id {active.team_id=Set(Some(team_id));}
     active.name = Set(body.name.trim().into());
     active.description = Set(body.description);
+    // Older clients that omit rich HTML should not erase existing formatting.
+    if let Some(html) = body.description_html {
+        active.description_html = Set(Some(ammonia::clean(&html)));
+    }
     active.image_url = Set(body.image_url.filter(|s| !s.is_empty()));
     active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
@@ -102,7 +152,7 @@ pub async fn update(
 pub async fn delete(
     Extension(claims): Extension<Claims>, State(state): State<AppState>, Path(id): Path<Uuid>
 ) -> Result<StatusCode, StatusCode> {
-    let item = owned(&claims, &state, id).await?;
+    let item = writable(&claims, &state, id).await?;
     // Do not orphan existing training and spreadsheet results.
     let in_training = training_activity::Entity::find()
         .filter(training_activity::COLUMN.catalog_id.eq(id))
@@ -130,7 +180,7 @@ pub async fn add_material(
     Extension(claims): Extension<Claims>, State(state): State<AppState>,
     Path(id): Path<Uuid>, Json(body): Json<MaterialPayload>,
 ) -> Result<(StatusCode, Json<catalog_material::Model>), StatusCode> {
-    owned(&claims, &state, id).await?;
+    writable(&claims, &state, id).await?;
     if body.name.trim().is_empty() || body.name.len() > 150 || !(1..=100000).contains(&body.quantity) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -139,6 +189,33 @@ pub async fn add_material(
         name: Set(body.name.trim().into()), quantity: Set(body.quantity), ..Default::default()
     }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED, Json(item)))
+}
+
+
+#[derive(Deserialize)]
+pub struct UpdateMaterialPayload {
+    pub name: String,
+    pub quantity: i32,
+}
+pub async fn update_material(
+    Extension(claims): Extension<Claims>, State(state): State<AppState>,
+    Path((id, material_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdateMaterialPayload>,
+) -> Result<Json<catalog_material::Model>, StatusCode> {
+    owned(&claims, &state, id).await?;
+    if body.name.trim().is_empty() || body.name.len() > 150 ||
+       !(1..=100_000).contains(&body.quantity) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let item = catalog_material::Entity::find_by_id(material_id)
+        .filter(catalog_material::COLUMN.activity_id.eq(id))
+        .one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut active: catalog_material::ActiveModel = item.into();
+    active.name = Set(body.name.trim().to_string());
+    active.quantity = Set(body.quantity);
+    let saved = active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(saved))
 }
 
 pub async fn remove_material(
@@ -199,5 +276,54 @@ mod tests {
         assert!(image_kind(b"\x89PNG\r\n\x1a\nxxxxx").is_some());
         assert!(image_kind(b"<svg onload=alert(1)>").is_none());
         assert!(image_kind(b"<html>bad</html>").is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod richer_catalog_tests {
+    use super::*;
+    use crate::entities::user;
+    use sea_orm::Database;
+
+    #[test]
+    fn unsafe_html_is_sanitized_before_storage() {
+        let cleaned = ammonia::clean("<p onclick='alert(1)'><strong>Objectif</strong><script>alert(1)</script></p>");
+        assert!(cleaned.contains("<strong>Objectif</strong>"));
+        assert!(!cleaned.contains("onclick"));
+        assert!(!cleaned.contains("<script"));
+    }
+
+    #[tokio::test]
+    async fn equipment_name_and_quantity_can_be_changed() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state = AppState { db };
+        let uid=Uuid::new_v4();
+        user::ActiveModel {
+            id:Set(uid),username:Set("coach-test".into()),password:Set("test".into()),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let claims=Claims{sub:uid,exp:u64::MAX};
+        let (_,activity)=create(Extension(claims.clone()),State(state.clone()),
+            Json(ActivityPayload{
+                name:"Passes".into(),description:"Consignes".into(),
+                description_html:Some("<p><strong>Passes</strong></p>".into()),
+                image_url:None,
+                team_id:None
+            })).await.unwrap();
+        assert_eq!(activity.0.description_html.as_deref(),Some("<p><strong>Passes</strong></p>"));
+        let id=activity.0.id;
+        let (_,material)=add_material(
+            Extension(claims.clone()),State(state.clone()),Path(id),
+            Json(MaterialPayload{name:"Ballons".into(),quantity:3})
+        ).await.unwrap();
+        update_material(
+            Extension(claims.clone()),State(state.clone()),Path((id,material.0.id)),
+            Json(UpdateMaterialPayload{name:"Chasubles".into(),quantity:8})
+        ).await.unwrap();
+        let rows=list(Extension(claims),State(state)).await.unwrap().0;
+        assert_eq!(rows[0].materials[0].name,"Chasubles");
+        assert_eq!(rows[0].materials[0].quantity,8);
     }
 }

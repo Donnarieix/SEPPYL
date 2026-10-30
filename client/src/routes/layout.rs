@@ -7,6 +7,7 @@ use crate::api::account;
 #[component]
 pub fn Header() -> Element {
     let mut session = use_context::<Signal<Option<String>>>();
+    let mut changelog_open=use_context::<Signal<bool>>();
     let navigator = use_navigator();
     let current = use_route::<Route>();
     let token=session.read().clone();
@@ -39,6 +40,11 @@ pub fn Header() -> Element {
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
+                    button{class:"topbar-changelog",r#type:"button",
+                        title:"Historique des versions",
+                        onclick:move |_|changelog_open.set(true),
+                        "Nouveautés"
+                    }
                     if can_audit {
                         Link { to: Route::AuditLog {},
                             class: if matches!(&current,Route::AuditLog{}){"topbar-account active"}else{"topbar-account"},

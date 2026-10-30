@@ -185,6 +185,24 @@ pub async fn add_team_information(db:&DatabaseConnection)->Result<(),DbErr>{
     Ok(())
 }
 
+/// Add optional release fields without modifying content or read receipts.
+/// The seed runs only after schema synchronization and never overwrites edits.
+pub async fn add_changelog_fields(db:&DatabaseConnection)->Result<(),DbErr>{
+    let columns=query_rows(db,"PRAGMA table_info('changelog_entries')").await?;
+    if columns.is_empty(){return Ok(());}
+    let names=columns.iter().map(|row|row.try_get::<String>("","name"))
+        .collect::<Result<Vec<_>,_>>()?;
+    for (name,sql) in [
+        ("is_hidden","ALTER TABLE changelog_entries ADD COLUMN is_hidden INTEGER"),
+        ("body_html","ALTER TABLE changelog_entries ADD COLUMN body_html TEXT"),
+    ]{
+        if !names.iter().any(|column|column==name){
+            db.execute_unprepared(sql).await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
     // A migration must never arbitrarily merge existing player IDs.
     let duplicates=query_rows(db,

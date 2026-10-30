@@ -12,6 +12,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     let session = use_context_provider(|| Signal::new(session::restore()));
+    let _changelog_open=use_context_provider(||Signal::new(false));
     let mut appearance = use_context_provider(|| Signal::new(UserPreferences::default()));
     let token = session.read().clone();
     let preferences = use_resource(move || {
@@ -57,6 +58,7 @@ fn App() -> Element {
             "data-theme": initial_theme.as_str(),
             "data-density": current.density.as_str(),
             Router::<routes::Route> {}
+            routes::changelog::ChangelogHost {}
         }
     }
 }

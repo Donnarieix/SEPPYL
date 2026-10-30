@@ -32,7 +32,8 @@ function fixture(){
     documentElement:new FakeNode(),
     activeElement:null,
     createElementNS(){return new FakeNode();},
-    querySelectorAll(selector){return selector===".seppyl-tactics-board"?[root]:[];}
+    querySelectorAll(selector){return selector===".seppyl-tactics-board"?[root]:[];},
+    addEventListener(){}
   };
   const svg=new FakeNode();
   svg.createSVGPoint=()=>({x:0,y:0,matrixTransform(){return {x:200,y:200};}});

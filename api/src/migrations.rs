@@ -23,7 +23,9 @@ fn quote_identifier(value:&str)->String{
     format!("\"{}\"",value.replace('"',"\"\""))
 }
 
-pub async fn migrate_legacy_player_firstname(db:&DatabaseConnection)->Result<bool,DbErr>{
+pub async fn migrate_legacy_player_firstname(
+    db:&DatabaseConnection,backup_path:Option<&str>
+)->Result<bool,DbErr>{
     let indexes=query_rows(db,"PRAGMA index_list('players')").await?;
     let mut inline_unique=false;
     let mut named_unique=Vec::<String>::new();
@@ -84,6 +86,17 @@ pub async fn migrate_legacy_player_firstname(db:&DatabaseConnection)->Result<boo
         let sql:String=obj.try_get("","sql")?;
         if kind=="index" && named_unique.iter().any(|i|i==&name){continue;}
         recreate.push(sql);
+    }
+
+    // VACUUM INTO provides a consistent SQLite snapshot (including WAL data).
+    // Keep the first snapshot for manual rollback; never overwrite it.
+    if let Some(path)=backup_path{
+        if !std::path::Path::new(path).exists(){
+            db.execute_unprepared(&format!(
+                "VACUUM INTO '{}'",path.replace('\\'', "''")
+            )).await?;
+            tracing::info!(path=%path,"Created pre-migration SQLite backup");
+        }
     }
 
     // Use a dedicated single-connection pool: PRAGMA foreign_keys is
@@ -151,8 +164,8 @@ mod tests{
         db.execute_unprepared(
             "INSERT INTO player_refs VALUES ('test-1')"
         ).await.unwrap();
-        assert!(migrate_legacy_player_firstname(&db).await.unwrap());
-        assert!(!migrate_legacy_player_firstname(&db).await.unwrap());
+        assert!(migrate_legacy_player_firstname(&db,None).await.unwrap());
+        assert!(!migrate_legacy_player_firstname(&db,None).await.unwrap());
         db.execute_unprepared(
             "INSERT INTO players VALUES ('test-2','Emma','Martin',9)"
         ).await.unwrap();

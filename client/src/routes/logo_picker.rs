@@ -97,7 +97,7 @@ pub fn LogoPicker(
                         "aria-label":"Cadrer l'image",
                         div{class:"logo-crop-heading",
                             div{h2{"Ajuster le cadrage"}
-                                p{"Déplacez l'image dans le cadre ou utilisez les réglages."}}
+                                p{"Glissez directement l'image pour la déplacer, puis ajustez le zoom."}}
                             button{class:"icon-button",r#type:"button",
                                 "aria-label":"Fermer",onclick:move |_|editing.set(false),"×"}
                         }
@@ -107,15 +107,13 @@ pub fn LogoPicker(
                             }
                             div{class:"logo-crop-outline"}
                         }
+                        // Coordinates remain controlled by the drag gesture, without
+                        // exposing redundant horizontal/vertical sliders.
+                        input{r#type:"hidden","data-logo-crop-x":"true",value:"{x}",
+                            oninput:move |e|if let Ok(v)=e.value().parse::<i32>(){x.set(v)}}
+                        input{r#type:"hidden","data-logo-crop-y":"true",value:"{y}",
+                            oninput:move |e|if let Ok(v)=e.value().parse::<i32>(){y.set(v)}}
                         div{class:"logo-crop-controls",
-                            div{class:"field",label{"Déplacement horizontal"},
-                                input{r#type:"range",min:"-100",max:"100",step:"1",
-                                    "data-logo-crop-x":"true",value:"{x}",
-                                    oninput:move |e|if let Ok(v)=e.value().parse::<i32>(){x.set(v)}}}
-                            div{class:"field",label{"Déplacement vertical"},
-                                input{r#type:"range",min:"-100",max:"100",step:"1",
-                                    "data-logo-crop-y":"true",value:"{y}",
-                                    oninput:move |e|if let Ok(v)=e.value().parse::<i32>(){y.set(v)}}}
                             div{class:"field",label{"Zoom — {zoom}%"},
                                 input{r#type:"range",min:"100",max:"300",step:"5",
                                     "data-logo-crop-zoom":"true",value:"{zoom}",

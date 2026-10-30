@@ -31,5 +31,16 @@ test("privacy notice reflects actual localStorage authentication",()=>{
  const privacy=file("src/routes/legal.rs");
  const session=file("src/session.rs");
  assert.ok(session.includes("LocalStorage"));
- assert.ok(privacy.includes("stockage local du navigateur"));
+ assert.ok(privacy.includes("stockage local"));
+});
+
+test("legal notice distinguishes home hosting from DNS/email provider",()=>{
+ const source=file("src/routes/legal.rs");
+ assert.ok(source.includes("auto-héberg")||source.includes("hébergées sur un serveur privé"));
+ assert.ok(source.includes("o2switch"));
+ assert.ok(source.includes("DNS"));
+ assert.ok(source.includes("mineures"));
+ assert.ok(source.includes("suppression"));
+ assert.ok(source.includes("Donnarieix"));
+ assert.ok(!source.includes("À renseigner avant la mise en ligne"));
 });

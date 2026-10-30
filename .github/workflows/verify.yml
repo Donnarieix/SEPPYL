@@ -21,6 +21,8 @@ jobs:
           node --test client/tests/*.test.cjs
           node --check client/assets/rich-editor.js
           node --check client/assets/tactics-board.js
+          node --check client/assets/tactics-fullscreen.js
+          node --check client/assets/select-overlay.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
       - name: Resolve dependencies

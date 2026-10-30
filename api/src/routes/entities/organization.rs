@@ -63,7 +63,6 @@ pub async fn list_clubs(
     State(state): State<AppState>,
 ) -> ApiResult<Json<Vec<club::Model>>> {
     let all = club::Entity::find().all(&state.db).await.map_err(db_error)?;
-    if role.0 == Role::Administrator { return Ok(Json(all)); }
     let club_ids:HashSet<Uuid> = club_membership::Entity::find()
         .filter(club_membership::COLUMN.user_id.eq(claims.sub))
         .all(&state.db).await.map_err(db_error)?
@@ -76,6 +75,53 @@ pub async fn list_clubs(
         .iter().filter(|t| team_ids.contains(&t.id)).map(|t|t.club_id).collect();
     Ok(Json(all.into_iter().filter(|c|club_ids.contains(&c.id)||indirect.contains(&c.id)).collect()))
 }
+/// Global administration is separate from the clubs a user actively belongs to.
+pub async fn list_admin_clubs(
+    Extension(role):Extension<CurrentRole>,State(state):State<AppState>,
+)->ApiResult<Json<Vec<club::Model>>>{
+    if role.0!=Role::Administrator{return Err(StatusCode::FORBIDDEN);}
+    Ok(Json(club::Entity::find().all(&state.db).await.map_err(db_error)?))
+}
+#[derive(Deserialize)]
+pub struct ClubInformation {
+    pub name:String,
+    pub description:String,
+    pub logo_url:Option<String>,
+    pub is_public:bool,
+}
+fn valid_logo(url:Option<&str>)->bool{
+    url.is_none_or(|s|s.is_empty() ||
+        (s.len()<=2000 && (s.starts_with("https://") ||
+        (s.starts_with("/catalog/images/") &&
+         s.rsplit('/').next().is_some_and(|filename|{
+            let Some((identifier,extension))=filename.rsplit_once('.') else{return false;};
+            Uuid::parse_str(identifier).is_ok() &&
+            matches!(extension,"png"|"jpg"|"webp"|"gif")
+         }))))
+}
+pub async fn update_club_information(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,Json(body):Json<ClubInformation>,
+)->ApiResult<Json<club::Model>>{
+    if !can_manage_club(&state,&claims,role.0,id).await?{
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if !valid_name(&body.name)||body.description.len()>3000||
+        !valid_logo(body.logo_url.as_deref()){
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let row=club::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut active:club::ActiveModel=row.into();
+    active.name=Set(body.name.trim().into());
+    active.description=Set(if body.description.trim().is_empty(){None}
+        else{Some(body.description.trim().to_owned())});
+    active.logo_url=Set(body.logo_url.filter(|u|!u.is_empty()));
+    active.is_public=Set(Some(body.is_public));
+    let saved=active.update(&state.db).await.map_err(db_error)?;
+    tracing::info!(actor=%claims.sub,club=%id,"Club information updated");
+    Ok(Json(saved))
+}
 pub async fn create_club(
     Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
     State(state): State<AppState>, Json(body): Json<CreateNamed>,
@@ -84,7 +130,7 @@ pub async fn create_club(
     if !valid_name(&body.name) { return Err(StatusCode::BAD_REQUEST); }
     let saved = club::ActiveModel {
         id: Set(Uuid::new_v4()), name: Set(body.name.trim().into()),
-        is_public: Set(Some(false)), ..Default::default()
+        is_public: Set(Some(false)),description:Set(None),logo_url:Set(None), ..Default::default()
     }.insert(&state.db).await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub, club=%saved.id, action="club.create");
     Ok((StatusCode::CREATED, Json(saved)))

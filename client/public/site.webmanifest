@@ -1,0 +1,10 @@
+{
+  "name": "SEPPYL — Gestion des entraînements sportifs",
+  "short_name": "SEPPYL",
+  "start_url": "/public",
+  "display": "browser",
+  "background_color": "#101f2a",
+  "theme_color": "#101f2a",
+  "lang": "fr",
+  "description": "Gestion des entraînements et des équipes sportives."
+}

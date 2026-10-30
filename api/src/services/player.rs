@@ -224,7 +224,7 @@ pub async fn delete_player(
 mod update_tests {
     use super::*;
     use crate::{entities::user,routes::authentication::login::Claims};
-    use sea_orm::{Database,ConnectionTrait,Statement,DbBackend};
+    use sea_orm::{Database,ConnectionTrait};
 
     async fn fresh_state()->AppState{
         let db=Database::connect("sqlite::memory:").await.unwrap();
@@ -266,9 +266,9 @@ mod update_tests {
     async fn schema_sync_removes_obsolete_firstname_unique_index(){
         let state=fresh_state().await;
         // Reproduce the old SeaORM-generated unique index on an existing DB.
-        state.db.execute(&Statement::from_string(DbBackend::Sqlite,
+        state.db.execute_unprepared(
             "CREATE UNIQUE INDEX \"idx-players-firstname\" ON \"players\" (\"firstname\")"
-        )).await.unwrap();
+        ).await.unwrap();
         state.db.get_schema_registry("api::entities::*")
             .sync(&state.db).await.unwrap();
         let claims=admin(&state).await;

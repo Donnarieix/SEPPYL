@@ -2407,8 +2407,10 @@ body{min-height:100dvh}
   .site-root .topbar-inner{height:62px;min-height:62px;flex-wrap:nowrap}
   .site-root .topbar-utilities{flex-wrap:nowrap}
 }
+/* Page height is managed by the app shell (header + main + footer).
+   Reserving a whole viewport here would push the footer below the fold. */
 .site-root :is(.organization-page,.administration-page){
-  min-height:calc(100dvh - 62px);
+  min-height:0;
 }
 .site-root :is(.organization-page,.administration-page)>.page-heading{
   min-height:65px;align-items:center;

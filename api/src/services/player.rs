@@ -73,7 +73,13 @@ pub async fn create_player(
     let player = player
         .insert(&txn)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|error| {
+            tracing::warn!(%error,"Unable to create player");
+            match error.sql_err(){
+                Some(sea_orm::SqlErr::UniqueConstraintViolation(_))=>StatusCode::CONFLICT,
+                _=>StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        })?;
 
     let player_user = entities::player_user::ActiveModel {
         player_id: Set(player.id),
@@ -229,6 +235,7 @@ mod update_tests {
     async fn fresh_state()->AppState{
         let db=Database::connect("sqlite::memory:").await.unwrap();
         db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        crate::migrations::enforce_player_identity(&db).await.unwrap();
         AppState{db}
     }
     async fn admin(state:&AppState)->Claims{
@@ -261,6 +268,12 @@ mod update_tests {
         assert_eq!(after.lastname,"Petit");
         let unchanged=get_player(&claims,&state,second).await.unwrap().unwrap();
         assert_eq!(unchanged.lastname,"Martin");
+        let conflict=create_player(&claims,&state,CreatePlayerRequest{
+            firstname:"Emma".into(),lastname:"Petit".into(),number:7,
+        }).await;
+        // The unique index is installed after schema synchronization, exactly
+        // as in AppState startup.
+        assert_eq!(conflict.err(),Some(StatusCode::CONFLICT));
     }
     #[tokio::test]
     async fn schema_sync_removes_obsolete_firstname_unique_index(){
@@ -278,5 +291,6 @@ mod update_tests {
         create_player(&claims,&state,CreatePlayerRequest{
             firstname:"Lina".into(),lastname:"B".into(),number:4,
         }).await.unwrap();
+        crate::migrations::enforce_player_identity(&state.db).await.unwrap();
     }
 }

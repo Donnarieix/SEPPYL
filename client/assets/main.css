@@ -12,7 +12,8 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { opacity: .52; cursor: not-allowed; }
 button:focus-visible, input:focus-visible { outline: 2px solid #4368a8; outline-offset: 2px; }
-.app { min-height: 100vh; }
+/* Viewport height belongs to the shared site-root, not individual routes. */
+.app { min-height: 0; }
 .app-header {
     height: 60px;
     background: var(--surface);
@@ -2716,8 +2717,24 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 
 
 /* Release footer and public legal content: remains unobtrusive in the app. */
-.site-root{display:flex;flex-direction:column;min-height:100dvh}
-.site-root>main{width:100%;flex:1 0 auto}
+/* One page shell owns the viewport. Children take only their natural
+   height, and grow into unused space so the footer rests at the bottom.
+   The footer never adds another viewport below a 100vh route. */
+.site-root{
+  display:flex;flex-direction:column;
+  min-height:100vh;min-height:100dvh;
+  height:auto;
+}
+.site-root > .app{
+  display:flex;flex-direction:column;
+  width:100%;min-height:0;flex:1 0 auto;
+}
+.site-root > .app > main{
+  width:100%;min-height:0;flex:1 0 auto;
+}
+.site-root > main{
+  width:100%;min-height:0;flex:1 0 auto;
+}
 .site-footer{
   flex:0 0 auto;margin-top:auto;position:relative;z-index:1;
   width:100%;border-top:1px solid var(--line);background:var(--surface);
@@ -2785,7 +2802,7 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
   .legal-page{padding:32px 18px 70px}
 }
 @media(max-width:680px){
-  .site-footer{padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+  .site-footer{padding-bottom:0}
   .site-footer-inner{min-height:0;gap:18px;align-items:flex-start}
   .site-footer-nav{gap:12px 15px}
   .site-footer-meta{width:100%;justify-content:flex-start}
@@ -2859,9 +2876,12 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
 }
 
 
-/* The fixed mobile toolbar only exists inside authenticated routes.
-   Public/login/print routes must not keep its old 73px reserved gutter. */
+/* The mobile navigation is fixed. Reserve its footprint *inside* the
+   footer when present, not as extra padding after the footer or on login. */
 @media(max-width:800px){
-  .site-root:not(:has(.mobile-nav)){padding-bottom:0!important}
+  .site-root{padding-bottom:0!important}
+  .site-root:has(.mobile-nav) > .site-footer{
+    padding-bottom:calc(73px + env(safe-area-inset-bottom,0px));
+  }
   .site-root:not(:has(.mobile-nav)) > .site-footer{padding-bottom:0}
 }

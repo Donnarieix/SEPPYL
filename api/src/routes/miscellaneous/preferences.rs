@@ -157,9 +157,14 @@ mod tests {
         update(Extension(alice_claims.clone()), State(state.clone()), Json(UpdatePreferences {
             attendance_view: Some(AttendanceView::Grid), ..Default::default()
         })).await.unwrap();
-        let final_settings = get(Extension(alice_claims), State(state)).await.unwrap().0;
+        let final_settings = get(Extension(alice_claims), State(state.clone())).await.unwrap().0;
         assert_eq!(final_settings.attendance_view, AttendanceView::Grid);
         assert_eq!(final_settings.theme, Theme::Dark);
+        update(Extension(Claims{sub:alice,exp:u64::MAX}),State(state.clone()),
+            Json(UpdatePreferences{theme:Some(Theme::Contrast),..Default::default()})).await.unwrap();
+        let high_contrast=get(Extension(Claims{sub:alice,exp:u64::MAX}),State(state))
+            .await.unwrap().0;
+        assert_eq!(high_contrast.theme,Theme::Contrast);
     }
 
     #[test]

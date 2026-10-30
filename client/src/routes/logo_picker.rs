@@ -11,9 +11,12 @@ pub struct LogoSelection{
 pub fn image_style(x:i32,y:i32,zoom:i32)->String{
     // Render cropped imagery without reading third-party pixel data in a canvas.
     // Remote HTTPS imagery therefore works even without cross-origin canvas access.
-    format!("transform:translate({}%,{}%) scale({});",
-        x.clamp(-100,100),y.clamp(-100,100),
-        zoom.clamp(100,300) as f32 / 100.0)
+    let z=zoom.clamp(100,300);
+    format!("object-position:{}% {}%;transform:translate({:.1}%,{:.1}%) scale({});",
+        50+x.clamp(-100,100)/2,50+y.clamp(-100,100)/2,
+        x.clamp(-100,100) as f32*(z-100) as f32/200.0,
+        y.clamp(-100,100) as f32*(z-100) as f32/200.0,
+        z as f32 / 100.0)
 }
 #[component]
 pub fn LogoPicker(

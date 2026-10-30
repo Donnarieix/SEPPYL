@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
 use crate::api::{account,organization as org};
 use super::{Route,layout::Header,membership::MembershipPanel,
-    team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor};
+    team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor,
+    team_information::TeamInformationEditor};
 
 #[component]
 pub fn Administration()->Element{
@@ -256,7 +257,8 @@ pub fn Administration()->Element{
                                             },
                                             span{class:"club-sidebar-avatar",
                                                 if let Some(url)=org::club_logo_src(item.logo_url.as_deref()){
-                                                    img{src:"{url}",alt:""}
+                                                    img{src:"{url}",alt:"",
+                                                    style:"{org::logo_style(item.logo_x,item.logo_y,item.logo_zoom)}"}
                                                 }else{"{item.name.chars().next().unwrap_or('C').to_uppercase()}"}
                                             }
                                             span{class:"club-sidebar-name","{item.name}"}
@@ -329,6 +331,11 @@ pub fn Administration()->Element{
                                                                 move |_|{team.set(id.clone());club_section.set("roster".into());}
                                                             },
                                                             "Gérer l'effectif"}
+                                                        button{class:"button outline small",
+                                                            onclick:{
+                                                                let id=entry.id.clone();
+                                                                move |_|{team.set(id.clone());club_section.set("team-info".into());}
+                                                            },"Informations"}
                                                         TeamManagerRow{
                                                             team:entry.clone(),token:token.clone(),
                                                             on_saved:move |_|{teams.restart();notice.set(Some("Équipe mise à jour.".into()));},
@@ -367,6 +374,18 @@ pub fn Administration()->Element{
                                                     input{value:"{new_team}",required:true,maxlength:"120",
                                                         oninput:move |e|new_team.set(e.value())}}
                                                 button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Ajouter"}
+                                            }
+                                        }
+                                    }else if *club_section.read()=="team-info"{
+                                        div{class:"admin-roster-heading",
+                                            button{class:"button outline small",r#type:"button",
+                                                onclick:move |_|club_section.set("teams".into()),"Retour aux équipes"}
+                                        }
+                                        if let Some(selected)=teams_list.iter().find(|t|t.id==*team.read()).cloned(){
+                                            TeamInformationEditor{key:"{selected.id}",
+                                                token:token.clone(),team:selected,
+                                                on_saved:move |_|{teams.restart();notice.set(Some("Équipe mise à jour.".into()));},
+                                                on_error:move |error|notice.set(Some(error))
                                             }
                                         }
                                     }else if *club_section.read()=="roster"{

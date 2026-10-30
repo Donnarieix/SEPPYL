@@ -21,7 +21,7 @@ test("legal links, contact and release are in the shared footer",()=>{
  const source=file("src/routes/legal.rs");
  const footer=source.split("pub fn SiteFooter()")[1].split("fn LegalHeading(")[0];
  for(const entry of ['href:"/mentions-legales"','href:"/confidentialite"',
-   'href:"/cgu"',"mailto:seppyl@donnarieix.fr","https://github.com/LuDoSniper"]){
+   'href:"/cgu"',"mailto:seppyl@donnarieix.fr","https://github.com/Donnarieix"]){
     assert.ok(footer.includes(entry),entry);
  }
  assert.ok(!footer.includes("Link{"),"Footer must not render router Links outside Router");

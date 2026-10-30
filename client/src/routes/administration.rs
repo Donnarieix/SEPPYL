@@ -466,7 +466,7 @@ pub fn Administration()->Element{
                                                         }
                                                     },
                                                     div{class:"field",label{"Joueuse déjà enregistrée"},
-                                                        select{value:"{roster_player}",required:true,
+                                                        select{value:"{roster_player}",required:true,"data-seppyl-searchable":"true",
                                                             onchange:move |e|roster_player.set(e.value()),
                                                             option{value:"","Choisir une joueuse"}
                                                             if let Some(Ok(people))=club_candidates.read().clone(){

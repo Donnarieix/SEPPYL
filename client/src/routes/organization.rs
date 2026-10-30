@@ -105,7 +105,11 @@ pub fn Organization()->Element{
                     }
                 }
                 if let Some(message)=notice.read().as_ref(){
-                    div{class:"inline-notice",role:"status","{message}"}
+                    div{class:"seppyl-toast",role:"status",
+                        span{class:"seppyl-toast-message","{message}"}
+                        button{r#type:"button",class:"seppyl-toast-close",
+                            "data-toast-dismiss":"true","aria-label":"Fermer la notification","×"}
+                    }
                 }
                 div{class:"club-layout",
                     aside{class:"club-sidebar",

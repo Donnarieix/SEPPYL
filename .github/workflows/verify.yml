@@ -27,15 +27,8 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
-      - name: Diagnose minimal lockfile synchronization for release
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo metadata --format-version 1 >/dev/null
-          echo "=== SEPPYL LOCKFILE PATCH START ==="
-          git diff -- Cargo.lock
-          echo "=== SEPPYL LOCKFILE PATCH END ==="
-          cargo metadata --locked --format-version 1 >/dev/null
+      - name: Verify committed production lockfile
+        run: cargo metadata --locked --format-version 1 >/dev/null
       - name: Check API
         run: cargo check -p api --locked
       - name: Check Web Client

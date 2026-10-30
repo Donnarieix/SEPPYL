@@ -3,7 +3,7 @@ use crate::api::{account,changelog};
 
 #[component]
 pub fn ChangelogHost()->Element{
-    let open=use_context::<Signal<bool>>();
+    let mut open=use_context::<Signal<bool>>();
     let session=use_context::<Signal<Option<String>>>();
     let token=session.read().clone();
     let entries_token=token.clone();

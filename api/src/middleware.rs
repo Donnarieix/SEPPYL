@@ -11,7 +11,7 @@ use sea_orm::EntityTrait;
 use crate::{audit,entities::user, routes::authentication::login::Claims, state::AppState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Role { Visitor, User, Trainer, Manager, Administrator }
+pub enum Role { Visitor, User, Trainer, Manager, Administrator, Maintainer }
 impl Role {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
@@ -20,11 +20,15 @@ impl Role {
             "trainer" => Some(Self::Trainer),
             "manager" => Some(Self::Manager),
             "administrator" => Some(Self::Administrator),
+            "maintainer" => Some(Self::Maintainer),
             _ => None
         }
     }
+    pub fn is_admin(self)->bool{
+        matches!(self,Self::Administrator|Self::Maintainer)
+    }
     pub fn can_write(self) -> bool {
-        matches!(self, Self::Trainer | Self::Manager | Self::Administrator)
+        matches!(self, Self::Trainer | Self::Manager | Self::Administrator | Self::Maintainer)
     }
 }
 
@@ -109,6 +113,9 @@ mod tests {
         assert!(Role::Trainer.can_write());
         assert!(Role::Manager.can_write());
         assert!(Role::Administrator.can_write());
+        assert!(Role::Maintainer.can_write());
+        assert!(Role::Maintainer.is_admin());
+        assert!(Role::Administrator.is_admin());
         assert!(Role::parse("administrator").is_some());
         assert!(Role::parse("superuser").is_none());
     }

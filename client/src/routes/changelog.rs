@@ -197,7 +197,7 @@ pub fn ChangelogHost()->Element{
                                     div{class:"field",
                                         label{"Notes de version"}
                                         RichTextEditor{
-                                            key:if *creating.read(){format!("new-{}",new_version.read())}else{selected.read().clone()},
+                                            key:if *creating.read(){"new-version".to_string()}else{selected.read().clone()},
                                             initial_html:body_html.read().clone(),
                                             initial_plain:body.read().clone(),
                                             aria_label:Some("Notes de version".into()),

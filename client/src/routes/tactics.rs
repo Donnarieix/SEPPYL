@@ -109,39 +109,51 @@ pub fn Tactics() -> Element {
                     }
                     if let Some(id) = selected_id.read().clone() {
                         div { class:"tactics-delete-compact",
+                            button {
+                                class:"button outline small tactics-delete-trigger",
+                                r#type:"button",
+                                disabled:*busy.read(),
+                                "aria-expanded":if *deletion_confirm.read(){"true"}else{"false"},
+                                onclick:move |_|deletion_confirm.set(!*deletion_confirm.read()),
+                                "Supprimer"
+                            }
                             if *deletion_confirm.read() {
-                                span { "Supprimer définitivement ce schéma ?" }
-                                button { class:"button danger small", disabled:*busy.read(),
-                                    onclick:{
-                                        let id=id.clone();
-                                        let token=token_delete.clone();
-                                        move |_|{
-                                            let id=id.clone();
-                                            let token=token.clone();
-                                            busy.set(true);
-                                            spawn(async move {
-                                                match tactics::remove(&token,&id).await {
-                                                    Ok(())=>{
-                                                        selected_id.set(None);
-                                                        name.set("Nouveau schéma".into());
-                                                        objects_json.set("[]".into());
-                                                        let next=*revision.read()+1;
-                                                        revision.set(next);
-                                                        diagrams.restart();
-                                                        notice.set(Some("Schéma supprimé.".into()));
-                                                    }
-                                                    Err(message)=>notice.set(Some(message)),
+                                div { class:"tactics-delete-confirm",role:"alertdialog",
+                                    "aria-label":"Confirmer la suppression du schéma",
+                                    strong { "Supprimer définitivement ce schéma ?" }
+                                    div { class:"tactics-delete-confirm-actions",
+                                        button { class:"button quiet small",r#type:"button",
+                                            onclick:move |_|deletion_confirm.set(false),"Annuler" }
+                                        button { class:"button danger small",r#type:"button",disabled:*busy.read(),
+                                            onclick:{
+                                                let id=id.clone();
+                                                let token=token_delete.clone();
+                                                move |_|{
+                                                    let id=id.clone();
+                                                    let token=token.clone();
+                                                    busy.set(true);
+                                                    spawn(async move {
+                                                        match tactics::remove(&token,&id).await {
+                                                            Ok(())=>{
+                                                                selected_id.set(None);
+                                                                name.set("Nouveau schéma".into());
+                                                                objects_json.set("[]".into());
+                                                                let next=*revision.read()+1;
+                                                                revision.set(next);
+                                                                diagrams.restart();
+                                                                notice.set(Some("Schéma supprimé.".into()));
+                                                            }
+                                                            Err(message)=>notice.set(Some(message)),
+                                                        }
+                                                        deletion_confirm.set(false);
+                                                        busy.set(false);
+                                                    });
                                                 }
-                                                deletion_confirm.set(false);
-                                                busy.set(false);
-                                            });
+                                            },
+                                            "Confirmer"
                                         }
-                                    },
-                                    "Confirmer"
+                                    }
                                 }
-                                button { class:"button quiet small", onclick:move |_|deletion_confirm.set(false), "Annuler" }
-                            } else {
-                                button { class:"button outline small tactics-delete-trigger", onclick:move |_|deletion_confirm.set(true), "Supprimer" }
                             }
                         }
                     }

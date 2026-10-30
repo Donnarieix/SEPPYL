@@ -60,6 +60,8 @@ async fn main() {
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
         .route("/admin/users", get(organization::list_users))
+        .route("/admin/clubs", get(organization::list_admin_clubs))
+        .route("/clubs/{id}/information", put(organization::update_club_information))
         .route("/clubs", get(organization::list_clubs).post(organization::create_club))
         .route("/clubs/{id}/members", get(organization::list_club_members))
         .route("/clubs/{id}/eligible-users", get(organization::eligible_users))

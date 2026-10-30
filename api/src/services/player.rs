@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, QueryFilter, TransactionTrait, SqlErr};
 use uuid::Uuid;
 
 use crate::{entities, routes::{authentication::login::Claims, entities::{player::{CreatePlayerRequest, UpdatePlayerRequest},organization}}, state::AppState};
@@ -150,7 +150,21 @@ pub async fn update_player(
     
     let player = player.update(&state.db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|error| {
+            // Keep the SQL details on the server, never in the HTTP response.
+            // A constraint violation is a data conflict, not a server crash.
+            tracing::error!(
+                player_id=%payload.id,
+                actor_id=%claims.sub,
+                error=%error,
+                "Unable to update player"
+            );
+            match error.sql_err() {
+                Some(SqlErr::UniqueConstraintViolation(_)) |
+                Some(SqlErr::ForeignKeyConstraintViolation(_)) => StatusCode::CONFLICT,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        })?;
 
     Ok(player.id)
 }

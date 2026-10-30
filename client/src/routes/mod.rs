@@ -15,6 +15,7 @@ mod tactics;
 mod organization;
 mod club_information;
 mod logo_picker;
+mod team_information;
 mod administration;
 mod membership;
 mod team_management;

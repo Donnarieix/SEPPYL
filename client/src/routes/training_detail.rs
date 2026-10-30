@@ -319,6 +319,7 @@ fn Notes(
                 div { class: "score-toolbar",
                     label { "Type de note" }
                     select { value: "{selected_activity}",
+                        "data-seppyl-searchable":"true",
                         onchange: move |event| selected_activity.set(event.value()),
                         option { value: "", "Note générale" }
                         for item in &detail.activities {
@@ -437,6 +438,7 @@ fn Preparation(
                             div { class: "picker-fields",
                                 select {
                                     value: "{selected}",
+                                    "data-seppyl-searchable":"true",
                                     onchange: move |e| selected.set(e.value()),
                                     option { value: "", "Choisir une activité existante…" }
                                     for item in available {

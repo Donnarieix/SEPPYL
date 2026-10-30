@@ -472,17 +472,17 @@ pub async fn assign_team_player(
     if player::Entity::find_by_id(player_id).one(&state.db).await.map_err(db_error)?.is_none(){
         return Err(StatusCode::NOT_FOUND);
     }
-    // Club membership persists even when the player leaves this team.
-    if club_player::Entity::find_by_id((target.club_id,player_id))
-        .one(&state.db).await.map_err(db_error)?.is_none(){
-        club_player::ActiveModel{club_id:Set(target.club_id),player_id:Set(player_id),
-            ..Default::default()}.insert(&state.db).await.map_err(db_error)?;
-    }
     // An existing relationship is not a successful insertion. Report a conflict
     // and avoid producing an incorrect user notification or audit "create".
     if team_player::Entity::find_by_id((id,player_id)).one(&state.db)
         .await.map_err(db_error)?.is_some(){
         return Err(StatusCode::CONFLICT);
+    }
+    // Club membership persists even when the player leaves this team.
+    if club_player::Entity::find_by_id((target.club_id,player_id))
+        .one(&state.db).await.map_err(db_error)?.is_none(){
+        club_player::ActiveModel{club_id:Set(target.club_id),player_id:Set(player_id),
+            ..Default::default()}.insert(&state.db).await.map_err(db_error)?;
     }
     team_player::ActiveModel{team_id:Set(id),player_id:Set(player_id),..Default::default()}
         .insert(&state.db).await.map_err(|error|{
@@ -789,6 +789,16 @@ mod roster_lifecycle_tests{
         ).await.unwrap().0;
         assert_eq!(players.len(),1);
         assert_eq!(players[0].id,id);
+        let duplicate=assign_team_player(
+            Extension(Claims{sub:coach,exp:u64::MAX}),
+            Extension(CurrentRole(Role::Trainer)),State(state.clone()),Path((team_id,id))
+        ).await;
+        assert_eq!(duplicate.err(),Some(StatusCode::CONFLICT));
+        let unchanged=list_team_players(
+            Extension(reader_claims.clone()),Extension(CurrentRole(Role::User)),
+            State(state.clone()),Path(team_id)
+        ).await.unwrap().0;
+        assert_eq!(unchanged.len(),1);
         let denied=list_team_players(
             Extension(Claims{sub:outsider,exp:u64::MAX}),Extension(CurrentRole(Role::User)),
             State(state.clone()),Path(team_id)

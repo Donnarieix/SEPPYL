@@ -26,9 +26,12 @@ pub struct Team{
     #[serde(default)]pub logo_zoom:Option<i32>,
 }
 pub fn logo_style(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->String {
-    format!("transform:translate({}%,{}%) scale({});",
-        x.unwrap_or(0).clamp(-100,100),y.unwrap_or(0).clamp(-100,100),
-        zoom.unwrap_or(100).clamp(100,300) as f32/100.0)
+    let x=x.unwrap_or(0).clamp(-100,100);
+    let y=y.unwrap_or(0).clamp(-100,100);
+    let z=zoom.unwrap_or(100).clamp(100,300);
+    format!("object-position:{}% {}%;transform:translate({:.1}%,{:.1}%) scale({});",
+        50+x/2,50+y/2,x as f32*(z-100) as f32/200.0,
+        y as f32*(z-100) as f32/200.0,z as f32/100.0)
 }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct User{pub id:String,pub username:String,pub role:String}

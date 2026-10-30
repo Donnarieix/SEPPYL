@@ -23,7 +23,15 @@ pub async fn save(token:&str,id:Option<&str>,firstname:&str,lastname:&str,number
             .json(&Create{firstname,lastname,number})
     };
     let res=req.send().await.map_err(|e|e.to_string())?;
-    if res.status().is_success(){Ok(())} else {Err(format!("Impossible d'enregistrer la joueuse (HTTP {}).",res.status()))}
+    match res.status(){
+        status if status.is_success()=>Ok(()),
+        StatusCode::BAD_REQUEST=>Err("Vérifiez le prénom, le nom et le numéro de la joueuse.".into()),
+        StatusCode::FORBIDDEN=>Err("Vous n'avez pas les droits pour modifier cette joueuse dans toutes ses équipes.".into()),
+        StatusCode::NOT_FOUND=>Err("Cette fiche n'existe plus ou n'est plus accessible.".into()),
+        StatusCode::CONFLICT=>Err("L'enregistrement est en conflit avec une donnée existante. Vérifiez les informations et réessayez.".into()),
+        StatusCode::INTERNAL_SERVER_ERROR=>Err("L'enregistrement a échoué côté serveur. Consultez les logs de l'API pour connaître la cause.".into()),
+        status=>Err(format!("Impossible d'enregistrer la joueuse (HTTP {status}).")),
+    }
 }
 pub async fn delete(token:&str,id:&str)->Result<(),String>{
     let res=Client::new().delete(format!("{}/player/delete/{id}",url()))

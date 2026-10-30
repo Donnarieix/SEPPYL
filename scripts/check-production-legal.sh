@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# Run BEFORE the production Web build, in the same environment as cargo/dx.
+# Run BEFORE building the Web client; the application is self-hosted, not hosted by o2switch.
+# Keep the publisher's actual identity in the private build environment.
 set -euo pipefail
 variables=(
   SEPPYL_LEGAL_PUBLISHER
   SEPPYL_LEGAL_ADDRESS
   SEPPYL_LEGAL_PHONE
   SEPPYL_LEGAL_DIRECTOR
-  SEPPYL_LEGAL_HOST
-  SEPPYL_LEGAL_HOST_ADDRESS
-  SEPPYL_LEGAL_HOST_PHONE
-  SEPPYL_LEGAL_DATA_CONTROLLER
-  SEPPYL_LEGAL_RETENTION
 )
 missing=0
 for var in "${variables[@]}"; do

@@ -861,13 +861,13 @@ mod club_information_regression {
         let invalid=update_club_information(Extension(admin.clone()),Extension(role),
             State(state.clone()),Path(second.0.id),Json(ClubInformation{
                 name:"B".into(),description:"A".into(),
-                logo_url:Some("javascript:alert(1)".into()),is_public:true,
+                logo_url:Some("javascript:alert(1)".into()),logo_x:None,logo_y:None,logo_zoom:None,is_public:true,
             })).await.err();
         assert_eq!(invalid,Some(StatusCode::BAD_REQUEST));
         let forbidden=update_club_information(Extension(guest),
             Extension(CurrentRole(Role::User)),State(state.clone()),
             Path(second.0.id),Json(ClubInformation{
-                name:"Club B".into(),description:String::new(),logo_url:None,is_public:false,
+                name:"Club B".into(),description:String::new(),logo_url:None,logo_x:None,logo_y:None,logo_zoom:None,is_public:false,
             })).await.err();
         assert_eq!(forbidden,Some(StatusCode::FORBIDDEN));
         let Json(updated)=update_club_information(
@@ -876,6 +876,7 @@ mod club_information_regression {
                 name:"Club B renommé".into(),
                 description:"Club amateur et école de sport".into(),
                 logo_url:Some("https://example.org/logo.png".into()),
+                logo_x:Some(12),logo_y:Some(-8),logo_zoom:Some(140),
                 is_public:true,
             })
         ).await.unwrap();

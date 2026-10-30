@@ -20,7 +20,8 @@ pub fn PublicDirectory()->Element{
                                 div{class:"catalog-content",
                                     div{class:"public-club-heading",
                                         if let Some(src)=organization::club_logo_src(club.logo_url.as_deref()){
-                                            span{class:"public-club-logo",img{src:"{src}",alt:"Logo de {club.name}"}}
+                                            span{class:"public-club-logo",img{src:"{src}",alt:"Logo de {club.name}",
+                                            style:"{organization::logo_style(club.logo_x,club.logo_y,club.logo_zoom)}"}}
                                         }
                                         div{
                                             h2{"{club.name}"}
@@ -48,7 +49,21 @@ fn PublicTeams(club_id:String)->Element{
         match choices.read().clone(){
             Some(Ok(items))=>rsx!{
                 if items.is_empty(){p{"Aucune équipe publiée."}}
-                for team in items{p{class:"muted-small",key:"{team.id}","{team.name}"}}
+                for team in items{
+                    div{class:"public-team-row",key:"{team.id}",
+                        span{class:"workspace-team-icon",
+                            if let Some(src)=organization::club_logo_src(team.logo_url.as_deref()){
+                                img{src:"{src}",alt:"",
+                                    style:"{organization::logo_style(team.logo_x,team.logo_y,team.logo_zoom)}"}
+                            }else{"⚽"}
+                        }
+                        div{strong{"{team.name}"}
+                            if let Some(description)=team.description.as_deref(){
+                                p{class:"muted-small","{description}"}
+                            }
+                        }
+                    }
+                }
             },
             Some(Err(_))=>rsx!{p{"Équipes indisponibles."}},
             None=>rsx!{p{"Chargement…"}},

@@ -107,6 +107,44 @@ pub fn Tactics() -> Element {
                         title:"Afficher le studio sur tout l'écran (F pour basculer, Échap pour quitter)",
                         "Plein écran"
                     }
+                    if let Some(id) = selected_id.read().clone() {
+                        div { class:"tactics-delete-compact",
+                            if *deletion_confirm.read() {
+                                span { "Supprimer définitivement ce schéma ?" }
+                                button { class:"button danger small", disabled:*busy.read(),
+                                    onclick:{
+                                        let id=id.clone();
+                                        let token=token_delete.clone();
+                                        move |_|{
+                                            let id=id.clone();
+                                            let token=token.clone();
+                                            busy.set(true);
+                                            spawn(async move {
+                                                match tactics::remove(&token,&id).await {
+                                                    Ok(())=>{
+                                                        selected_id.set(None);
+                                                        name.set("Nouveau schéma".into());
+                                                        objects_json.set("[]".into());
+                                                        let next=*revision.read()+1;
+                                                        revision.set(next);
+                                                        diagrams.restart();
+                                                        notice.set(Some("Schéma supprimé.".into()));
+                                                    }
+                                                    Err(message)=>notice.set(Some(message)),
+                                                }
+                                                deletion_confirm.set(false);
+                                                busy.set(false);
+                                            });
+                                        }
+                                    },
+                                    "Confirmer"
+                                }
+                                button { class:"button quiet small", onclick:move |_|deletion_confirm.set(false), "Annuler" }
+                            } else {
+                                button { class:"button outline small tactics-delete-trigger", onclick:move |_|deletion_confirm.set(true), "Supprimer" }
+                            }
+                        }
+                    }
                     }
                 }
                 div { class: "tactics-layout",
@@ -267,48 +305,6 @@ pub fn Tactics() -> Element {
                             textarea { class:"rich-hidden-input", "data-tactics-output":"true",
                                 "aria-hidden":"true", tabindex:"-1",
                                 oninput:move |event|objects_json.set(event.value()) }
-                        }
-                        div { class: "tactics-actions",
-                            p { class:"muted-small", "Sélection : cliquez, Shift+clic ou encadrez plusieurs éléments. Glissez pour déplacer le groupe. Les couleurs se modifient sur la sélection." }
-
-                        }
-                        if let Some(id) = selected_id.read().clone() {
-                            div { class:"tactics-delete",
-                                if *deletion_confirm.read() {
-                                    span { "Supprimer définitivement ce schéma ?" }
-                                    button { class:"button danger small", disabled:*busy.read(),
-                                        onclick:{
-                                            let id=id.clone();
-                                            let token=token_delete.clone();
-                                            move |_|{
-                                                let id=id.clone();
-                                                let token=token.clone();
-                                                busy.set(true);
-                                                spawn(async move {
-                                                    match tactics::remove(&token,&id).await {
-                                                        Ok(())=>{
-                                                            selected_id.set(None);
-                                                            name.set("Nouveau schéma".into());
-                                                            objects_json.set("[]".into());
-                                                            let next=*revision.read()+1;
-                                                            revision.set(next);
-                                                            diagrams.restart();
-                                                            notice.set(Some("Schéma supprimé.".into()));
-                                                        }
-                                                        Err(message)=>notice.set(Some(message)),
-                                                    }
-                                                    deletion_confirm.set(false);
-                                                    busy.set(false);
-                                                });
-                                            }
-                                        },
-                                        "Confirmer"
-                                    }
-                                    button { class:"button quiet small", onclick:move |_|deletion_confirm.set(false), "Annuler" }
-                                } else {
-                                    button { class:"remove-link", onclick:move |_|deletion_confirm.set(true), "Supprimer le schéma" }
-                                }
-                            }
                         }
                     }
                 }

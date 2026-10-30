@@ -78,9 +78,11 @@ pub fn ClubInformationEditor(
                     textarea{rows:"4",maxlength:"3000",
                         placeholder:"Présentez votre club, ses activités et son identité.",
                         value:"{description}",oninput:move |e|description.set(e.value())}}
-                div{class:"club-public-setting",
-                    div{strong{"Visible dans l'annuaire"}
-                        p{"Seuls le nom, le logo, la description et les équipes seront publics. Les joueuses et données sportives restent privées."}}
+                label{class:"club-public-setting",
+                    span{class:"club-public-setting-copy",
+                        strong{"Visible dans l'annuaire"}
+                        span{"Seuls le nom, le logo, la description et les équipes seront publics. Les joueuses et données sportives restent privées."}
+                    }
                     input{r#type:"checkbox",checked:*public.read(),
                         "aria-label":"Rendre ce club public",
                         onchange:move |e|public.set(e.checked())}

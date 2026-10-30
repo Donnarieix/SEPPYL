@@ -13,6 +13,7 @@ mod account;
 mod rich_editor;
 mod tactics;
 mod organization;
+mod club_information;
 mod administration;
 mod membership;
 mod team_management;

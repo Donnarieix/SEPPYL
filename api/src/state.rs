@@ -44,6 +44,12 @@ impl AppState {
             .sync(&db)
             .await
             .unwrap();
+        // Enforce the complete player identity, never firstname alone.
+        // A pre-existing conflict aborts startup rather than silently merging
+        // distinct player IDs, team memberships, scores or attendance.
+        crate::migrations::enforce_player_identity(&db).await
+            .expect("Duplicate player identities in the existing database: resolve them on a backup before startup");
+
 
         let user = entities::user::Entity::find()
             .filter(entities::user::COLUMN.username.eq("admin".to_string()))

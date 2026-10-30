@@ -53,6 +53,16 @@
     let color = DEFAULTS.player;
     let brushSize=22;
     let draggingCurve=null;
+    const palette=root.querySelector("[data-tactic-menu]");
+    const isEditing=()=> {
+      const active=document.activeElement;
+      return !!active && (active.matches("input, textarea, select") || active.isContentEditable);
+    };
+    const hidePalette=()=>{ if(palette)palette.classList.remove("open"); };
+    const KEY_TO_TOOL={
+      s:"select",j:"player",b:"ball",p:"cone",g:"goal",
+      f:"arrow",c:"curve",e:"erase"
+    };
 
     const position = event => {
       const point = svg.createSVGPoint();
@@ -67,6 +77,7 @@
       output.dispatchEvent(new Event("input", { bubbles: true }));
     };
     const activate = next => {
+      hidePalette();
       tool = next;
       arrowStart = null;
       for (const button of root.querySelectorAll("[data-tactic-tool]")) {
@@ -202,6 +213,7 @@
       render(); sync();
     }
     function loadDiagram() {
+      hidePalette();
       let loaded=[];
       try {
         const decoded=JSON.parse(root.dataset.tacticsInitial||"[]");
@@ -221,6 +233,13 @@
     root.querySelectorAll("[data-tactic-color]").forEach(button =>
       button.addEventListener("click", () => paint(button.dataset.tacticColor))
     );
+    root.querySelectorAll("[data-tactic-quick-color]").forEach(button=>{
+      button.addEventListener("click",()=>{
+        paint(button.dataset.tacticQuickColor);
+        hidePalette();
+        svg.focus({preventScroll:true});
+      });
+    });
     root.querySelector("[data-tactic-custom]")?.addEventListener("input", event => paint(event.target.value));
     root.querySelector("[data-tactic-remove]")?.addEventListener("click", dropSelection);
     const resize = value => {
@@ -235,13 +254,46 @@
     };
     root.querySelector("[data-tactic-size]")?.addEventListener("input",event=>resize(event.target.value));
 
-    root.addEventListener("keydown", event => {
-      if (event.target.matches("input, textarea, select")) return;
-      if (event.key === "Escape") {
-        selected.clear(); marquee = null; arrowStart = null; render();
-      } else if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault(); dropSelection();
+    // Mouse shortcuts are attached to the canvas only, never to surrounding UI.
+    svg.addEventListener("wheel",event=>{
+      if(isEditing())return;
+      event.preventDefault();
+      resize(brushSize+(event.deltaY<0?2:-2));
+    },{passive:false});
+    svg.addEventListener("contextmenu",event=>{
+      if(isEditing())return;
+      event.preventDefault();
+      if(!palette)return;
+      const target=event.target.closest("[data-marker-id]");
+      const id=target?.getAttribute("data-marker-id");
+      if(id&&!selected.has(id)){selected=new Set([id]);render();}
+      const rect=root.getBoundingClientRect();
+      palette.style.left=Math.max(8,Math.min(event.clientX-rect.left,rect.width-205))+"px";
+      palette.style.top=Math.max(8,Math.min(event.clientY-rect.top,rect.height-110))+"px";
+      palette.classList.add("open");
+    });
+    root.addEventListener("keydown",event=>{
+      if(isEditing() || event.target.matches("input, textarea, select") ||
+          event.ctrlKey || event.metaKey || event.altKey)return;
+      const key=event.key.toLowerCase();
+      if(key==="escape"){
+        event.preventDefault();
+        hidePalette();
+        selected.clear();marquee=null;arrowStart=null;render();
+      }else if(key==="delete"||key==="backspace"){
+        event.preventDefault();
+        dropSelection();
+      }else if(KEY_TO_TOOL[key] && !event.repeat){
+        event.preventDefault();
+        activate(KEY_TO_TOOL[key]);
       }
+    });
+    // Keyboard shortcuts can be used after entering the canvas; an input
+    // focused elsewhere is never overridden by hover or a wheel interaction.
+    svg.addEventListener("pointerdown",()=>{if(!isEditing())svg.focus({preventScroll:true});});
+    document.addEventListener("pointerdown",event=>{
+      if(!root.contains(event.target))hidePalette();
+      else if(palette && !palette.contains(event.target) && !event.target.closest("[data-tactics-svg]"))hidePalette();
     });
     svg.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;

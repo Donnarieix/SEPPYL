@@ -76,7 +76,9 @@ pub async fn auth(
             .and_then(|v|v.to_str().ok()).is_some_and(|v|v.starts_with("application/json")) {
         let length = request.headers().get(CONTENT_LENGTH)
             .and_then(|v|v.to_str().ok()).and_then(|v|v.parse::<usize>().ok());
-        if length.is_some_and(|n|n <= 512 * 1024) {
+        // Browser fetch typically omits Content-Length, especially over HTTP/2.
+        // Read bounded JSON even when the header is absent.
+        if length.is_none_or(|n|n <= 512 * 1024) {
             let original = std::mem::replace(request.body_mut(), Body::empty());
             let bytes = to_bytes(original, 512 * 1024).await
                 .map_err(|_|StatusCode::PAYLOAD_TOO_LARGE)?;

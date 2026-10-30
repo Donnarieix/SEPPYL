@@ -65,7 +65,11 @@ pub async fn auth(
     let mutation = matches!(method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE);
     let self_service = path.starts_with("/account/") || path == "/preferences"
         || path.starts_with("/clubs") || path.starts_with("/teams")
-        || path.starts_with("/admin/");
+        || path.starts_with("/admin/")
+        // Read receipts belong to the authenticated account, even when that
+        // account has no mutation permissions (Utilisateur / lecture seule).
+        || (method == Method::POST && path.starts_with("/changelog/")
+            && path.ends_with("/read"));
     if mutation && !self_service && !role.can_write() {
         tracing::warn!(actor=%data.claims.sub, %path, "role denied mutation");
         return Err(StatusCode::FORBIDDEN);

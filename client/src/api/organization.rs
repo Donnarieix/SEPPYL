@@ -26,7 +26,9 @@ pub struct Team{
     #[serde(default)]pub logo_zoom:Option<i32>,
 }
 pub fn logo_style(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->String {
-    super::super::routes::logo_picker::image_style(x.unwrap_or(0),y.unwrap_or(0),zoom.unwrap_or(100))
+    format!("transform:translate({}%,{}%) scale({});",
+        x.unwrap_or(0).clamp(-100,100),y.unwrap_or(0).clamp(-100,100),
+        zoom.unwrap_or(100).clamp(100,300) as f32/100.0)
 }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct User{pub id:String,pub username:String,pub role:String}

@@ -133,7 +133,7 @@ mod tests{
         let value=serde_json::to_string(&changed).unwrap();
         let restored:DrawingObject=serde_json::from_str(&value).unwrap();
         assert!(restored.dashed);
-        assert!(value.contains("\\"dashed\\":true"));
+        assert!(value.contains(r#""dashed":true"#));
     }
     #[test]
     fn rejects_untrusted_objects_and_invalid_positions(){

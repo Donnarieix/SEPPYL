@@ -48,6 +48,7 @@ fn App() -> Element {
         document::Script { src: asset!("/assets/audit-dates.js") }
         document::Script { src: asset!("/assets/rich-editor.js") }
         document::Script { src: asset!("/assets/tactics-board.js") }
+        document::Script { src: asset!("/assets/tactics-fullscreen.js") }
         div {
             class: "site-root",
             "data-theme": initial_theme.as_str(),

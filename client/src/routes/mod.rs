@@ -14,6 +14,7 @@ mod rich_editor;
 mod tactics;
 mod organization;
 mod club_information;
+mod logo_picker;
 mod administration;
 mod membership;
 mod team_management;

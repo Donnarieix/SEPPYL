@@ -29,7 +29,9 @@ impl AppState {
         migration_options.max_connections(1);
         let migration_db=Database::connect(migration_options).await
             .expect("Unable to connect for database migration");
-        crate::migrations::migrate_legacy_player_firstname(&migration_db)
+        crate::migrations::migrate_legacy_player_firstname(
+            &migration_db,Some("data/seppyl.local.db-before-player-migration")
+        )
             .await.expect("Unable to safely migrate the players table; restore the backup and inspect SQLite schema");
         migration_db.close().await
             .expect("Unable to close migration connection");

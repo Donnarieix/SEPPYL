@@ -26,6 +26,8 @@ pub struct DrawingObject {
     pub control_x:Option<f64>,
     #[serde(default)]
     pub control_y:Option<f64>,
+    #[serde(default)]
+    pub dashed:bool,
 }
 #[derive(Clone,Serialize,Deserialize)]
 pub struct DiagramPayload {
@@ -125,7 +127,7 @@ mod tests{
     fn rejects_untrusted_objects_and_invalid_positions(){
         let mut good=DiagramPayload{name:"Exercice".into(),layout:"football".into(),
             objects:vec![DrawingObject{id:"1".into(),kind:"player".into(),x:400.0,y:250.0,
-                end_x:None,end_y:None,label:Some("A1".into()),color:None,size:None,control_x:None,control_y:None}]};
+                end_x:None,end_y:None,label:Some("A1".into()),color:None,size:None,control_x:None,control_y:None,dashed:false}]};
         assert!(validate(&good));
         good.objects[0].color=Some("#123ABC".into());
         assert!(validate(&good));

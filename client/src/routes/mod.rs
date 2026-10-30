@@ -25,6 +25,18 @@ pub mod changelog;
 pub mod legal;
 
 use home::Home;
+
+#[component]
+fn RootRedirect()->Element{
+    let session=use_context::<Signal<Option<String>>>();
+    let navigator=use_navigator();
+    use_effect(move || {
+        let destination=if session.read().is_some(){Route::Trainings{}}else{Route::Login{}};
+        navigator.replace(destination);
+    });
+    rsx! {}
+}
+
 use login::Login;
 use training_detail::TrainingDetail;
 use training_print::TrainingPrint;
@@ -42,6 +54,8 @@ use legal::{LegalNotice,PrivacyPolicy,TermsOfUse};
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {
     #[route("/")]
+    RootRedirect {},
+    #[route("/trainings")]
     Trainings {},
     #[route("/spreadsheet")]
     Home {},

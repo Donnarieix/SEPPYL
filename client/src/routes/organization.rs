@@ -88,6 +88,8 @@ pub fn Organization()->Element{
     let caps=capabilities.read().as_ref().and_then(|v|v.as_ref().ok()).cloned();
     let can_manage=caps.as_ref().is_some_and(|c|c.can_manage);
     let can_write_team=caps.as_ref().is_some_and(|c|c.can_write_teams.contains(&team_id.read()));
+    let selected_team_label=teams_list.iter().find(|t|t.id==*team_id.read())
+        .map(|t|t.name.clone()).unwrap_or_else(||"Effectif de l'équipe".to_string());
     let current_club=clubs_list.iter().find(|c|c.id==*club_id.read()).cloned();
     let is_public=current_club.as_ref().and_then(|c|c.is_public)==Some(true);
     let team_for_members=team_id.read().clone();
@@ -207,7 +209,7 @@ pub fn Organization()->Element{
                                 div{class:"club-roster-grid",
                                 section{class:"panel",
                                     div{class:"panel-head",
-                                        div{h2{"{teams_list.iter().find(|t| t.id==*team_id.read()).map(|t|t.name.as_str()).unwrap_or("Effectif de l'équipe")}"}p{"Joueuses de cette équipe"}}
+                                        div{h2{"{selected_team_label}"}p{"Joueuses de cette équipe"}}
                                         button{class:"button outline small",r#type:"button",
                                             onclick:move |_|{team_id.set(String::new());tab.set("teams".into());},
                                             "Retour aux équipes"}

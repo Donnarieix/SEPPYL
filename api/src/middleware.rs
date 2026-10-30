@@ -85,7 +85,7 @@ pub async fn auth(
         }
     }
     let context = if mutation {
-        Some(audit::capture(&state,&method,&path,payload.as_ref()).await)
+        Some(audit::capture(&state,actor,&method,&path,payload.as_ref()).await)
     }else{None};
     request.extensions_mut().insert(data.claims);
     request.extensions_mut().insert(CurrentRole(role));

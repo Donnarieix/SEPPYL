@@ -37,6 +37,20 @@ fn RootRedirect()->Element{
     rsx! {}
 }
 
+#[component]
+fn RequireAuth()->Element{
+    let session=use_context::<Signal<Option<String>>>();
+    let navigator=use_navigator();
+    let authenticated=session.read().is_some();
+    use_effect(move || {
+        if session.read().is_none(){
+            navigator.replace(Route::Login{});
+        }
+    });
+    if !authenticated{return rsx!{};}
+    rsx!{Outlet::<Route>{}}
+}
+
 use login::Login;
 use training_detail::TrainingDetail;
 use training_print::TrainingPrint;
@@ -55,6 +69,18 @@ use legal::{LegalNotice,PrivacyPolicy,TermsOfUse};
 pub enum Route {
     #[route("/")]
     RootRedirect {},
+    #[route("/login")]
+    Login {},
+    #[route("/public")]
+    PublicDirectory {},
+    #[route("/mentions-legales")]
+    LegalNotice {},
+    #[route("/confidentialite")]
+    PrivacyPolicy {},
+    #[route("/cgu")]
+    TermsOfUse {},
+
+    #[layout(RequireAuth)]
     #[route("/trainings")]
     Trainings {},
     #[route("/spreadsheet")]
@@ -73,16 +99,6 @@ pub enum Route {
     AuditLog {},
     #[route("/settings")]
     AccountPage {},
-    #[route("/public")]
-    PublicDirectory {},
-    #[route("/mentions-legales")]
-    LegalNotice {},
-    #[route("/confidentialite")]
-    PrivacyPolicy {},
-    #[route("/cgu")]
-    TermsOfUse {},
-    #[route("/login")]
-    Login {},
     #[route("/trainings/:id")]
     TrainingDetail { id: String },
     #[route("/trainings/:id/print")]

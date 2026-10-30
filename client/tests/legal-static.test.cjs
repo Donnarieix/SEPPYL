@@ -19,10 +19,12 @@ test("all four indexable URLs are public and login is not indexed",()=>{
 });
 test("legal links, contact and release are in the shared footer",()=>{
  const source=file("src/routes/legal.rs");
- for(const entry of ["Route::LegalNotice","Route::PrivacyPolicy","Route::TermsOfUse",
-   "mailto:seppyl@donnarieix.fr","https://github.com/LuDoSniper"]){
-    assert.ok(source.includes(entry),entry);
+ const footer=source.split("pub fn SiteFooter()")[1].split("fn LegalHeading(")[0];
+ for(const entry of ['href:"/mentions-legales"','href:"/confidentialite"',
+   'href:"/cgu"',"mailto:seppyl@donnarieix.fr","https://github.com/LuDoSniper"]){
+    assert.ok(footer.includes(entry),entry);
  }
+ assert.ok(!footer.includes("Link{"),"Footer must not render router Links outside Router");
  assert.ok(source.includes('env!("CARGO_PKG_VERSION")'));
 });
 test("privacy notice reflects actual localStorage authentication",()=>{

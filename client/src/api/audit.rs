@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde::Deserialize;
-fn base()->&'static str{option_env!("SEPPYL_API_URL").unwrap_or("http://127.0.0.1:3000")}
+fn base()->&'static str{super::base_url()}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Event{
     pub id:String,pub author:String,pub action:String,

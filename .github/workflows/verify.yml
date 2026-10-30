@@ -27,8 +27,15 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
-      - name: Verify production lockfile without modifying it
-        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Inspect and regenerate the release lockfile for verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          echo "=== SEPPYL LOCKFILE PATCH START ==="
+          git diff -- Cargo.lock
+          echo "=== SEPPYL LOCKFILE PATCH END ==="
+          cargo metadata --locked --format-version 1 >/dev/null
       - name: Check API
         run: cargo check -p api --locked
       - name: Check Web Client

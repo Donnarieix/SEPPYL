@@ -87,7 +87,14 @@ pub struct ClubInformation {
     pub name:String,
     pub description:String,
     pub logo_url:Option<String>,
+    #[serde(default)]pub logo_x:Option<i32>,
+    #[serde(default)]pub logo_y:Option<i32>,
+    #[serde(default)]pub logo_zoom:Option<i32>,
     pub is_public:bool,
+}
+fn valid_crop(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->bool {
+    x.unwrap_or(0).abs()<=100 && y.unwrap_or(0).abs()<=100
+        && (100..=300).contains(&zoom.unwrap_or(100))
 }
 fn valid_logo(url:Option<&str>)->bool {
     let Some(url)=url else{return true;};
@@ -106,7 +113,8 @@ pub async fn update_club_information(
         return Err(StatusCode::FORBIDDEN);
     }
     if !valid_name(&body.name)||body.description.len()>3000||
-        !valid_logo(body.logo_url.as_deref()){
+        !valid_logo(body.logo_url.as_deref())||
+        !valid_crop(body.logo_x,body.logo_y,body.logo_zoom){
         return Err(StatusCode::BAD_REQUEST);
     }
     let row=club::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
@@ -116,11 +124,48 @@ pub async fn update_club_information(
     active.description=Set(if body.description.trim().is_empty(){None}
         else{Some(body.description.trim().to_owned())});
     active.logo_url=Set(body.logo_url.filter(|u|!u.is_empty()));
+    active.logo_x=Set(Some(body.logo_x.unwrap_or(0)));
+    active.logo_y=Set(Some(body.logo_y.unwrap_or(0)));
+    active.logo_zoom=Set(Some(body.logo_zoom.unwrap_or(100)));
     active.is_public=Set(Some(body.is_public));
     let saved=active.update(&state.db).await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub,club=%id,"Club information updated");
     Ok(Json(saved))
 }
+#[derive(Deserialize)]
+pub struct TeamInformation {
+    pub name:String,
+    pub description:String,
+    pub logo_url:Option<String>,
+    #[serde(default)]pub logo_x:Option<i32>,
+    #[serde(default)]pub logo_y:Option<i32>,
+    #[serde(default)]pub logo_zoom:Option<i32>,
+}
+pub async fn update_team_information(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path(id):Path<Uuid>,Json(body):Json<TeamInformation>
+)->ApiResult<Json<team::Model>>{
+    let old=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if !can_manage_club(&state,&claims,role.0,old.club_id).await? {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if !valid_name(&body.name)||body.description.len()>3000||
+        !valid_logo(body.logo_url.as_deref())||
+        !valid_crop(body.logo_x,body.logo_y,body.logo_zoom){
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let mut active:team::ActiveModel=old.into();
+    active.name=Set(body.name.trim().to_string());
+    active.description=Set(if body.description.trim().is_empty(){None}
+        else{Some(body.description.trim().to_string())});
+    active.logo_url=Set(body.logo_url.filter(|s|!s.is_empty()));
+    active.logo_x=Set(Some(body.logo_x.unwrap_or(0)));
+    active.logo_y=Set(Some(body.logo_y.unwrap_or(0)));
+    active.logo_zoom=Set(Some(body.logo_zoom.unwrap_or(100)));
+    Ok(Json(active.update(&state.db).await.map_err(db_error)?))
+}
+
 pub async fn create_club(
     Extension(claims): Extension<Claims>, Extension(role): Extension<CurrentRole>,
     State(state): State<AppState>, Json(body): Json<CreateNamed>,
@@ -433,10 +478,19 @@ pub async fn assign_team_player(
         club_player::ActiveModel{club_id:Set(target.club_id),player_id:Set(player_id),
             ..Default::default()}.insert(&state.db).await.map_err(db_error)?;
     }
-    if team_player::Entity::find_by_id((id,player_id)).one(&state.db).await.map_err(db_error)?.is_none(){
-        team_player::ActiveModel{team_id:Set(id),player_id:Set(player_id),..Default::default()}
-            .insert(&state.db).await.map_err(db_error)?;
+    // An existing relationship is not a successful insertion. Report a conflict
+    // and avoid producing an incorrect user notification or audit "create".
+    if team_player::Entity::find_by_id((id,player_id)).one(&state.db)
+        .await.map_err(db_error)?.is_some(){
+        return Err(StatusCode::CONFLICT);
     }
+    team_player::ActiveModel{team_id:Set(id),player_id:Set(player_id),..Default::default()}
+        .insert(&state.db).await.map_err(|error|{
+            tracing::warn!(%error,team=%id,player=%player_id,"Unable to assign player");
+            if matches!(error.sql_err(),Some(sea_orm::SqlErr::UniqueConstraintViolation(_))){
+                StatusCode::CONFLICT
+            }else{StatusCode::INTERNAL_SERVER_ERROR}
+        })?;
     tracing::info!(actor=%claims.sub,team=%id,player=%player_id,action="team.player.add");
     Ok(StatusCode::NO_CONTENT)
 }

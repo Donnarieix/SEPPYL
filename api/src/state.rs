@@ -80,7 +80,8 @@ impl AppState {
                 .filter(crate::entities::user::COLUMN.username.eq(admin_username))
                 .one(&db).await.expect("Unable to load bootstrap admin")
             {
-                if existing.role.as_deref() != Some("administrator") {
+                if existing.role.as_deref()!=Some("administrator")
+                    && existing.role.as_deref()!=Some("maintainer") {
                     let mut active:crate::entities::user::ActiveModel = existing.into();
                     active.role = Set(Some("administrator".into()));
                     active.update(&db).await.expect("Unable to bootstrap administrator");

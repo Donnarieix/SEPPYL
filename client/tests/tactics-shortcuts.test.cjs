@@ -59,7 +59,8 @@ function fixture(){
   })[selector]??null;
   root.querySelectorAll=selector=>selector==="[data-tactic-quick-color]"?[quick]:[];
   const window={};
-  vm.runInNewContext(source,{window,document,MutationObserver:class{observe(){}},Event});
+  vm.runInNewContext(source,{window,document,MutationObserver:class{observe(){}},Event,
+    setTimeout:()=>1,clearTimeout:()=>{}});
   const marker={closest(selector){
     return selector==="[data-marker-id]"?{getAttribute:()=>"one"}:null;
   }};

@@ -669,6 +669,41 @@ mod integration_tests {
             })
         ).await.unwrap();
         let activity_id = Uuid::parse_str(&activity_id).unwrap();
+        let original_catalog_id=training_activity::Entity::find_by_id(activity_id)
+            .one(&state.db).await.unwrap().unwrap().catalog_id.unwrap();
+        let refused=update_activity(
+            Extension(Claims{sub:other,exp:u64::MAX}),State(state.clone()),
+            Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Tentative".into(),description:"".into(),description_html:None,image_url:None
+            })
+        ).await;
+        assert!(matches!(refused,Err(StatusCode::NOT_FOUND)));
+        update_activity(
+            Extension(claims.clone()),State(state.clone()),Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Passes corrigées".into(),
+                description:"Description corrigée".into(),
+                description_html:Some("<p><strong>Consigne</strong></p>".into()),
+                image_url:None,
+            })
+        ).await.unwrap();
+        let modified=training_activity::Entity::find_by_id(activity_id)
+            .one(&state.db).await.unwrap().unwrap();
+        assert_eq!(modified.name,"Passes corrigées");
+        assert_eq!(modified.description,"Description corrigée");
+        let original=catalog_activity::Entity::find_by_id(original_catalog_id)
+            .one(&state.db).await.unwrap().unwrap();
+        assert_eq!(original.name,"Passes");
+        // Restore the label used by the remaining existing assertions.
+        update_activity(
+            Extension(claims.clone()),State(state.clone()),Path((id,activity_id)),
+            Json(EditSessionActivity{
+                name:"Passes".into(),
+                description:"En binôme, pendant 10 minutes.".into(),
+                description_html:None,image_url:None,
+            })
+        ).await.unwrap();
 
         add_material(
             Extension(claims.clone()), State(state.clone()), Path((id, activity_id)),

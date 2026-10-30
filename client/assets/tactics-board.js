@@ -52,16 +52,20 @@
     let arrowStart = null;
     let color = DEFAULTS.player;
     let brushSize=22;
+    let dashed=false;
     let draggingCurve=null;
     const palette=root.querySelector("[data-tactic-menu]");
     const isEditing=()=> {
       const active=document.activeElement;
       return !!active && (active.matches("input, textarea, select") || active.isContentEditable);
     };
-    const hidePalette=()=>{ if(palette)palette.classList.remove("open"); };
+    const hidePalette=()=>{
+      if(palette)palette.classList.remove("open");
+      root.querySelector("[data-tactic-line-menu]")?.classList.remove("open");
+    };
     const KEY_TO_TOOL={
       s:"select",j:"player",b:"ball",p:"cone",g:"goal",
-      f:"arrow",c:"curve",e:"erase"
+      a:"arrow",c:"curve",e:"erase"
     };
 
     const position = event => {
@@ -120,7 +124,8 @@
         ?"M"+x1+" "+y1+" Q"+cx+" "+cy+" "+bx+" "+by
         :"M"+x1+" "+y1+" L"+bx+" "+by;
       add(group,"path",{d:path,stroke:fill,fill:"none",
-        "stroke-width":Math.max(3,(item.size??20)*.23),"stroke-linecap":"round",
+        "stroke-width":Math.max(3,(item.size??20)*.23),"stroke-linecap":"butt",
+        ...(item.dashed?{"stroke-dasharray":"14 9"}:{}),
         "pointer-events":"stroke"});
       add(group,"polygon",{points:[
         [x2,y2],[x2-ux*head-uy*head*.5,y2-uy*head+ux*head*.5],
@@ -206,6 +211,7 @@
       }
       const count = root.querySelector("[data-selection-count]");
       if (count) count.textContent = selected.size + " sélectionné(s)";
+      updateDashControls();
     }
     function dropSelection() {
       objects = objects.filter(item => !selected.has(item.id));
@@ -244,6 +250,26 @@
     });
     root.querySelector("[data-tactic-custom]")?.addEventListener("input", event => paint(event.target.value));
     root.querySelector("[data-tactic-remove]")?.addEventListener("click", dropSelection);
+    const isArrow=item=>item.kind==="arrow"||item.kind==="curve";
+    const updateDashControls=()=>{
+      const current=objects.filter(item=>selected.has(item.id)&&isArrow(item));
+      const active=current.length?current.every(item=>!!item.dashed):dashed;
+      root.querySelectorAll("[data-tactic-dash]").forEach(button=>{
+        button.classList.toggle("selected",(button.dataset.tacticDash==="dashed")===active);
+      });
+    };
+    const setDash=next=>{
+      dashed=next==="dashed";
+      for(const item of objects){
+        if(selected.has(item.id)&&isArrow(item))item.dashed=dashed;
+      }
+      sync();render();updateDashControls();
+    };
+    root.querySelectorAll("[data-tactic-dash]").forEach(button=>
+      button.addEventListener("click",()=>setDash(button.dataset.tacticDash)));
+    root.querySelectorAll("[data-tactic-context-dash]").forEach(button=>
+      button.addEventListener("click",()=>{setDash(button.dataset.tacticContextDash);hidePalette();}));
+
     const sizeFeedback=root.querySelector("[data-tactic-size-feedback]");
     let feedbackTimer=null;
     const showSizeFeedback=(event)=>{
@@ -293,6 +319,8 @@
       palette.style.left=Math.max(8,Math.min(event.clientX-rect.left,rect.width-205))+"px";
       palette.style.top=Math.max(8,Math.min(event.clientY-rect.top,rect.height-110))+"px";
       palette.classList.add("open");
+      const style=root.querySelector("[data-tactic-line-menu]");
+      if(style)style.classList.toggle("open",objects.some(item=>selected.has(item.id)&&isArrow(item)));
     });
     root.addEventListener("keydown",event=>{
       if(isEditing() || event.target.matches("input, textarea, select") ||
@@ -364,6 +392,7 @@
         size:brushSize,
         control_x:tool==="curve"?clamp((arrowStart.x+p.x)/2-(p.y-arrowStart.y)*.3,800):null,
         control_y:tool==="curve"?clamp((arrowStart.y+p.y)/2+(p.x-arrowStart.x)*.3,500):null,
+        dashed:(tool==="arrow"||tool==="curve")?dashed:false,
         label: null, color
       };
       objects.push(next);

@@ -22,6 +22,7 @@ mod team_management;
 mod public_directory;
 mod audit;
 pub mod changelog;
+pub mod legal;
 
 use home::Home;
 use login::Login;
@@ -36,6 +37,7 @@ use organization::Organization;
 use administration::Administration;
 use public_directory::PublicDirectory;
 use audit::AuditLog;
+use legal::{LegalNotice,PrivacyPolicy,TermsOfUse};
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum Route {
@@ -59,6 +61,12 @@ pub enum Route {
     AccountPage {},
     #[route("/public")]
     PublicDirectory {},
+    #[route("/mentions-legales")]
+    LegalNotice {},
+    #[route("/confidentialite")]
+    PrivacyPolicy {},
+    #[route("/cgu")]
+    TermsOfUse {},
     #[route("/login")]
     Login {},
     #[route("/trainings/:id")]

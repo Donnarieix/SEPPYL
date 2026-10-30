@@ -320,7 +320,12 @@
       palette.style.top=Math.max(8,Math.min(event.clientY-rect.top,rect.height-110))+"px";
       palette.classList.add("open");
       const style=root.querySelector("[data-tactic-line-menu]");
-      if(style)style.classList.toggle("open",objects.some(item=>selected.has(item.id)&&isArrow(item)));
+      if(style){
+        const hasArrow=objects.some(item=>selected.has(item.id)&&isArrow(item));
+        style.classList.toggle("open",hasArrow);
+        style.style.left=palette.style.left;
+        style.style.top=Math.max(8,Math.min(rect.height-90,parseFloat(palette.style.top)+126))+"px";
+      }
     });
     root.addEventListener("keydown",event=>{
       if(isEditing() || event.target.matches("input, textarea, select") ||

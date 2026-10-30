@@ -7,6 +7,7 @@ pub fn PublicDirectory()->Element{
     let clubs=use_resource(||async{organization::public_clubs().await});
     rsx!{
         document::Title { "Annuaire public des clubs | SEPPYL" }
+        document::Link { rel:"canonical", href:"https://seppyl.donnarieix.fr/public" }
         document::Meta { name:"description",
             content:"Découvrez les clubs sportifs et les équipes qui partagent leurs informations sur SEPPYL." }
         document::Meta { name:"robots", content:"index,follow" }

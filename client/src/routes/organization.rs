@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::{organization as org,players};
-use super::{Route,layout::Header,membership::MembershipPanel,team_management::{TeamManagerRow,CreateTeamPlayer}};
+use super::{Route,layout::Header,membership::MembershipPanel,team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor};
 
 #[component]
 pub fn Organization()->Element{
@@ -128,7 +128,11 @@ pub fn Organization()->Element{
                                             notice.set(None);
                                         }
                                     },
-                                    span{class:"club-sidebar-avatar","{club.name.chars().next().unwrap_or('C').to_uppercase()}"}
+                                    span{class:"club-sidebar-avatar",
+                                        if let Some(src)=org::club_logo_src(club.logo_url.as_deref()){
+                                            img{src:"{src}",alt:""}
+                                        }else{"{club.name.chars().next().unwrap_or('C').to_uppercase()}"}
+                                    }
                                     span{class:"club-sidebar-name","{club.name}"}
                                 }
                             }
@@ -155,7 +159,7 @@ pub fn Organization()->Element{
                             button{class:if *tab.read()=="access"{"selected"}else{""},
                                 onclick:move |_|tab.set("access".into()),"Accès"}
                             button{class:if *tab.read()=="settings"{"selected"}else{""},
-                                onclick:move |_|tab.set("settings".into()),"Visibilité"}
+                                onclick:move |_|tab.set("settings".into()),"Informations"}
                         }
                     }
                     div{class:"workspace-tab-panel",
@@ -174,7 +178,11 @@ pub fn Organization()->Element{
                                                     tab.set("roster".into());
                                                 }
                                             },
-                                            span{class:"workspace-team-icon","⚽"}
+                                            span{class:"workspace-team-icon",
+                                                if let Some(src)=org::club_logo_src(current_club.as_ref().and_then(|c|c.logo_url.as_deref())){
+                                                    img{src:"{src}",alt:""}
+                                                }else{"⚽"}
+                                            }
                                             strong{"{team.name}"}
                                             span{class:"muted-small","Consulter l'effectif"}
                                         }
@@ -385,35 +393,13 @@ pub fn Organization()->Element{
                                 can_manage:true,default_user:None,
                             }
                         }else if *tab.read()=="settings" && can_manage{
-                            section{class:"panel",
-                                div{class:"panel-head",div{h2{"Visibilité publique"}p{"Le club reste privé tant que vous ne l'activez pas."}}}
-                                div{class:"workspace-visibility",
-                                    div{
-                                        strong{if is_public{"Club visible dans l'annuaire public"}else{"Club privé"}}
-                                        p{"Seuls le nom du club et ses équipes deviennent publics. Les joueuses, séances et notes restent privées."}
-                                    }
-                                    button{class:if is_public{"button outline"}else{"button solid"},
-                                        disabled:*busy.read(),
-                                        onclick:{
-                                            let token=token.clone();
-                                            move |_|{
-                                                let token=token.clone();
-                                                let id=club_id.read().clone();
-                                                busy.set(true);
-                                                spawn(async move{
-                                                    match org::set_public(&token,&id,!is_public).await{
-                                                        Ok(())=>{
-                                                            clubs.restart();
-                                                            notice.set(Some(if is_public{"Club rendu privé.".into()}else{"Annuaire public activé.".into()}));
-                                                        }
-                                                        Err(e)=>notice.set(Some(e)),
-                                                    }
-                                                    busy.set(false);
-                                                });
-                                            }
-                                        },
-                                        if is_public{"Rendre privé"}else{"Publier le club"}
-                                    }
+                            if let Some(selected_club)=current_club.clone(){
+                                ClubInformationEditor{
+                                    key:"{selected_club.id}",
+                                    token:token.clone(),
+                                    club:selected_club,
+                                    on_saved:move |_|{clubs.restart();notice.set(Some("Informations du club enregistrées.".into()));},
+                                    on_error:move |error|notice.set(Some(error)),
                                 }
                             }
                         }

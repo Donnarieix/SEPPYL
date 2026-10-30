@@ -50,6 +50,43 @@ pub fn Tactics() -> Element {
                         h1 { "Tableau tactique" }
                         p { "Construisez vos exercices sur un terrain, organisez les joueurs et tracez leurs déplacements." }
                     }
+                    div { class:"tactics-heading-actions",
+                            button { class:"button solid tactics-save", disabled:*busy.read(),
+                                onclick:move |_|{
+                                    if *busy.read(){return;}
+                                    let parsed: Result<Vec<DrawingObject>, _> =
+                                        serde_json::from_str(&objects_json.read());
+                                    let Ok(objects)=parsed else {
+                                        notice.set(Some("Le schéma contient des données invalides.".into()));
+                                        return;
+                                    };
+                                    let label=name.read().trim().to_string();
+                                    if label.is_empty() {
+                                        notice.set(Some("Donnez un nom au schéma.".into()));
+                                        return;
+                                    }
+                                    let layout_value="football".to_string();
+                                    let id=selected_id.read().clone();
+                                    let token=token_save.clone();
+                                    busy.set(true);
+                                    notice.set(None);
+                                    spawn(async move {
+                                        match tactics::save(&token,id.as_deref(),&label,&layout_value,&objects).await {
+                                            Ok(saved)=>{
+                                                selected_id.set(Some(saved.id));
+                                                notice.set(Some("Schéma enregistré.".into()));
+                                                diagrams.restart();
+                                            }
+                                            Err(message)=>notice.set(Some(message)),
+                                        }
+                                        busy.set(false);
+                                    });
+                                },
+                                if *busy.read() { "Enregistrement…" } else { "Enregistrer" }
+                            }
+                        if let Some(message)=notice.read().as_ref(){
+                            span { class:"tactics-save-notice",role:"status","{message}" }
+                        }
                     button { class: "button outline tactics-fullscreen-toggle",
                         r#type:"button",
                         "data-tactics-fullscreen":"true",
@@ -69,9 +106,7 @@ pub fn Tactics() -> Element {
                         },
                         "+ Nouveau schéma"
                     }
-                }
-                if let Some(message) = notice.read().as_ref() {
-                    div { class: "inline-notice", role:"status", "{message}" }
+                    }
                 }
                 div { class: "tactics-layout",
                     aside { class: "panel tactics-library",
@@ -148,6 +183,14 @@ pub fn Tactics() -> Element {
                                     button { r#type:"button","data-tactic-tool":"arrow","Droite" kbd { "F" } }
                                     button { r#type:"button","data-tactic-tool":"curve","Courbe" kbd { "C" } }
                                 }
+                                div { class:"tactic-toolbar-section tactic-line-style",
+                                    span { class:"tactic-toolbar-label","Ligne" }
+                                    button { r#type:"button","data-tactic-dash":"solid",class:"selected",
+                                        title:"Trait continu","Continu" }
+                                    button { r#type:"button","data-tactic-dash":"dashed",
+                                        title:"Trait discontinu (tirets)","Tirets" }
+
+                                }
                             }
                             div { class:"tactic-colors",
                                 div { class:"tactic-colors-heading",
@@ -206,6 +249,11 @@ pub fn Tactics() -> Element {
                                 span { "Taille" }
                                 strong { "22" }
                             }
+                            div { class:"tactic-context-style","data-tactic-line-menu":"true",
+                                span { class:"tactic-context-palette-head","Type de trait" }
+                                button { r#type:"button","data-tactic-context-dash":"solid","Continu" }
+                                button { r#type:"button","data-tactic-context-dash":"dashed","Tirets" }
+                            }
                             div { class:"tactic-context-palette","data-tactic-menu":"true",
                                 role:"group","aria-label":"Couleur de l'objet",
                                 div { class:"tactic-context-palette-head","Couleur" }
@@ -221,39 +269,7 @@ pub fn Tactics() -> Element {
                         }
                         div { class: "tactics-actions",
                             p { class:"muted-small", "Sélection : cliquez, Shift+clic ou encadrez plusieurs éléments. Glissez pour déplacer le groupe. Les couleurs se modifient sur la sélection." }
-                            button { class:"button solid", disabled:*busy.read(),
-                                onclick:move |_|{
-                                    if *busy.read(){return;}
-                                    let parsed: Result<Vec<DrawingObject>, _> =
-                                        serde_json::from_str(&objects_json.read());
-                                    let Ok(objects)=parsed else {
-                                        notice.set(Some("Le schéma contient des données invalides.".into()));
-                                        return;
-                                    };
-                                    let label=name.read().trim().to_string();
-                                    if label.is_empty() {
-                                        notice.set(Some("Donnez un nom au schéma.".into()));
-                                        return;
-                                    }
-                                    let layout_value="football".to_string();
-                                    let id=selected_id.read().clone();
-                                    let token=token_save.clone();
-                                    busy.set(true);
-                                    notice.set(None);
-                                    spawn(async move {
-                                        match tactics::save(&token,id.as_deref(),&label,&layout_value,&objects).await {
-                                            Ok(saved)=>{
-                                                selected_id.set(Some(saved.id));
-                                                notice.set(Some("Schéma enregistré.".into()));
-                                                diagrams.restart();
-                                            }
-                                            Err(message)=>notice.set(Some(message)),
-                                        }
-                                        busy.set(false);
-                                    });
-                                },
-                                if *busy.read() { "Enregistrement…" } else { "Enregistrer le schéma" }
-                            }
+
                         }
                         if let Some(id) = selected_id.read().clone() {
                             div { class:"tactics-delete",

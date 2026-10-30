@@ -34,6 +34,8 @@ Une CI verte réduit le risque, sans prouver que la base de production, le DNS, 
 
 Les comptes Maintainer ne sont jamais créés par les E2E en production : `fixture-coach` est un compte de test dans une copie SQLite synthétique. Le mécanisme d'amorçage temporaire du Maintainer a été supprimé du code et de la CI.
 
-## Suivi du retrait du marqueur historique
+## Bootstrap retiré définitivement
 
-La première release de nettoyage détruit uniquement `/var/lib/seppyl/data/.maintainer-bootstrapped-v1` au démarrage, sans toucher à la base ou à l'identité du Maintainer. Après vérification que le nouveau binaire est en service, le bloc de nettoyage transitoire est supprimé dans une deuxième release. L'ancien secret GitHub `SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH` doit être supprimé depuis les paramètres du dépôt : il n'est plus lu par le workflow.
+Le compte Maintainer déjà créé est conservé comme un compte normal de la base SQLite. Son identifiant et son mot de passe sont modifiables par son titulaire. Le code ne recrée ni ne promeut aucun compte au démarrage. Le fichier marqueur historique a été traité par la première release de nettoyage ; il n'y a plus ni marqueur ni code d'entretien du marqueur dans le binaire final.
+
+**Action administrative hors du dépôt :** supprimer l'ancien secret GitHub `SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH` depuis Settings → Secrets and variables → Actions. Le pipeline ne le consulte plus.

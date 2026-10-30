@@ -44,11 +44,18 @@ pub fn Tactics() -> Element {
     rsx! {
         div { class: "app",
             Header {}
-            main { class: "page tactics-page",
+            main { class: "page tactics-page",id:"tactics-studio",
                 div { class: "page-heading",
                     div {
                         h1 { "Tableau tactique" }
                         p { "Construisez vos exercices sur un terrain, organisez les joueurs et tracez leurs déplacements." }
+                    }
+                    button { class: "button outline tactics-fullscreen-toggle",
+                        r#type:"button",
+                        "data-tactics-fullscreen":"true",
+                        "aria-pressed":"false",
+                        title:"Afficher le studio sur tout l'écran (Échap pour quitter)",
+                        "Plein écran"
                     }
                     button { class: "button solid",
                         onclick: move |_| {
@@ -193,6 +200,11 @@ pub fn Tactics() -> Element {
                                 view_box:"0 0 800 500",
                                 tabindex:"0",
                                 "aria-label":"Terrain tactique interactif",
+                            }
+                            div { class:"tactic-size-feedback","data-tactic-size-feedback":"true",
+                                "aria-hidden":"true",
+                                span { "Taille" }
+                                strong { "22" }
                             }
                             div { class:"tactic-context-palette","data-tactic-menu":"true",
                                 role:"group","aria-label":"Couleur de l'objet",

@@ -114,3 +114,38 @@ test("short role selector keeps the existing menu without search",()=>{
  assert.equal(panel.children.length,2);
  assert.equal(panel.children.some(child=>child.tag==="input"),false);
 });
+
+test("meaningful empty-value choice remains available in a searchable activity menu",()=>{
+ const f=fixture();
+ f.select.options=[
+   {value:"",textContent:"Note générale",hidden:false,disabled:false},
+   {value:"a1",textContent:"Passes longues",hidden:false,disabled:false},
+   {value:"a2",textContent:"Dribbles",hidden:false,disabled:false}
+ ];
+ f.select.value="a1";
+ f.select.setAttribute("data-seppyl-searchable","true");
+ f.listeners.pointerdown(f.pointerdown);
+ const list=f.host.children[0].children[1];
+ assert.equal(list.children.length,3);
+ assert.equal(list.children[0].textContent,"Note générale");
+ list.children[0].emit("click",{});
+ assert.equal(f.select.value,"");
+});
+test("searchable menu reports no match, Escape restores focus without modifying choice",()=>{
+ const f=fixture();
+ f.select.options=[
+   {value:"",textContent:"Choisir une activité",hidden:false,disabled:false},
+   {value:"x",textContent:"Coup franc",hidden:false,disabled:false}
+ ];
+ f.select.setAttribute("data-seppyl-searchable","true");
+ f.listeners.pointerdown(f.pointerdown);
+ const panel=f.host.children[0],search=panel.children[0],list=panel.children[1];
+ search.value="inexistante";
+ search.emit("input",{});
+ assert.equal(list.children.length,1);
+ assert.equal(list.children[0].textContent,"Aucun résultat");
+ f.listeners.keydown({key:"Escape",preventDefault(){}});
+ assert.equal(f.host.children.length,0);
+ assert.equal(f.select.value,"a");
+ assert.equal(f.document.activeElement,f.select);
+});

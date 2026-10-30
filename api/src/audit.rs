@@ -438,4 +438,50 @@ mod tests{
         assert_eq!(operation(&Method::DELETE),"Suppression");
         assert_eq!(payload_team(Some(&serde_json::json!({"team_id":"invalid"}))),None);
     }
+    #[tokio::test]
+    async fn player_rename_is_described_for_a_nontechnical_reader(){
+        use sea_orm::Database;
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let pid=Uuid::new_v4();
+        player::ActiveModel{id:Set(pid),firstname:Set("Alice".into()),
+            lastname:Set("Durand".into()),number:Set(8),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let body=serde_json::json!({
+            "id":pid.to_string(),"firstname":"Alice",
+            "lastname":"Martin","number":9
+        });
+        let result=capture(&state,Uuid::new_v4(),&Method::PUT,
+            "/player/update",Some(&body)).await;
+        assert_eq!(result.scope,"personal");
+        assert!(result.description.contains("Alice Durand"));
+        assert!(result.description.contains("Martin"));
+        assert!(result.description.contains("8 → 9"));
+        assert!(!result.description.contains(&pid.to_string()));
+    }
+    #[tokio::test]
+    async fn named_session_activity_log_has_training_context(){
+        use sea_orm::Database;
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        let state=AppState{db};
+        let tid=Uuid::new_v4();let aid=Uuid::new_v4();let uid=Uuid::new_v4();
+        training::ActiveModel{id:Set(tid),user_id:Set(uid),team_id:Set(None),
+            name:Set("Séance du lundi".into()),
+            date:Set(chrono::NaiveDate::from_ymd_opt(2026,10,30).unwrap().and_hms_opt(9,0,0).unwrap()),
+            notes:Set(String::new()),..Default::default()
+        }.insert(&state.db).await.unwrap();
+        training_activity::ActiveModel{id:Set(aid),training_id:Set(tid),catalog_id:Set(None),
+            name:Set("Passes".into()),description:Set(String::new()),
+            description_html:Set(None),image_url:Set(None),sort_order:Set(0),
+            ..Default::default()
+        }.insert(&state.db).await.unwrap();
+        let body=serde_json::json!({"name":"Passes longues","description":"Exercice corrigé"});
+        let path=format!("/trainings/{tid}/activities/{aid}");
+        let captured=capture(&state,uid,&Method::PUT,&path,Some(&body)).await;
+        assert!(captured.description.contains("Passes"));
+        assert!(captured.description.contains("Passes longues"));
+        assert!(captured.description.contains("Séance du lundi"));
+    }
 }

@@ -114,7 +114,10 @@ pub fn Tactics() -> Element {
                                 r#type:"button",
                                 disabled:*busy.read(),
                                 "aria-expanded":if *deletion_confirm.read(){"true"}else{"false"},
-                                onclick:move |_|deletion_confirm.set(!*deletion_confirm.read()),
+                                onclick:move |_|{
+                                    let is_open=*deletion_confirm.read();
+                                    deletion_confirm.set(!is_open);
+                                },
                                 "Supprimer"
                             }
                             if *deletion_confirm.read() {

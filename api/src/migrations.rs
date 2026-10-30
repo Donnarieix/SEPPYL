@@ -142,6 +142,26 @@ pub async fn migrate_legacy_player_firstname(
     Ok(true)
 }
 
+
+pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
+    // A migration must never arbitrarily merge existing player IDs.
+    let duplicates=query_rows(db,
+        "SELECT firstname,lastname,number,COUNT(*) AS total FROM players GROUP BY firstname,lastname,number HAVING COUNT(*) > 1 LIMIT 1"
+    ).await?;
+    if let Some(row)=duplicates.first(){
+        let firstname:String=row.try_get("","firstname")?;
+        let lastname:String=row.try_get("","lastname")?;
+        let number:i64=row.try_get("","number")?;
+        tracing::error!(%firstname,%lastname,number,
+            "Duplicate complete player identity blocks unique-index migration");
+        return Err(missing("Identité de joueuse déjà présente plusieurs fois ; aucune fiche n'a été fusionnée"));
+    }
+    db.execute_unprepared(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_players_complete_identity ON players (firstname, lastname, number)"
+    ).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;

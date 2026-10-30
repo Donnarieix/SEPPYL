@@ -1,11 +1,16 @@
 name: Verify SEPPYL
 
 on:
+  workflow_call:
   push:
     branches:
       - ui-tableur
       - 'feat/**'
   workflow_dispatch:
+
+concurrency:
+  group: seppyl-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:

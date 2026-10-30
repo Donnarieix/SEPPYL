@@ -1,0 +1,39 @@
+# Tests E2E et protection de la production SEPPYL
+
+## Contrat de déploiement
+
+`.github/workflows/deploy.yml` déploie **uniquement sur un push ou lancement manuel de `main`**, et seulement si les jobs suivants réussissent :
+
+1. `verify` (Rust API, Rust WASM, tests Rust, tests JS, migrations SQLite et préservation des données synthétiques);
+2. `build-api` et `build-web` (artefacts de release);
+3. `e2e` (vrai navigateur Chromium, client Dioxus release et API Rust release reliés par un proxy local).
+
+Une PR vers `main` exécute ces vérifications sans livrer. Les suites utilisent une base **jetable et exclusivement synthétique** : aucune connexion à la production n'est effectuée pendant les E2E.
+
+## Pourquoi les E2E sont nécessaires
+
+Un `cargo check` et un `dx build` peuvent réussir alors que le WebAssembly plante à l'exécution (ex. : `Link` Dioxus dans le footer hors du `Router`). Les E2E capturent `pageerror`, `console.error` et les échecs de requêtes locales, et échouent si l'interface ne se charge pas ou si la connexion ne fonctionne pas.
+
+Les parcours actuels couvrent :
+- page de connexion, annuaire public et navigation entre les pages légales par le footer ;
+- connexion réelle du compte synthétique, rechargement de session, accès aux pages protégées et Administration ;
+- affichage mobile des pages publiques ;
+- API authentifiée inaccessible sans jeton ; inscription bloquée dans le proxy comme dans le Nginx de production ; santé API.
+
+Les traces, captures, vidéos et rapport HTML Playwright sont téléchargables dans les **Artifacts** de l'exécution GitHub Actions (14 jours).
+
+## Exécution sur GitHub et localement
+
+La CI installe la version fixée de `@playwright/test` et Chromium. Elle construit une version Web spéciale E2E avec `SEPPYL_API_URL=http://127.0.0.1:4173/api`, sans jamais toucher au `main` de production. Le serveur Python de test reproduit le SPA fallback et la règle de proxy Nginx ; le serveur API écoute seulement en boucle locale.
+
+En local, avec les toolchains Rust/Dioxus et Chromium installés : préparer uniquement une base CI jetable avec `CI=true python3 scripts/create-legacy-fixture.py data/sappyl.db` puis `CI=true python3 scripts/prepare-e2e-fixture.py data/sappyl.db`. **Ces scripts refusent toute exécution hors CI et ne doivent jamais être lancés depuis le serveur de production.** Construire `api` en release et `client` en release avec la variable `SEPPYL_API_URL` locale, exporter `SEPPYL_E2E_API_BINARY` et `SEPPYL_E2E_WEB_ROOT`, puis exécuter `bash scripts/run-e2e.sh`.
+
+## Gestion d'incidents et limites
+
+Une CI verte réduit le risque, sans prouver que la base de production, le DNS, Nginx, TLS ou les périphériques des utilisateurs n'ont pas de problème. Les sauvegardes de SQLite et les procédures de retour arrière restent nécessaires. Le retour arrière automatique de l'API ne restaure **pas** le schéma SQLite.
+
+Les comptes Maintainer ne sont jamais créés par les E2E en production : `fixture-coach` est un compte de test dans une copie SQLite synthétique. Le mécanisme d'amorçage temporaire du Maintainer a été supprimé du code et de la CI.
+
+## Suivi du retrait du marqueur historique
+
+La première release de nettoyage détruit uniquement `/var/lib/seppyl/data/.maintainer-bootstrapped-v1` au démarrage, sans toucher à la base ou à l'identité du Maintainer. Après vérification que le nouveau binaire est en service, le bloc de nettoyage transitoire est supprimé dans une deuxième release. L'ancien secret GitHub `SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH` doit être supprimé depuis les paramètres du dépôt : il n'est plus lu par le workflow.

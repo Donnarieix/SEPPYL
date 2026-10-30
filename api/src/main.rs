@@ -32,7 +32,6 @@ use crate::{
 };
 
 mod audit;
-mod bootstrap;
 mod entities;
 mod middleware;
 mod migrations;

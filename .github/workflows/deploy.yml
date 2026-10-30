@@ -9,8 +9,10 @@ permissions:
   contents: read
 concurrency:
   group: seppyl-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
   build-api:
     runs-on: ubuntu-latest
     steps:
@@ -18,15 +20,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build API
-        shell: bash
-        env:
-          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -n "$BOOTSTRAP_HASH" ]; then
-            export SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH="$BOOTSTRAP_HASH"
-          fi
-          cargo build -p api --release --locked
+        run: cargo build -p api --release --locked
       - run: tar czf "$RUNNER_TEMP/seppyl-api.tar.gz" -C target/release api
       - uses: actions/upload-artifact@v4
         with:
@@ -78,25 +72,88 @@ jobs:
         with:
           name: seppyl-web
           path: ${{ runner.temp }}/seppyl-web.tar.gz
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: [build-api, build-web]
+  e2e:
+    name: Browser E2E (Chromium + real API)
     runs-on: ubuntu-latest
+    needs: [build-api, build-web]
+    timeout-minutes: 40
     steps:
-      - name: Verify production bootstrap has been configured
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache Dioxus CLI 0.7.10
+        id: cache-dx
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/dx
+          key: ${{ runner.os }}-${{ runner.arch }}-dioxus-cli-0.7.10-v1
+      - name: Install Dioxus CLI from verified official release
+        if: steps.cache-dx.outputs.cache-hit != 'true'
         shell: bash
-        env:
-          BOOTSTRAP_HASH: ${{ secrets.SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH }}
         run: |
           set -euo pipefail
-          if [ -z "$BOOTSTRAP_HASH" ]; then
-            echo "::error::Configure the SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH Actions secret before the initial release."
-            exit 1
-          fi
-          if [[ "$BOOTSTRAP_HASH" != '$argon2id$'* ]]; then
-            echo "::error::Bootstrap secret must contain an Argon2id password hash."
-            exit 1
-          fi
+          base="https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10"
+          curl -fsSL --retry 3 "$base/dx-x86_64-unknown-linux-gnu.tar.gz" -o "$RUNNER_TEMP/dx.tar.gz"
+          curl -fsSL --retry 3 "$base/dx-x86_64-unknown-linux-gnu.sha256" -o "$RUNNER_TEMP/dx.sha256"
+          checksum="$(grep -Eo '[0-9a-fA-F]{64}' "$RUNNER_TEMP/dx.sha256" | head -n 1)"
+          test -n "$checksum"
+          printf '%s  %s\n' "$checksum" "$RUNNER_TEMP/dx.tar.gz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/dx-unpacked" "$HOME/.cargo/bin"
+          tar -xzf "$RUNNER_TEMP/dx.tar.gz" -C "$RUNNER_TEMP/dx-unpacked"
+          executable="$(find "$RUNNER_TEMP/dx-unpacked" -type f -name dx -print -quit)"
+          test -n "$executable"
+          install -m 0755 "$executable" "$HOME/.cargo/bin/dx"
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-api
+          path: ${{ runner.temp }}/e2e-api
+      - name: Extract release API
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/e2e-api-bin"
+          tar -xzf "$RUNNER_TEMP/e2e-api/seppyl-api.tar.gz" -C "$RUNNER_TEMP/e2e-api-bin"
+          test -x "$RUNNER_TEMP/e2e-api-bin/api"
+      - name: Build Dioxus browser app for loopback API
+        working-directory: client
+        env:
+          SEPPYL_API_URL: http://127.0.0.1:4173/api
+        run: dx build --platform web --release
+      - name: Install pinned Playwright test runner and Chromium
+        working-directory: tests/e2e
+        run: |
+          npm install --no-audit --no-fund --no-package-lock
+          npx playwright install --with-deps chromium
+      - name: Seed isolated SQLite fixture and run browser tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true python3 scripts/create-legacy-fixture.py data/sappyl.db
+          CI=true python3 scripts/prepare-e2e-fixture.py data/sappyl.db
+          index="$(find . -path '*/release/web/public/index.html' -print -quit)"
+          test -n "$index"
+          export SEPPYL_E2E_API_BINARY="$RUNNER_TEMP/e2e-api-bin/api"
+          export SEPPYL_E2E_WEB_ROOT="$PWD/$(dirname "$index")"
+          bash scripts/run-e2e.sh
+      - name: Upload browser traces and screenshots on failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seppyl-browser-e2e-report
+          path: |
+            tests/e2e/playwright-report/
+            tests/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [verify, build-api, build-web, e2e]
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/download-artifact@v4
         with:
           name: seppyl-api
@@ -129,3 +186,12 @@ jobs:
           PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           cat "$RUNNER_TEMP/web/seppyl-web.tar.gz" | ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/web_key -p "$PORT" "lud@$HOST"
+      - name: Verify public API and SPA after deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 2 --connect-timeout 5 --max-time 15             https://seppyl.donnarieix.fr/api/health | python3 -c 'import json,sys; assert json.load(sys.stdin).get("status") == "ok"'
+          for route in / /login /public /mentions-legales; do
+            curl -fsS --retry 3 --retry-delay 2 --connect-timeout 5 --max-time 15               "https://seppyl.donnarieix.fr$route" -o "$RUNNER_TEMP/seppyl-smoke.html"
+            test -s "$RUNNER_TEMP/seppyl-smoke.html"
+          done

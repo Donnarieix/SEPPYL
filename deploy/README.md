@@ -1,4 +1,4 @@
-# SEPPYL production bootstrap (Debian 13)
+# SEPPYL — installation initiale du serveur (Debian 13)
 
 This must be performed **once** by the server administrator. The CI cannot provision SSH credentials, DNS, or root services.
 

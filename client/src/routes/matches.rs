@@ -42,7 +42,7 @@ pub fn Matches()->Element{
                             div{class:"catalog-grid",
                                 for game in items{
                                     button{class:"catalog-card match-card",key:"{game.id}",
-                                        onclick:{let id=game.id.clone();move |_|navigator.push(Route::MatchDetail{id:id.clone()})},
+                                        onclick:{let id=game.id.clone();move |_|{navigator.push(Route::MatchDetail{id:id.clone()});}},
                                         strong{"{game.opponent}"}
                                         span{"{game.date.get(..10).unwrap_or(&game.date)}"}
                                         span{class:"muted-small","{game.half_minutes} min / mi-temps"}
@@ -71,7 +71,7 @@ pub fn Matches()->Element{
                                     let minutes=half.read().parse::<i32>().unwrap_or(0);
                                     spawn(async move{
                                         match matches::create(&t,&team,&other,&day,minutes).await{
-                                            Ok(game)=>{adding.set(false);list.restart();navigator.push(Route::MatchDetail{id:game.id})},
+                                            Ok(game)=>{adding.set(false);list.restart();navigator.push(Route::MatchDetail{id:game.id});},
                                             Err(e)=>error.set(Some(e)),
                                         }
                                         busy.set(false);

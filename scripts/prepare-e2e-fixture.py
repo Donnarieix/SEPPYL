@@ -39,5 +39,7 @@ with sqlite3.connect(db_path) as db:
                            (uuid.UUID(value).bytes, rowid))
     db.execute("ALTER TABLE users ADD COLUMN role TEXT")
     db.execute("UPDATE users SET password=?, role='maintainer' WHERE username='fixture-coach'", (PHC,))
+    db.execute("INSERT INTO users(id,username,password,role) VALUES (?,?,?,?)",
+               (uuid.uuid4().bytes, "fixture-user", PHC, "user"))
     assert db.execute("SELECT COUNT(*) FROM users WHERE role='maintainer'").fetchone()[0] == 1
 print("Synthetic E2E account prepared")

@@ -4,6 +4,8 @@ fn base()->&'static str{ super::base_url() }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct Club{
     pub id:String,pub name:String,pub is_public:Option<bool>,
+    #[serde(default)]pub show_public_teams:Option<bool>,
+    #[serde(default)]pub show_public_roster:Option<bool>,
     #[serde(default)]pub description:Option<String>,
     #[serde(default)]pub logo_url:Option<String>,
     #[serde(default)]pub logo_x:Option<i32>,
@@ -60,15 +62,17 @@ pub async fn admin_clubs(token:&str)->Result<Vec<Club>,String>{
 #[derive(Serialize)]
 struct ClubInformation<'a>{
     name:&'a str,description:&'a str,logo_url:Option<&'a str>,is_public:bool,
+    show_public_teams:bool,show_public_roster:bool,
     logo_x:i32,logo_y:i32,logo_zoom:i32,
 }
 pub async fn update_club_information(
     token:&str,id:&str,name:&str,description:&str,logo_url:Option<&str>,is_public:bool,
     logo_x:i32,logo_y:i32,logo_zoom:i32,
+    show_public_teams:bool,show_public_roster:bool,
 )->Result<(),String>{
     let response=Client::new().put(format!("{}/clubs/{id}/information",base()))
         .bearer_auth(token)
-        .json(&ClubInformation{name,description,logo_url,is_public,logo_x,logo_y,logo_zoom})
+        .json(&ClubInformation{name,description,logo_url,is_public,show_public_teams,show_public_roster,logo_x,logo_y,logo_zoom})
         .send().await.map_err(|e|e.to_string())?;
     check(response.status())
 }
@@ -231,4 +235,11 @@ pub async fn club_players(token:&str,club_id:&str)->Result<Vec<crate::api::playe
     let r=Client::new().get(format!("{}/clubs/{club_id}/players",base()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}
+
+pub async fn public_roster(team_id:&str)->Result<Vec<crate::api::players::Player>,String>{
+    let response=Client::new().get(format!("{}/public/teams/{team_id}/players",base()))
+        .send().await.map_err(|e|e.to_string())?;
+    check(response.status())?;
+    response.json().await.map_err(|e|e.to_string())
 }

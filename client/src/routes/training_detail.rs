@@ -70,12 +70,15 @@ pub fn TrainingDetail(id: String) -> Element {
                             div {
                                 h1 { "{detail.training.name}" }
                                 p { "{detail.training.date.get(..10).unwrap_or(&detail.training.date)}" }
+                                p{"Durée prévue : {detail.training.duration_minutes.unwrap_or(0)} min"}
                             }
                             Link { to: Route::TrainingPrint { id: id.clone() }, class: "button outline print-link",
                                 "Fiche imprimable ↗"
                             }
                         }
 
+                        TrainingDuration{token:token.clone(),training_id:id.clone(),training:detail.training.clone(),
+                            on_saved:move |_|data.restart(),on_error:move |e|notice.set(Some(e))}
                         div { class: "tabs", role: "tablist", "aria-label": "Étapes de l'entraînement",
                             button { class: if *tab.read() == "presence" { "tab active" } else { "tab" },
                                 onclick: move |_| tab.set("presence".into()), "1. Présences" }
@@ -337,6 +340,13 @@ fn Notes(
                             } else {
                                 detail.scores.iter().find(|s| s.player_id == player_id && s.activity_id == activity).map(|s| s.score)
                             };
+                            let current_comment=if activity.is_empty(){
+                                detail.attendance.iter().find(|a|a.player_id==player_id)
+                                    .and_then(|a|a.score_comment.clone()).unwrap_or_default()
+                            }else{
+                                detail.scores.iter().find(|s|s.player_id==player_id&&s.activity_id==activity)
+                                    .and_then(|s|s.comment.clone()).unwrap_or_default()
+                            };
                             let token = token.clone();
                             let training_id = training_id.clone();
                             let activity_id = if activity.is_empty() { None } else { Some(activity.clone()) };
@@ -377,12 +387,79 @@ fn Notes(
                                             }
                                         }
                                     }
+                                    ScoreComment{
+                                        key:"{key}",token:token.clone(),training_id:training_id.clone(),
+                                        player_id:player_id.clone(),activity_id:activity_id.clone(),
+                                        initial:current_comment,score,on_saved,on_error
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+
+#[component]
+fn ScoreComment(
+    token:String,training_id:String,player_id:String,activity_id:Option<String>,
+    initial:String,score:Option<i32>,on_saved:EventHandler<()>,
+    on_error:EventHandler<String>,
+)->Element{
+    let mut comment=use_signal(||initial);
+    let mut busy=use_signal(||false);
+    rsx!{
+        div{class:"score-comment-field",
+            input{value:"{comment}",maxlength:"4000",
+                placeholder:"Informations complémentaires",
+                "aria-label":"Informations complémentaires",
+                oninput:move |e|comment.set(e.value())}
+            button{class:"button quiet small",r#type:"button",
+                disabled:*busy.read()||score.is_none(),
+                onclick:move |_|{
+                    let t=token.clone();let id=training_id.clone();let p=player_id.clone();
+                    let activity=activity_id.clone();let text=comment.read().clone();
+                    busy.set(true);
+                    spawn(async move{
+                        match trainings::save_score_comment(&t,&id,&p,activity.as_deref(),score,Some(&text)).await{
+                            Ok(())=>on_saved.call(()),Err(e)=>on_error.call(e)
+                        }
+                        busy.set(false);
+                    });
+                },"Enregistrer"}
+        }
+    }
+}
+
+#[component]
+fn TrainingDuration(
+    token:String,training_id:String,training:trainings::Training,
+    on_saved:EventHandler<()>,on_error:EventHandler<String>,
+)->Element{
+    let mut duration=use_signal(||training.duration_minutes.map(|n|n.to_string()).unwrap_or_default());
+    let mut busy=use_signal(||false);
+    rsx!{
+        div{class:"training-duration-editor",
+            label{"Durée (minutes)"}
+            input{r#type:"number",min:"1",max:"1440",value:"{duration}",
+                oninput:move |e|duration.set(e.value())}
+            button{class:"button outline small",disabled:*busy.read(),
+                onclick:move |_|{
+                    let t=token.clone();let id=training_id.clone();
+                    let name=training.name.clone();let date=training.date.get(..10).unwrap_or("").to_string();
+                    let notes=training.notes.clone();
+                    let minutes=duration.read().parse::<i32>().ok().filter(|m|(1..=1440).contains(m));
+                    busy.set(true);
+                    spawn(async move{
+                        match trainings::update(&t,&id,&name,&date,&notes,minutes).await{
+                            Ok(())=>on_saved.call(()),Err(e)=>on_error.call(e)
+                        }
+                        busy.set(false);
+                    });
+                },"Enregistrer"}
         }
     }
 }
@@ -720,7 +797,7 @@ fn ActivityCard(
                         disabled:*busy.read(),onclick:move |_|editing.set(true),
                         "Modifier"
                     }
-                button { class: "remove-link", title: "Supprimer cet exercice", disabled: *busy.read(),
+                button { class: "remove-link", title: "Retirer cette activité de l’entraînement", disabled: *busy.read(),
                     onclick: {
                         let token = token.clone();
                         let training_id = training_id.clone();
@@ -740,7 +817,7 @@ fn ActivityCard(
                             });
                         }
                     },
-                    "Supprimer"
+                    "Retirer de l’entraînement"
                 }
                 }
             }

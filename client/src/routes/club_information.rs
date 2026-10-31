@@ -15,6 +15,8 @@ pub fn ClubInformationEditor(
     let mut logo_y=use_signal(||club.logo_y.unwrap_or(0));
     let mut logo_zoom=use_signal(||club.logo_zoom.unwrap_or(100));
     let mut public=use_signal(||club.is_public==Some(true));
+    let mut public_teams=use_signal(||club.show_public_teams==Some(true));
+    let mut public_roster=use_signal(||club.show_public_roster==Some(true));
     let mut saving=use_signal(||false);
 
     let preview=org::club_logo_src(Some(logo.read().as_str()));
@@ -42,7 +44,8 @@ pub fn ClubInformationEditor(
                             let result=org::update_club_information(
                                 &token,&id,&label,&text,
                                 if image.is_empty(){None}else{Some(&image)},visible,
-                                *logo_x.read(),*logo_y.read(),*logo_zoom.read()
+                                *logo_x.read(),*logo_y.read(),*logo_zoom.read(),
+                                *public_teams.read(),*public_roster.read()
                             ).await;
                             match result{
                                 Ok(())=>on_saved.call(()),
@@ -81,11 +84,28 @@ pub fn ClubInformationEditor(
                 label{class:"club-public-setting",
                     span{class:"club-public-setting-copy",
                         strong{"Visible dans l'annuaire"}
-                        span{"Seuls le nom, le logo, la description et les équipes seront publics. Les joueuses et données sportives restent privées."}
+                        span{"La publication du club ne rend pas ses équipes ou ses effectifs publics automatiquement."}
                     }
                     input{r#type:"checkbox",checked:*public.read(),
                         "aria-label":"Rendre ce club public",
                         onchange:move |e|public.set(e.checked())}
+                }
+                label{class:"club-public-setting",
+                    span{class:"club-public-setting-copy",
+                        strong{"Afficher publiquement les équipes"}
+                        span{"Noms, logos et descriptions des équipes."}
+                    }
+                    input{r#type:"checkbox",checked:*public_teams.read(),disabled:!*public.read(),
+                        onchange:move |e|public_teams.set(e.checked())}
+                }
+                label{class:"club-public-setting",
+                    span{class:"club-public-setting-copy",
+                        strong{"Publier les effectifs"}
+                        span{"Les noms et numéros des joueuses seront publics. Désactivé par défaut."}
+                    }
+                    input{r#type:"checkbox",checked:*public_roster.read(),
+                        disabled:!*public.read()||!*public_teams.read(),
+                        onchange:move |e|public_roster.set(e.checked())}
                 }
                 div{class:"club-information-actions",
                     button{class:"button solid",r#type:"submit",

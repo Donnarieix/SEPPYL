@@ -85,6 +85,7 @@ pub fn Players() -> Element {
 fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:EventHandler<String>)->Element{
     let mut editing=use_signal(||false);
     let mut confirming=use_signal(||false);
+    let mut showing_times=use_signal(||false);
     let mut busy=use_signal(||false);
     rsx!{
         tr{
@@ -93,6 +94,12 @@ fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:Event
             td{"{player.number}"}
             td{class:"roster-actions",
                 button{class:"button outline small",onclick:move |_|editing.set(true),"Modifier"}
+                button{class:"button quiet small",r#type:"button",
+                    onclick:move |_|{let visible=*showing_times.read();showing_times.set(!visible);},
+                    "Temps de jeu"}
+                if *showing_times.read(){
+                    PlayerTimes{token:token.clone(),player_id:player.id.clone()}
+                }
                 if *confirming.read(){
                     button{class:"button danger small",disabled:*busy.read(),
                         onclick:{
@@ -122,6 +129,27 @@ fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:Event
                 on_cancel:move |_|editing.set(false),
                 on_saved:move |_|{editing.set(false);on_saved.call(());},
                 on_error}
+        }
+    }
+}
+
+#[component]
+fn PlayerTimes(token:String,player_id:String)->Element{
+    let summary=use_resource(move ||{let t=token.clone();let id=player_id.clone();
+        async move{players::time_totals(&t,&id).await}});
+    rsx!{
+        div{class:"player-time-totals",
+            match summary.read().clone(){
+                Some(Ok(t))=>rsx!{
+                    p{"Entraînements : {t.training_minutes} min ({t.training_attended} présences)"}
+                    p{"Matchs : {t.match_minutes} min ({t.matches_played} joués)"}
+                    if t.trainings_without_duration>0{
+                        small{"{t.trainings_without_duration} entraînement(s) sans durée renseignée"}
+                    }
+                },
+                Some(Err(e))=>rsx!{small{"{e}"}},
+                None=>rsx!{small{"Calcul…"}}
+            }
         }
     }
 }

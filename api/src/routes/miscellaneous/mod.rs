@@ -5,3 +5,5 @@ pub mod account;
 pub mod audit;
 
 pub mod changelog;
+pub mod tickets;
+pub mod announcements;

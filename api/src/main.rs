@@ -23,10 +23,12 @@ use crate::{
             catalog,
             training,
             organization,
+            matches,
+            player_stats,
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog},
+        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog, tickets, announcements},
     },
     state::AppState,
 };
@@ -59,7 +61,19 @@ async fn main() {
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
-.route("/changelog",get(changelog::list))
+        .route("/tickets",get(tickets::list).post(tickets::create))
+        .route("/tickets/{id}",get(tickets::get))
+        .route("/tickets/{id}/messages",post(tickets::message))
+        .route("/tickets/{id}/status",put(tickets::status))
+        .route("/admin/announcements",get(announcements::all).post(announcements::create))
+        .route("/admin/announcements/{id}",put(announcements::update).delete(announcements::remove))
+        .route("/matches",get(matches::list).post(matches::create))
+        .route("/matches/{id}",get(matches::get).put(matches::update))
+        .route("/matches/{id}/lineup",put(matches::set_lineup))
+        .route("/matches/{id}/event-types",post(matches::create_type))
+        .route("/matches/{id}/events",post(matches::add_event))
+        .route("/matches/{id}/events/{event_id}",delete(matches::remove_event))
+        .route("/changelog",get(changelog::list))
         .route("/changelog/status",get(changelog::status))
         .route("/changelog/{version}/read",post(changelog::acknowledge))
         .route("/changelog/{version}",put(changelog::save))
@@ -88,6 +102,7 @@ async fn main() {
         .route("/account", get(account::get))
         .route("/account/profile", put(account::update_profile))
         .route("/account/password", put(account::change_password))
+        .route("/players/{id}/time-totals",get(player_stats::get))
         .route("/player/list", get(get_players))
         .route("/player/get/{id}", get(get_player))
         .route("/player/create", post(create_player))
@@ -124,8 +139,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/announcements",get(announcements::public))
         .route("/public/clubs", get(organization::public_clubs))
         .route("/public/clubs/{id}/teams", get(organization::public_teams))
+        .route("/public/teams/{id}/players",get(organization::public_team_roster))
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))

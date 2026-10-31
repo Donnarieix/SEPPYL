@@ -280,7 +280,7 @@ mod shared_catalog_tests {
         let date = DateTime::parse_from_str("2026-10-28 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let (_, tid) = training::create(
             Extension(claims.clone()), State(state.clone()),
-            Json(training::CreateTraining { name: "Séance".into(), date, team_id: None })
+            Json(training::CreateTraining { name: "Séance".into(), date, team_id: None, duration_minutes:None })
         ).await.unwrap();
         let tid = Uuid::parse_str(&tid).unwrap();
 

@@ -40,7 +40,11 @@ pub fn PublicDirectory()->Element{
                                             }
                                         }
                                     }
-                                    PublicTeams{club_id:club.id.clone()}
+                                    if club.show_public_teams==Some(true){
+                                        PublicTeams{club_id:club.id.clone(),show_roster:club.show_public_roster==Some(true)}
+                                    }else{
+                                        p{class:"muted-small","Les équipes de ce club ne sont pas publiées."}
+                                    }
                                 }
                             }
                         }
@@ -53,7 +57,7 @@ pub fn PublicDirectory()->Element{
     }
 }
 #[component]
-fn PublicTeams(club_id:String)->Element{
+fn PublicTeams(club_id:String,show_roster:bool)->Element{
     let choices=use_resource(move ||{let id=club_id.clone();async move{organization::public_teams(&id).await}});
     rsx!{
         match choices.read().clone(){
@@ -71,12 +75,28 @@ fn PublicTeams(club_id:String)->Element{
                             if let Some(description)=team.description.as_deref(){
                                 p{class:"muted-small","{description}"}
                             }
+                            if show_roster{PublicRoster{team_id:team.id.clone()}}
                         }
                     }
                 }
             },
             Some(Err(_))=>rsx!{p{"Équipes indisponibles."}},
             None=>rsx!{p{"Chargement…"}},
+        }
+    }
+}
+
+#[component]
+fn PublicRoster(team_id:String)->Element{
+    let people=use_resource(move ||{let id=team_id.clone();async move{organization::public_roster(&id).await}});
+    rsx!{
+        if let Some(Ok(players))=people.read().clone(){
+            div{class:"public-roster",
+                strong{"Effectif publié"}
+                for player in players{
+                    p{key:"{player.id}","{player.firstname} {player.lastname} · n°{player.number}"}
+                }
+            }
         }
     }
 }

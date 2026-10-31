@@ -64,6 +64,8 @@ impl AppState {
             .expect("Unable to migrate team information columns");
         crate::migrations::add_changelog_fields(&migration_db).await
             .expect("Unable to migrate changelog information columns");
+        crate::migrations::add_sixth_pass_fields(&migration_db).await
+            .expect("Unable to add sixth-pass optional fields");
         migration_db.close().await
             .expect("Unable to close migration connection");
 

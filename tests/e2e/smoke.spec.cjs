@@ -70,13 +70,54 @@ test('mobile-sized public pages render without uncaught errors', async ({ page }
   await expect(page.locator('.site-footer')).toBeVisible();
 });
 
-test('unauthenticated API is rejected, registration proxy stays closed', async ({ request }) => {
+test('public registration succeeds via signup, remains least-privileged, and legacy URL stays closed', async ({ request }) => {
   const privateResponse = await request.get('/api/account');
   expect(privateResponse.status()).toBe(401);
-  const register = await request.post('/api/register', {
+  // The installed Nginx location = /api/register is intentionally not
+  // rewritten by app deployments: reproduce its behavior in this test proxy.
+  const blockedLegacy = await request.post('/api/register', {
     data: { username: 'never-created-e2e', password: 'never-created-e2e' },
   });
-  expect(register.status()).toBe(403);
+  expect(blockedLegacy.status()).toBe(403);
+
+  const username = 'hotfix-signup-e2e';
+  const password = 'test-signup-e2e-very-strong';
+  const malformed = await request.post('/api/signup', {
+    data: { username: 'xx', password: 'short' },
+  });
+  expect(malformed.status()).toBe(400);
+  const created = await request.post('/api/signup', {
+    data: { username, password },
+  });
+  expect(created.status()).toBe(200);
+  const duplicate = await request.post('/api/signup', {
+    data: { username, password },
+  });
+  expect(duplicate.status()).toBe(409);
+
+  const login = await request.post('/api/login', { data: { username, password } });
+  expect(login.status()).toBe(200);
+  const { token } = await login.json();
+  expect(token).toBeTruthy();
+  const self = await request.get('/api/account', { headers: { Authorization: 'Bearer ' + token } });
+  expect(self.status()).toBe(200);
+  expect((await self.json()).role).toBe('user');
+  const deniedWrite = await request.post('/api/player/create', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { firstname: 'Denied', lastname: 'Signup', number: 77 },
+  });
+  expect(deniedWrite.status()).toBe(403);
   const health = await request.get('/api/health');
   expect(health.ok()).toBeTruthy();
+});
+
+test('registration form signs up and logs in through production-style proxy', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Créer un nouveau compte' }).click();
+  await expect(page.getByRole('heading', { name: 'Créer un compte' })).toBeVisible();
+  await page.locator('input[autocomplete="username"]').fill('e2e-new-account-form');
+  await page.locator('input[type="password"]').fill('e2e-signup-form-password!');
+  await page.getByRole('button', { name: 'Créer le compte' }).click();
+  await expect(page).toHaveURL(/\\/trainings$/);
+  await expect(page.getByRole('heading', { name: 'Entraînements' })).toBeVisible();
 });

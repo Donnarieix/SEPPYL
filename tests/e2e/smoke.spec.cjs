@@ -80,3 +80,38 @@ test('unauthenticated API is rejected, registration proxy stays closed', async (
   const health = await request.get('/api/health');
   expect(health.ok()).toBeTruthy();
 });
+
+
+test('tickets and announcement pages render in Chromium without browser errors',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  await expect(page.getByRole('heading',{name:'Mes tickets'})).toBeVisible();
+  await page.getByRole('button',{name:/Nouveau ticket/}).click();
+  await page.getByRole('dialog').getByRole('textbox',{name:'Objet'}).fill('Incident de test E2E');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Description du problème'}).fill('Rapport synthétique E2E');
+  await page.getByRole('dialog').getByRole('button',{name:'Envoyer'}).click();
+  await expect(page).toHaveURL(/\/tickets\/[\w-]+$/);
+  await expect(page.getByText('Rapport synthétique E2E')).toBeVisible();
+  await page.goto('/matches');
+  await expect(page.getByRole('heading',{name:'Matchs'})).toBeVisible();
+  await page.goto('/announcements/manage');
+  await expect(page.getByRole('heading',{name:'Annonces'})).toBeVisible();
+  await page.goto('/news');
+  await expect(page.getByRole('heading',{name:'Nouveautés'})).toBeVisible();
+});
+
+test('ticket permission checks and non-public roster are enforced server-side',async ({request})=>{
+  const privateTickets=await request.get('/api/tickets');
+  expect(privateTickets.status()).toBe(401);
+  const privateStats=await request.get('/api/players/00000000-0000-0000-0000-000000000000/time-totals');
+  expect(privateStats.status()).toBe(401);
+  const hiddenRoster=await request.get('/api/public/teams/00000000-0000-0000-0000-000000000000/players');
+  expect(hiddenRoster.status()).toBe(404);
+  const banners=await request.get('/api/announcements');
+  expect(banners.status()).toBe(200);
+  expect(Array.isArray(await banners.json())).toBeTruthy();
+});

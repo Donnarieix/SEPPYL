@@ -221,4 +221,24 @@ test('match event timeline and public-roster opt-in are enforced end to end',asy
   const total=await request.get('/api/players/'+alice.id+'/time-totals',{headers});
   expect(total.status()).toBe(200);
   expect((await total.json()).match_minutes).toBe(30);
+  const session=await request.post('/api/trainings',{headers,data:{
+    name:'Séance 6e passe',date:'2026-10-31T00:00:00',team_id:team.id,duration_minutes:95}});
+  expect(session.status()).toBe(201);
+  const training=await session.json();
+  const presence=await request.put('/api/trainings/'+training.id+'/attendance',{
+    headers,data:{player_ids:[alice.id]}});
+  expect(presence.status()).toBe(204);
+  const note=await request.put('/api/trainings/'+training.id+'/scores',{
+    headers,data:{player_id:alice.id,activity_id:null,score:4,
+      comment:'Informations complémentaires E2E'}});
+  expect(note.status()).toBe(204);
+  const savedTraining=await request.get('/api/trainings/'+training.id,{headers});
+  expect(savedTraining.status()).toBe(200);
+  const trainingDetails=await savedTraining.json();
+  expect(trainingDetails.training.duration_minutes).toBe(95);
+  expect(trainingDetails.attendance.find(a=>a.player_id===alice.id).score_comment)
+    .toBe('Informations complémentaires E2E');
+  const fullStats=await request.get('/api/players/'+alice.id+'/time-totals',{headers});
+  expect(fullStats.status()).toBe(200);
+  expect((await fullStats.json()).training_minutes).toBe(95);
 });

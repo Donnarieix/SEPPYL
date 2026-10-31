@@ -224,15 +224,15 @@ test('match event timeline and public-roster opt-in are enforced end to end',asy
   const session=await request.post('/api/trainings',{headers,data:{
     name:'Séance 6e passe',date:'2026-10-31T00:00:00',team_id:team.id,duration_minutes:95}});
   expect(session.status()).toBe(201);
-  const training=await session.json();
-  const presence=await request.put('/api/trainings/'+training.id+'/attendance',{
+  const trainingId=(await session.text()).trim();
+  const presence=await request.put('/api/trainings/'+trainingId+'/attendance',{
     headers,data:{player_ids:[alice.id]}});
   expect(presence.status()).toBe(204);
-  const note=await request.put('/api/trainings/'+training.id+'/scores',{
+  const note=await request.put('/api/trainings/'+trainingId+'/scores',{
     headers,data:{player_id:alice.id,activity_id:null,score:4,
       comment:'Informations complémentaires E2E'}});
   expect(note.status()).toBe(204);
-  const savedTraining=await request.get('/api/trainings/'+training.id,{headers});
+  const savedTraining=await request.get('/api/trainings/'+trainingId,{headers});
   expect(savedTraining.status()).toBe(200);
   const trainingDetails=await savedTraining.json();
   expect(trainingDetails.training.duration_minutes).toBe(95);

@@ -90,6 +90,12 @@ test('tickets and announcement pages render in Chromium without browser errors',
   await expect(page).toHaveURL(/\/trainings$/);
   await page.goto('/tickets');
   await expect(page.getByRole('heading',{name:'Mes tickets'})).toBeVisible();
+  // The release history is legitimately shown to first-time accounts and
+  // intercepts clicks until acknowledged. Close it as a real user would.
+  const releaseHistory=page.getByRole('dialog',{name:'Historique des versions'});
+  if (await releaseHistory.isVisible()) {
+    await releaseHistory.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
   await page.getByRole('button',{name:/Nouveau ticket/}).click();
   await page.getByRole('dialog').locator('input[maxlength="160"]').fill('Incident de test E2E');
   await page.getByRole('dialog').locator('textarea').fill('Rapport synthétique E2E');

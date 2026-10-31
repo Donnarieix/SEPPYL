@@ -76,6 +76,10 @@ pub fn compute_playtime(
             let started=entered.remove(&out).ok_or(StatusCode::BAD_REQUEST)?;
             *totals.get_mut(&out).ok_or(StatusCode::BAD_REQUEST)?+=event.minute-started;
             entered.insert(incoming,event.minute);
+        } else if event.kind=="red_card" {
+            let player=event.player_id.ok_or(StatusCode::BAD_REQUEST)?;
+            let start=entered.remove(&player).ok_or(StatusCode::BAD_REQUEST)?;
+            *totals.get_mut(&player).ok_or(StatusCode::BAD_REQUEST)?+=event.minute-start;
         } else if event.player_in_id.is_some() {
             return Err(StatusCode::BAD_REQUEST);
         }
@@ -230,7 +234,7 @@ pub async fn add_event(
         if ty.club_id!=club_id{return Err(StatusCode::FORBIDDEN);}
     }
     let existing=detail(&state,game.clone()).await?;
-    let order=existing.events.len() as i32;
+    let order=existing.events.iter().map(|event|event.sort_order).max().unwrap_or(-1)+1;
     let entry=match_event::Model{
         id:Uuid::new_v4(),match_id:id,event_type_id:body.event_type_id,
         minute:body.minute,kind:body.kind,
@@ -281,5 +285,10 @@ mod tests{
         assert_eq!((time(a),time(b),time(c)),(30,35,25));
         assert!(compute_playtime(45,&ps,&[substitution(a,b,30),substitution(a,c,40)]).is_err());
         assert!(compute_playtime(45,&ps,&[substitution(b,a,20)]).is_err());
+        let dismissal=match_event::Model{id:Uuid::new_v4(),match_id:Uuid::nil(),
+            event_type_id:None,kind:"red_card".into(),minute:60,
+            player_id:Some(a),player_in_id:None,notes:String::new(),sort_order:0};
+        let after_card=compute_playtime(45,&ps,&[dismissal]).unwrap();
+        assert_eq!(after_card.iter().find(|x|x.player_id==a).unwrap().minutes,60);
     }
 }

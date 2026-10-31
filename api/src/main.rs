@@ -127,7 +127,11 @@ async fn main() {
         .route("/public/clubs", get(organization::public_clubs))
         .route("/public/clubs/{id}/teams", get(organization::public_teams))
         .route("/login", post(login))
+        // /api/register remains blocked by the installed production Nginx
+        // configuration. /api/signup is the public registration entry point;
+        // it reuses the same validated handler without requiring SSH/Nginx edits.
         .route("/register", post(register))
+        .route("/signup", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))
         .merge(protected)
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))

@@ -3,7 +3,7 @@
 This must be performed **once** by the server administrator. The CI cannot provision SSH credentials, DNS, or root services.
 
 1. Ensure `seppyl.donnarieix.fr` resolves to the server and the wildcard certificate is installed.
-2. Application production configuration: Create `/etc/seppyl/api.env` (root owned, mode 0600) with a strong `JWT_SECRET`, `SEPPYL_BIND=127.0.0.1:3101`, and `SEPPYL_ALLOW_REGISTRATION=false` (temporarily enable only for deliberate user enrollment). Never commit secrets.
+2. Application production configuration: Create `/etc/seppyl/api.env` (root owned, mode 0600) with a strong `JWT_SECRET`, `SEPPYL_BIND=127.0.0.1:3101`, for application authentication. Public account creation uses the `/api/signup` endpoint; newly registered accounts have the read-only `user` role. Never commit secrets.
 3. Create the dedicated account and directories:
    ```sh
    sudo useradd --system --home /var/lib/seppyl --shell /usr/sbin/nologin seppyl
@@ -19,4 +19,4 @@ This must be performed **once** by the server administrator. The CI cannot provi
 8. Configure GitHub Actions secrets: `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_KNOWN_HOSTS`, `DEPLOY_API_SSH_KEY`, and `DEPLOY_WEB_SSH_KEY`. Pin SSH host fingerprints obtained through a trusted channel. Set deploy user to the account holding the forced-command keys (workflow defaults to `lud`; adapt if using a dedicated deploy user).
 9. Run the workflow from GitHub Actions. Only after a successful deployment, reload Nginx and check `https://seppyl.donnarieix.fr` and the API endpoint.
 
-**Security:** Avoid reusing the Drive deployment key. Keep SQLite backups, protect `api.env`, restrict account registration, and note that the certificate created with manual DNS challenge still needs automated renewal separately.
+**Security:** Avoid reusing the Drive deployment key. Keep SQLite backups, protect `api.env`, monitor public account registration and add rate limiting at the proxy if needed, and note that the certificate created with manual DNS challenge still needs automated renewal separately.

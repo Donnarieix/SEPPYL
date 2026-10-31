@@ -118,6 +118,6 @@ test('registration form signs up and logs in through production-style proxy', as
   await page.locator('input[autocomplete="username"]').fill('e2e-new-account-form');
   await page.locator('input[type="password"]').fill('e2e-signup-form-password!');
   await page.getByRole('button', { name: 'Créer le compte' }).click();
-  await expect(page).toHaveURL(/\\/trainings$/);
+  await expect(page).toHaveURL(/\/trainings$/);
   await expect(page.getByRole('heading', { name: 'Entraînements' })).toBeVisible();
 });

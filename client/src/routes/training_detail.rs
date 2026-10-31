@@ -340,6 +340,13 @@ fn Notes(
                             } else {
                                 detail.scores.iter().find(|s| s.player_id == player_id && s.activity_id == activity).map(|s| s.score)
                             };
+                            let current_comment=if activity.is_empty(){
+                                detail.attendance.iter().find(|a|a.player_id==player_id)
+                                    .and_then(|a|a.score_comment.clone()).unwrap_or_default()
+                            }else{
+                                detail.scores.iter().find(|s|s.player_id==player_id&&s.activity_id==activity)
+                                    .and_then(|s|s.comment.clone()).unwrap_or_default()
+                            };
                             let token = token.clone();
                             let training_id = training_id.clone();
                             let activity_id = if activity.is_empty() { None } else { Some(activity.clone()) };
@@ -380,6 +387,11 @@ fn Notes(
                                             }
                                         }
                                     }
+                                    ScoreComment{
+                                        key:"{key}",token:token.clone(),training_id:training_id.clone(),
+                                        player_id:player_id.clone(),activity_id:activity_id.clone(),
+                                        initial:current_comment,score,on_saved,on_error
+                                    }
                                 }
                             }
                         }
@@ -390,6 +402,37 @@ fn Notes(
     }
 }
 
+
+#[component]
+fn ScoreComment(
+    token:String,training_id:String,player_id:String,activity_id:Option<String>,
+    initial:String,score:Option<i32>,on_saved:EventHandler<()>,
+    on_error:EventHandler<String>,
+)->Element{
+    let mut comment=use_signal(||initial);
+    let mut busy=use_signal(||false);
+    rsx!{
+        div{class:"score-comment-field",
+            input{value:"{comment}",maxlength:"4000",
+                placeholder:"Informations complémentaires",
+                "aria-label":"Informations complémentaires",
+                oninput:move |e|comment.set(e.value())}
+            button{class:"button quiet small",r#type:"button",
+                disabled:*busy.read()||score.is_none(),
+                onclick:move |_|{
+                    let t=token.clone();let id=training_id.clone();let p=player_id.clone();
+                    let activity=activity_id.clone();let text=comment.read().clone();
+                    busy.set(true);
+                    spawn(async move{
+                        match trainings::save_score_comment(&t,&id,&p,activity.as_deref(),score,Some(&text)).await{
+                            Ok(())=>on_saved.call(()),Err(e)=>on_error.call(e)
+                        }
+                        busy.set(false);
+                    });
+                },"Enregistrer"}
+        }
+    }
+}
 
 #[component]
 fn TrainingDuration(

@@ -27,6 +27,9 @@ test('public pages hydrate, links navigate, and global footer never panics', asy
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
   await expect(page.locator('.site-footer')).toBeVisible();
+  const versionFromManifest = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../client/Cargo.toml'), 'utf8').match(/^version\\s*=\\s*"(\\d+\\.\\d+\\.\\d+)"/m)?.[1];
+  expect(versionFromManifest, 'client Cargo version').toBeTruthy();
+  await expect(page.locator('.site-footer-version')).toHaveText('v' + versionFromManifest);
   await page.locator('.site-footer a[href="/mentions-legales"]').click();
   await expect(page).toHaveURL(/\/mentions-legales$/);
   await expect(page.getByRole('heading', { name: 'Mentions légales' })).toBeVisible();

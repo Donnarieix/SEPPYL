@@ -14,9 +14,7 @@ const DIRECTOR:Option<&str>=option_env!("SEPPYL_LEGAL_DIRECTOR");
 
 /// The release displayed in the UI follows the package's major.minor fields.
 pub fn version()->String {
-    let version=env!("CARGO_PKG_VERSION");
-    let mut parts=version.split('.');
-    format!("v{}.{}",parts.next().unwrap_or("0"),parts.next().unwrap_or("1"))
+    format!("v{}",env!("CARGO_PKG_VERSION"))
 }
 
 #[component]

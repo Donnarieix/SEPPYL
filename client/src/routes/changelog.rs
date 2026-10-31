@@ -21,7 +21,7 @@ pub fn ChangelogHost()->Element{
         let token=session.read().clone();
         async move{match token{
             Some(token)=>changelog::status(&token).await,
-            None=>Ok(changelog::Status{version:"v0.1".into(),unread:false})
+            None=>Ok(changelog::Status{version:format!("v{}",env!("CARGO_PKG_VERSION")),unread:false})
         }}
     });
     let user=use_resource(move ||{
@@ -32,7 +32,7 @@ pub fn ChangelogHost()->Element{
         }}
     });
     let mut prompted=use_signal(||None::<String>);
-    let mut selected=use_signal(||"v0.1".to_string());
+    let mut selected=use_signal(||format!("v{}",env!("CARGO_PKG_VERSION")));
     let mut editing=use_signal(||false);
     let mut title=use_signal(String::new);
     let mut body=use_signal(String::new);

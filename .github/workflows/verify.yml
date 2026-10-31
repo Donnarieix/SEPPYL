@@ -32,6 +32,8 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
+      - name: Verify release version, changelog and notes
+        run: python3 scripts/release-version.py --check
       - name: Verify committed production lockfile
         run: cargo metadata --locked --format-version 1 >/dev/null
       - name: Check API

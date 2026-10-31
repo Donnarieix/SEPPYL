@@ -34,3 +34,15 @@ test('the browser suite catches the historic router Link runtime panic', () => {
   assert.match(spec, /page\.on\('requestfailed'/);
   assert.match(spec, /site-footer a\[href/);
 });
+
+test('GitHub Releases are published only after successful production deployment', () => {
+  const workflow = read('.github/workflows/deploy.yml');
+  const release = workflow.split('\n  release:\n')[1];
+  assert.ok(release, 'release job missing');
+  assert.match(release, /needs: \[deploy\]/);
+  assert.match(release, /contents: write/);
+  assert.match(release, /gh release create/);
+  assert.match(release, /scripts\/release-version\.py/);
+  const verify = read('.github/workflows/verify.yml');
+  assert.ok(verify.includes('python3 scripts/release-version.py --check'));
+});

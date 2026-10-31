@@ -39,3 +39,18 @@ Les comptes Maintainer ne sont jamais créés par les E2E en production : `fixtu
 Le compte Maintainer déjà créé est conservé comme un compte normal de la base SQLite. Son identifiant et son mot de passe sont modifiables par son titulaire. Le code ne recrée ni ne promeut aucun compte au démarrage. Le fichier marqueur historique a été traité par la première release de nettoyage ; il n'y a plus ni marqueur ni code d'entretien du marqueur dans le binaire final.
 
 **Action administrative hors du dépôt :** supprimer l'ancien secret GitHub `SEPPYL_BOOTSTRAP_MAINTAINER_PASSWORD_HASH` depuis Settings → Secrets and variables → Actions. Le pipeline ne le consulte plus.
+
+## Versions et GitHub Releases
+
+Chaque livraison versionnée est décrite par une version SemVer commune dans `api/Cargo.toml`, `client/Cargo.toml` et `Cargo.lock`. L'API et le client utilisent cette version pour le changelog courant et le pied de page.
+
+Avant une nouvelle version, préparer une PR avec :
+- la version harmonisée dans les deux Cargo.toml et dans Cargo.lock ;
+- une entrée `seed` dans `api/src/routes/miscellaneous/changelog.rs`, ajoutée sans écraser les personnalisations existantes ;
+- les notes `docs/releases/vX.Y.Z.md`.
+
+La vérification `scripts/release-version.py --check` bloque la CI si ces éléments sont incohérents.
+
+Une PR exécute tous les tests mais ne publie **ni tag, ni release, ni déploiement**. Après fusion dans `main`, le workflow déploie d'abord l'API et le client, vérifie la disponibilité publique, puis crée le tag `vX.Y.Z` et la GitHub Release associée au commit effectivement livré. Les archives API Linux et client Web de cette même CI sont jointes à la release.
+
+Une release existante reste immuable : toute nouvelle version doit incrémenter le numéro. Les déploiements ultérieurs sans changement de version ne créent pas de second tag ni de nouvelle release.

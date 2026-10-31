@@ -195,3 +195,57 @@ jobs:
             curl -fsS --retry 3 --retry-delay 2 --connect-timeout 5 --max-time 15               "https://seppyl.donnarieix.fr$route" -o "$RUNNER_TEMP/seppyl-smoke.html"
             test -s "$RUNNER_TEMP/seppyl-smoke.html"
           done
+
+  release:
+    name: Publish version tag and GitHub Release
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Confirm release metadata
+        run: python3 scripts/release-version.py --check
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-api
+          path: ${{ runner.temp }}/release-api
+      - uses: actions/download-artifact@v4
+        with:
+          name: seppyl-web
+          path: ${{ runner.temp }}/release-web
+      - name: Publish immutable release only after production succeeds
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/release-version.py)"
+          tag="v$version"
+          notes="docs/releases/$tag.md"
+          existing_sha="$(git ls-remote --tags --refs origin "refs/tags/$tag" | awk '{print $1}')"
+          if [ -n "$existing_sha" ] && [ "$existing_sha" != "$GITHUB_SHA" ]; then
+            echo "::notice::Release $tag already refers to an earlier deployed commit. No new release until the version is incremented."
+            exit 0
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "GitHub Release $tag already exists at this commit; leaving it unchanged."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          cp "$RUNNER_TEMP/release-api/seppyl-api.tar.gz" "$RUNNER_TEMP/release-assets/seppyl-api-linux-x86_64-$tag.tar.gz"
+          cp "$RUNNER_TEMP/release-web/seppyl-web.tar.gz" "$RUNNER_TEMP/release-assets/seppyl-web-$tag.tar.gz"
+          if [ -n "$existing_sha" ]; then
+            gh release create "$tag" --verify-tag \
+              --title "SEPPYL $tag" --notes-file "$notes" \
+              "$RUNNER_TEMP/release-assets/seppyl-api-linux-x86_64-$tag.tar.gz" \
+              "$RUNNER_TEMP/release-assets/seppyl-web-$tag.tar.gz"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "SEPPYL $tag" --notes-file "$notes" \
+              "$RUNNER_TEMP/release-assets/seppyl-api-linux-x86_64-$tag.tar.gz" \
+              "$RUNNER_TEMP/release-assets/seppyl-web-$tag.tar.gz"
+          fi

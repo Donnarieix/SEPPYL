@@ -132,8 +132,6 @@ pub async fn update_club_information(
     active.is_public=Set(Some(body.is_public));
     active.show_public_teams=Set(Some(body.is_public&&body.show_public_teams));
     active.show_public_roster=Set(Some(body.is_public&&body.show_public_teams&&body.show_public_roster));
-    active.show_public_teams=Set(Some(body.is_public&&body.show_public_teams));
-    active.show_public_roster=Set(Some(body.is_public&&body.show_public_teams&&body.show_public_roster));
     let saved=active.update(&state.db).await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub,club=%id,"Club information updated");
     Ok(Json(saved))

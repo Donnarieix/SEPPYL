@@ -95,7 +95,7 @@ fn PlayerRow(player:Player,token:String,on_saved:EventHandler<()>,on_error:Event
             td{class:"roster-actions",
                 button{class:"button outline small",onclick:move |_|editing.set(true),"Modifier"}
                 button{class:"button quiet small",r#type:"button",
-                    onclick:move |_|showing_times.set(!*showing_times.read()),
+                    onclick:move |_|{let visible=*showing_times.read();showing_times.set(!visible);},
                     "Temps de jeu"}
                 if *showing_times.read(){
                     PlayerTimes{token:token.clone(),player_id:player.id.clone()}

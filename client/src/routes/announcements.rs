@@ -7,7 +7,14 @@ use super::layout::Header;
 /// as persistent banners across navigation.
 #[component]
 pub fn UrgentBanner()->Element{
-    let active=use_resource(||async{announcements::active().await});
+    let mut active=use_resource(||async{announcements::active().await});
+    let mut poll=active;
+    use_future(move ||async move{
+        loop{
+            gloo_timers::future::TimeoutFuture::new(60_000).await;
+            poll.restart();
+        }
+    });
     rsx!{
         if let Some(Ok(items))=active.read().clone(){
             for item in items.into_iter().filter(|a|a.urgent){
@@ -35,6 +42,7 @@ pub fn AnnouncementAdmin()->Element{
     let mut starts=use_signal(||"0".to_string());
     let mut ends=use_signal(String::new);
     let mut notice=use_signal(||None::<String>);
+    let mut editing=use_signal(||None::<String>);
     let mut busy=use_signal(||false);
     rsx!{
         div{class:"app",Header{},
@@ -60,13 +68,19 @@ pub fn AnnouncementAdmin()->Element{
                                 let is_urgent=*urgent.read();let is_published=*published.read();
                                 let begin=starts.read().parse::<i64>().unwrap_or(0);
                                 let until=ends.read().parse::<i64>().ok();
+                                let edit_id=editing.read().clone();
                                 spawn(async move{
-                                    let result=announcements::create(&t,announcements::Payload{
+                                    let payload=announcements::Payload{
                                         title:&label,body:&content,urgent:is_urgent,
                                         published:is_published,starts_at:begin,ends_at:until
-                                    }).await;
+                                    };
+                                    let result=if let Some(ref id)=edit_id{
+                                        announcements::update(&t,id,payload).await
+                                    }else{
+                                        announcements::create(&t,payload).await
+                                    };
                                     match result{
-                                        Ok(())=>{title.set(String::new());body.set(String::new());list.restart();
+                                        Ok(())=>{title.set(String::new());body.set(String::new());editing.set(None);list.restart();
                                             notice.set(Some("Annonce enregistrée.".into()));},
                                         Err(e)=>notice.set(Some(e))
                                     }
@@ -93,7 +107,13 @@ pub fn AnnouncementAdmin()->Element{
                                 div{class:"field",label{"Fin (timestamp Unix, facultatif)"}
                                     input{r#type:"number",value:"{ends}",oninput:move |e|ends.set(e.value())}}
                             }
-                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Publier"}
+                            button{class:"button solid",r#type:"submit",disabled:*busy.read(),
+                                if editing.read().is_some(){"Enregistrer les modifications"}else{"Publier"}}
+                            if editing.read().is_some(){
+                                button{class:"button quiet",r#type:"button",
+                                    onclick:move |_|{editing.set(None);title.set(String::new());body.set(String::new());},
+                                    "Annuler la modification"}
+                            }
                         }
                     }
                     section{class:"panel",
@@ -106,6 +126,19 @@ pub fn AnnouncementAdmin()->Element{
                                             p{"{a.body}"}
                                             span{class:"muted-small",if a.published{"Publiée"}else{"Brouillon"}}
                                         }
+                                        button{class:"button outline small",r#type:"button",
+                                            onclick:{
+                                                let record=a.clone();
+                                                move |_|{
+                                                    editing.set(Some(record.id.clone()));
+                                                    title.set(record.title.clone());
+                                                    body.set(record.body.clone());
+                                                    urgent.set(record.urgent);
+                                                    published.set(record.published);
+                                                    starts.set(record.starts_at.to_string());
+                                                    ends.set(record.ends_at.map(|n|n.to_string()).unwrap_or_default());
+                                                }
+                                            },"Modifier"}
                                         button{class:"button quiet small",r#type:"button",
                                             onclick:{
                                                 let t=token.clone();let id=a.id.clone();

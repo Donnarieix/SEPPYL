@@ -23,10 +23,11 @@ use crate::{
             catalog,
             training,
             organization,
+            matches,
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog},
+        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog, tickets, announcements},
     },
     state::AppState,
 };
@@ -124,6 +125,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/announcements",get(announcements::public))
         .route("/public/clubs", get(organization::public_clubs))
         .route("/public/clubs/{id}/teams", get(organization::public_teams))
         .route("/login", post(login))

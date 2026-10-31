@@ -119,11 +119,17 @@ fn notify_discord(id:Uuid,subject:&str){
     let Ok(url)=reqwest::Url::parse(&webhook) else{return;};
     if url.scheme()!="https" || !matches!(url.host_str(),Some("discord.com"|"discordapp.com"))
         || !url.path().starts_with("/api/webhooks/") {return;}
-    let line=format!("Ticket SEPPYL {} — {}",id,subject.chars().take(160).collect::<String>());
+    // Optional Discord role/group ping. Administrators configure the snowflake
+    // only on the server; arbitrary user-supplied @mentions stay disabled.
+    let role_id=std::env::var("SEPPYL_DISCORD_TICKET_ROLE_ID").ok()
+        .filter(|v|(15..=22).contains(&v.len())&&v.bytes().all(|b|b.is_ascii_digit()));
+    let ping=role_id.as_ref().map(|id|format!("<@&{id}> ")).unwrap_or_default();
+    let line=format!("{ping}Ticket SEPPYL {} — {}",id,subject.chars().take(160).collect::<String>());
     tokio::spawn(async move {
+        let mentions=role_id.into_iter().collect::<Vec<_>>();
         let result=reqwest::Client::new().post(url)
             .timeout(std::time::Duration::from_secs(6))
-            .json(&serde_json::json!({"content":line,"allowed_mentions":{"parse":[]}}))
+            .json(&serde_json::json!({"content":line,"allowed_mentions":{"parse":[],"roles":mentions}}))
             .send().await;
         match result {
             Ok(response) if response.status().is_success()=>{},

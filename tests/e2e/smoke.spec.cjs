@@ -149,3 +149,70 @@ test('ticket owner isolation, staff escalation and published urgent banner',asyn
   await expect(page.getByText('Annonce urgente E2E')).toBeVisible();
   await expect(page.locator('.global-urgent-banner')).toContainText('Maintenance de test');
 });
+
+test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
+  const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(response.status()).toBe(200);
+  const token=(await response.json()).token;
+  const headers={Authorization:'Bearer '+token};
+  const newClub=await request.post('/api/clubs',{headers,data:{name:'Club sixième passe'}});
+  expect(newClub.status()).toBe(201);
+  const club=await newClub.json();
+  const newTeam=await request.post('/api/clubs/'+club.id+'/teams',{
+    headers,data:{name:'Équipe 1'}});
+  expect(newTeam.status()).toBe(201);
+  const team=await newTeam.json();
+  const newPlayer=async (firstname,number)=>{
+    const r=await request.post('/api/teams/'+team.id+'/players',{
+      headers,data:{firstname,lastname:'Test E2E',number}});
+    expect(r.status()).toBe(201);
+    return r.json();
+  };
+  const alice=await newPlayer('Alice',101);
+  const bob=await newPlayer('Bob',102);
+  let hidden=await request.get('/api/public/clubs/'+club.id+'/teams');
+  expect(hidden.status()).toBe(404);
+  const published=await request.put('/api/clubs/'+club.id+'/visibility',{
+    headers,data:{is_public:true,show_public_teams:true,show_public_roster:false}});
+  expect(published.status()).toBe(204);
+  const publicTeams=await request.get('/api/public/clubs/'+club.id+'/teams');
+  expect(publicTeams.status()).toBe(200);
+  expect((await publicTeams.json()).length).toBe(1);
+  hidden=await request.get('/api/public/teams/'+team.id+'/players');
+  expect(hidden.status()).toBe(404);
+  const exposeRoster=await request.put('/api/clubs/'+club.id+'/visibility',{
+    headers,data:{is_public:true,show_public_teams:true,show_public_roster:true}});
+  expect(exposeRoster.status()).toBe(204);
+  const roster=await request.get('/api/public/teams/'+team.id+'/players');
+  expect(roster.status()).toBe(200);
+  expect((await roster.json()).length).toBe(2);
+  const match=await request.post('/api/matches',{
+    headers,data:{team_id:team.id,opponent:'Adversaire E2E',
+      date:'2026-10-31T00:00:00',half_minutes:45}});
+  expect(match.status()).toBe(201);
+  const game=await match.json();
+  const lineup=await request.put('/api/matches/'+game.id+'/lineup',{
+    headers,data:{players:[
+      {player_id:alice.id,position:'Attaquante',starter:true},
+      {player_id:bob.id,position:'Milieu',starter:false},
+    ]}});
+  expect(lineup.status()).toBe(204);
+  const substitution=await request.post('/api/matches/'+game.id+'/events',{
+    headers,data:{kind:'substitution',minute:30,player_id:alice.id,
+      player_in_id:bob.id,event_type_id:null,notes:'Changement E2E'}});
+  expect(substitution.status()).toBe(201);
+  const detail=await request.get('/api/matches/'+game.id,{headers});
+  expect(detail.status()).toBe(200);
+  const gameInfo=await detail.json();
+  expect(gameInfo.playing_times.find(p=>p.player_id===alice.id).minutes).toBe(30);
+  expect(gameInfo.playing_times.find(p=>p.player_id===bob.id).minutes).toBe(60);
+  const outsiderAuth=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}});
+  const outsiderToken=(await outsiderAuth.json()).token;
+  const outsider=await request.get('/api/matches/'+game.id,{
+    headers:{Authorization:'Bearer '+outsiderToken}});
+  expect(outsider.status()).toBe(404);
+  const total=await request.get('/api/players/'+alice.id+'/time-totals',{headers});
+  expect(total.status()).toBe(200);
+  expect((await total.json()).match_minutes).toBe(30);
+});

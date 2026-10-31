@@ -6,3 +6,4 @@ pub mod catalog;
 pub mod organization;
 pub mod tactics;
 pub mod matches;
+pub mod player_stats;

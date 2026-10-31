@@ -5,3 +5,4 @@ pub mod training;
 pub mod catalog;
 pub mod organization;
 pub mod tactics;
+pub mod matches;

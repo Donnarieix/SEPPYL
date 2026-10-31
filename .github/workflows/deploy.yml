@@ -228,8 +228,8 @@ jobs:
           notes="docs/releases/$tag.md"
           existing_sha="$(git ls-remote --tags --refs origin "refs/tags/$tag" | awk '{print $1}')"
           if [ -n "$existing_sha" ] && [ "$existing_sha" != "$GITHUB_SHA" ]; then
-            echo "::error::Tag $tag belongs to another commit ($existing_sha). Increment the version before releasing again."
-            exit 1
+            echo "::notice::Release $tag already refers to an earlier deployed commit. No new release until the version is incremented."
+            exit 0
           fi
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "GitHub Release $tag already exists at this commit; leaving it unchanged."

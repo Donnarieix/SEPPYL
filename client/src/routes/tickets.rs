@@ -107,7 +107,7 @@ pub fn TicketDetail(id:String)->Element{
     let is_staff=matches!(user.read().as_ref(),Some(Ok(p)) if p.role=="administrator"||p.role=="maintainer");
     let mut reply=use_signal(String::new);
     let mut status=use_signal(String::new);
-    let mut escalation=use_signal(||false);
+    let mut escalation=use_signal(||None::<bool>);
     let mut busy=use_signal(||false);
     let mut error=use_signal(||None::<String>);
     // A 15-second poll keeps threaded ticket discussions current without
@@ -179,8 +179,8 @@ pub fn TicketDetail(id:String)->Element{
                                     }
                                 }
                                 label{class:"field ticket-checkbox",
-                                    input{r#type:"checkbox",checked:*escalation.read()||current.ticket.maintainer_required,
-                                        onchange:move |e|escalation.set(e.checked())}
+                                    input{r#type:"checkbox",checked:escalation.read().unwrap_or(current.ticket.maintainer_required),
+                                        onchange:move |e|escalation.set(Some(e.checked()))}
                                     "À traiter par un Maintainer"
                                 }
                                 button{class:"button outline",disabled:*busy.read(),
@@ -191,7 +191,7 @@ pub fn TicketDetail(id:String)->Element{
                                         move |_|{
                                             let t=t.clone();let id=id.clone();
                                             let next=status.read().clone();
-                                            let flag=*escalation.read()||current_flag;
+                                            let flag=escalation.read().unwrap_or(current_flag);
                                             busy.set(true);
                                             let actual=if next.is_empty(){current_status.clone()}else{next};
                                             spawn(async move{

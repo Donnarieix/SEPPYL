@@ -643,7 +643,7 @@ mod integration_tests {
         let (created, id_string) = create(
             Extension(claims.clone()),
             State(state.clone()),
-            Json(CreateTraining { name: "Entraînement test".into(), date, team_id: None }),
+            Json(CreateTraining { name: "Entraînement test".into(), date, team_id: None, duration_minutes:None }),
         ).await.unwrap();
         assert_eq!(created, StatusCode::CREATED);
         let id = Uuid::parse_str(&id_string).unwrap();
@@ -727,12 +727,12 @@ mod integration_tests {
 
         set_score(
             Extension(claims.clone()), State(state.clone()), Path(id),
-            Json(ScoreUpdate { player_id, activity_id: None, score: Some(5) }),
+            Json(ScoreUpdate { player_id, activity_id: None, comment: None, score: Some(5) }),
         ).await.unwrap();
 
         set_score(
             Extension(claims.clone()), State(state.clone()), Path(id),
-            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), score: Some(3) }),
+            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), comment: None, score: Some(3) }),
         ).await.unwrap();
 
         let detail = get(Extension(claims.clone()), State(state.clone()), Path(id))
@@ -747,11 +747,11 @@ mod integration_tests {
         // Subsequent updates must persist as well, not just initial inserts.
         set_score(
             Extension(claims.clone()), State(state.clone()), Path(id),
-            Json(ScoreUpdate { player_id, activity_id: None, score: Some(2) }),
+            Json(ScoreUpdate { player_id, activity_id: None, comment: None, score: Some(2) }),
         ).await.unwrap();
         set_score(
             Extension(claims.clone()), State(state.clone()), Path(id),
-            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), score: Some(4) }),
+            Json(ScoreUpdate { player_id, activity_id: Some(activity_id), comment: None, score: Some(4) }),
         ).await.unwrap();
         set_attendance(
             Extension(claims.clone()), State(state.clone()), Path(id),
@@ -771,8 +771,7 @@ mod integration_tests {
             Json(UpdateTraining {
                 name: "Entraînement corrigé".into(),
                 date: DateTime::parse_from_str("2026-10-28 19:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-                notes: "Consignes générales".into(),
-            }),
+                notes: "Consignes générales".into(),, duration_minutes:None }),
         ).await.unwrap();
         let saved = get(Extension(claims.clone()), State(state.clone()), Path(id)).await.unwrap().0;
         assert!(saved.attendance[0].present);
@@ -781,7 +780,7 @@ mod integration_tests {
 
         let invalid = set_score(
             Extension(claims), State(state), Path(id),
-            Json(ScoreUpdate { player_id, activity_id: None, score: Some(6) }),
+            Json(ScoreUpdate { player_id, activity_id: None, comment: None, score: Some(6) }),
         ).await;
         assert!(matches!(invalid, Err(StatusCode::BAD_REQUEST)));
     }
@@ -804,7 +803,7 @@ mod reorder_tests {
         let claims=Claims{sub:uid,exp:u64::MAX};
         let date=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
         let (_,id)=create(Extension(claims.clone()),State(state.clone()),
-            Json(CreateTraining{name:"Training".into(),date,team_id:None})).await.unwrap();
+            Json(CreateTraining{name:"Training".into(),date,team_id:None,duration_minutes:None})).await.unwrap();
         let tid=Uuid::parse_str(&id).unwrap();
         for name in ["Échauffement","Passes","Match"] {
             add_activity(Extension(claims.clone()),State(state.clone()),Path(tid),
@@ -860,7 +859,7 @@ mod team_scope_regression {
         let now=DateTime::parse_from_str("2026-10-29 18:00:00","%Y-%m-%d %H:%M:%S").unwrap();
         let claims=Claims{sub:creator,exp:u64::MAX};
         let (_,created_id)=create(Extension(claims.clone()),State(state.clone()),
-            Json(CreateTraining{name:"Séance partagée".into(),date:now,team_id:Some(team_id)}))
+            Json(CreateTraining{name:"Séance partagée".into(),date:now,team_id:Some(team_id),duration_minutes:None}))
             .await.unwrap();
         let id=Uuid::parse_str(&created_id).unwrap();
         let reader=Claims{sub:teammate,exp:u64::MAX};
@@ -868,7 +867,7 @@ mod team_scope_regression {
         let their_sessions=list(Extension(reader.clone()),State(state.clone())).await.unwrap().0;
         assert_eq!(their_sessions.len(),1);
         let forbidden=update(Extension(reader),State(state.clone()),Path(id),
-            Json(UpdateTraining{name:"Interdit".into(),date:now,notes:String::new()})).await;
+            Json(UpdateTraining{name:"Interdit".into(),date:now,notes:String::new(),duration_minutes:None})).await;
         assert!(matches!(forbidden,Err(StatusCode::NOT_FOUND)));
         let stranger=Claims{sub:outsider,exp:u64::MAX};
         assert!(matches!(

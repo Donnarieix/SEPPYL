@@ -771,7 +771,7 @@ mod integration_tests {
             Json(UpdateTraining {
                 name: "Entraînement corrigé".into(),
                 date: DateTime::parse_from_str("2026-10-28 19:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-                notes: "Consignes générales".into(),, duration_minutes:None }),
+                notes: "Consignes générales".into(), duration_minutes:None }),
         ).await.unwrap();
         let saved = get(Extension(claims.clone()), State(state.clone()), Path(id)).await.unwrap().0;
         assert!(saved.attendance[0].present);

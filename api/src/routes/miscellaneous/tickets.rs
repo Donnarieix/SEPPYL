@@ -1,6 +1,6 @@
 //! Private support tickets. Ownership and staff role are checked at every read/write.
 use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
-use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder};
+use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder,TransactionTrait};
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use crate::{
@@ -52,17 +52,19 @@ pub async fn create(
     if payload.subject.trim().is_empty()||payload.subject.len()>160
         ||!valid_message(&payload.message){return Err(StatusCode::BAD_REQUEST);}
     let stamp=now();
+    let txn=state.db.begin().await.map_err(db)?;
     let row=ticket::ActiveModel{
         id:Set(Uuid::new_v4()),author_id:Set(claims.sub),
         subject:Set(payload.subject.trim().into()),status:Set("open".into()),
         maintainer_required:Set(false),created_at:Set(stamp),updated_at:Set(stamp),
         ..Default::default()
-    }.insert(&state.db).await.map_err(db)?;
+    }.insert(&txn).await.map_err(db)?;
     ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(row.id),author_id:Set(claims.sub),
         message:Set(payload.message.trim().into()),created_at:Set(stamp),
         ..Default::default()
-    }.insert(&state.db).await.map_err(db)?;
+    }.insert(&txn).await.map_err(db)?;
+    txn.commit().await.map_err(db)?;
     notify_discord(row.id,&row.subject);
     Ok((StatusCode::CREATED,Json(row)))
 }

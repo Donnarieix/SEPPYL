@@ -91,8 +91,8 @@ test('tickets and announcement pages render in Chromium without browser errors',
   await page.goto('/tickets');
   await expect(page.getByRole('heading',{name:'Mes tickets'})).toBeVisible();
   await page.getByRole('button',{name:/Nouveau ticket/}).click();
-  await page.getByRole('dialog').getByRole('textbox',{name:'Objet'}).fill('Incident de test E2E');
-  await page.getByRole('dialog').getByRole('textbox',{name:'Description du problème'}).fill('Rapport synthétique E2E');
+  await page.getByRole('dialog').locator('input[maxlength="160"]').fill('Incident de test E2E');
+  await page.getByRole('dialog').locator('textarea').fill('Rapport synthétique E2E');
   await page.getByRole('dialog').getByRole('button',{name:'Envoyer'}).click();
   await expect(page).toHaveURL(/\/tickets\/[\w-]+$/);
   await expect(page.getByText('Rapport synthétique E2E')).toBeVisible();
@@ -114,4 +114,38 @@ test('ticket permission checks and non-public roster are enforced server-side',a
   const banners=await request.get('/api/announcements');
   expect(banners.status()).toBe(200);
   expect(Array.isArray(await banners.json())).toBeTruthy();
+});
+
+test('ticket owner isolation, staff escalation and published urgent banner',async ({request,page})=>{
+  const userAuth=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}});
+  expect(userAuth.status()).toBe(200);
+  const userToken=(await userAuth.json()).token;
+  const created=await request.post('/api/tickets',{
+    headers:{Authorization:'Bearer '+userToken},
+    data:{subject:'Ticket privé E2E',message:'Message confidentiel'}});
+  expect(created.status()).toBe(201);
+  const ticket=await created.json();
+  const maintainerAuth=await request.post('/api/login',{
+    data:{username:'fixture-coach',password:ciPassword}});
+  expect(maintainerAuth.status()).toBe(200);
+  const staffToken=(await maintainerAuth.json()).token;
+  const outsider=await request.get('/api/tickets/'+ticket.id);
+  expect(outsider.status()).toBe(401);
+  const cannotEscalate=await request.put('/api/tickets/'+ticket.id+'/status',{
+    headers:{Authorization:'Bearer '+userToken},
+    data:{status:'in_progress',maintainer_required:true}});
+  expect(cannotEscalate.status()).toBe(403);
+  const escalated=await request.put('/api/tickets/'+ticket.id+'/status',{
+    headers:{Authorization:'Bearer '+staffToken},
+    data:{status:'in_progress',maintainer_required:true}});
+  expect(escalated.status()).toBe(204);
+  const announcement=await request.post('/api/admin/announcements',{
+    headers:{Authorization:'Bearer '+staffToken},
+    data:{title:'Maintenance de test',body:'Annonce urgente E2E',
+      urgent:true,published:true,starts_at:0,ends_at:null}});
+  expect(announcement.status()).toBe(201);
+  await page.goto('/news');
+  await expect(page.getByText('Annonce urgente E2E')).toBeVisible();
+  await expect(page.locator('.global-urgent-banner')).toContainText('Maintenance de test');
 });

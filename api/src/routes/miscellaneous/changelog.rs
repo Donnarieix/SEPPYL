@@ -176,7 +176,7 @@ mod tests{
                 body_html:None,is_hidden:false,
             })).await.unwrap();
         assert_eq!(list(Extension(CurrentRole(Role::Trainer)),
-            State(state.clone())).await.unwrap().0.len(),2);
+            State(state.clone())).await.unwrap().0.len(),3);
         assert!(status(Extension(Claims{sub:Uuid::new_v4(),exp:u64::MAX}),
             State(state)).await.unwrap().0.unread);
     }

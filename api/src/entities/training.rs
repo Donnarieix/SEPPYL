@@ -14,5 +14,7 @@ pub struct Model {
     pub name: String,
     pub date: DateTime,
     pub notes: String,
+    /// Scheduled duration in minutes. Old sessions remain unspecified.
+    pub duration_minutes: Option<i32>,
 }
 impl ActiveModelBehavior for ActiveModel {}

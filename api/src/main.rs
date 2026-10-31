@@ -24,6 +24,7 @@ use crate::{
             training,
             organization,
             matches,
+            player_stats,
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
@@ -89,6 +90,7 @@ async fn main() {
         .route("/account", get(account::get))
         .route("/account/profile", put(account::update_profile))
         .route("/account/password", put(account::change_password))
+        .route("/players/{id}/time-totals",get(player_stats::get))
         .route("/player/list", get(get_players))
         .route("/player/get/{id}", get(get_player))
         .route("/player/create", post(create_player))
@@ -128,6 +130,7 @@ async fn main() {
         .route("/announcements",get(announcements::public))
         .route("/public/clubs", get(organization::public_clubs))
         .route("/public/clubs/{id}/teams", get(organization::public_teams))
+        .route("/public/teams/{id}/players",get(organization::public_team_roster))
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/catalog/images/{filename}", get(catalog::image))

@@ -70,7 +70,7 @@ pub fn TrainingDetail(id: String) -> Element {
                             div {
                                 h1 { "{detail.training.name}" }
                                 p { "{detail.training.date.get(..10).unwrap_or(&detail.training.date)}" }
-                                p{"Durée : {detail.training.duration_minutes.map(|m|format!("{m} min")).unwrap_or_else(||"Non renseignée".into())}"}
+                                p{"Durée prévue : {detail.training.duration_minutes.unwrap_or(0)} min"}
                             }
                             Link { to: Route::TrainingPrint { id: id.clone() }, class: "button outline print-link",
                                 "Fiche imprimable ↗"

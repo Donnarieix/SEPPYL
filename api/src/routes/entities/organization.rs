@@ -948,12 +948,16 @@ mod club_information_regression {
             State(state.clone()),Path(second.0.id),Json(ClubInformation{
                 name:"B".into(),description:"A".into(),
                 logo_url:Some("javascript:alert(1)".into()),logo_x:None,logo_y:None,logo_zoom:None,is_public:true,
+            
+                show_public_teams:false,show_public_roster:false,
             })).await.err();
         assert_eq!(invalid,Some(StatusCode::BAD_REQUEST));
         let forbidden=update_club_information(Extension(guest),
             Extension(CurrentRole(Role::User)),State(state.clone()),
             Path(second.0.id),Json(ClubInformation{
                 name:"Club B".into(),description:String::new(),logo_url:None,logo_x:None,logo_y:None,logo_zoom:None,is_public:false,
+            
+                show_public_teams:false,show_public_roster:false,
             })).await.err();
         assert_eq!(forbidden,Some(StatusCode::FORBIDDEN));
         let Json(updated)=update_club_information(
@@ -964,6 +968,8 @@ mod club_information_regression {
                 logo_url:Some("https://example.org/logo.png".into()),
                 logo_x:Some(12),logo_y:Some(-8),logo_zoom:Some(140),
                 is_public:true,
+            
+                show_public_teams:false,show_public_roster:false,
             })
         ).await.unwrap();
         assert_eq!(updated.name,"Club B renommé");

@@ -96,6 +96,7 @@ pub fn NewTraining(
 ) -> Element {
     let mut name = use_signal(String::new);
     let mut date = use_signal(String::new);
+    let mut duration = use_signal(||"90".to_string());
     let mut busy = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut team_id = use_signal(String::new);
@@ -138,8 +139,9 @@ pub fn NewTraining(
                         let token = token.clone();
                         spawn(async move {
                             let selected_team=team_id.read().clone();
-                            match trainings::create(&token, &name_value, &date_value,
-                                if selected_team.is_empty(){None}else{Some(&selected_team)}).await {
+                            let minutes=duration.read().parse::<i32>().ok().filter(|v|(1..=1440).contains(v));
+                            match trainings::create_with_duration(&token, &name_value, &date_value,
+                                if selected_team.is_empty(){None}else{Some(&selected_team)},minutes).await {
                                 Ok(id) => on_created.call(id),
                                 Err(message) => error.set(Some(message)),
                             }
@@ -155,6 +157,11 @@ pub fn NewTraining(
                         div { class: "field",
                             label { "Date" }
                             input { r#type: "date", value: "{date}", required: true, oninput: move |e| date.set(e.value()) }
+                        }
+                        div { class:"field",
+                            label { "Durée prévue (minutes)" }
+                            input { r#type:"number",min:"1",max:"1440",value:"{duration}",
+                                oninput:move |e|duration.set(e.value()) }
                         }
                         div { class:"field",
                             label { "Équipe (facultatif pour les séances historiques)" }

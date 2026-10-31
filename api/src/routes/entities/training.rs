@@ -75,6 +75,7 @@ pub struct CreateTraining {
     pub name: String,
     pub date: DateTime,
     pub team_id: Option<Uuid>,
+    #[serde(default)] pub duration_minutes:Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +83,7 @@ pub struct UpdateTraining {
     name: String,
     date: DateTime,
     notes: String,
+    #[serde(default)] duration_minutes:Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -107,11 +109,14 @@ pub struct ScoreUpdate {
     player_id: Uuid,
     activity_id: Option<Uuid>,
     score: Option<i32>,
+    #[serde(default)] comment:Option<String>,
 }
 
 fn valid_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 150
 }
+
+fn valid_duration(value:Option<i32>)->bool { value.is_none_or(|v|(1..=1440).contains(&v)) }
 
 fn valid_score(score: Option<i32>) -> bool {
     score.is_none_or(|value| (0..=5).contains(&value))
@@ -147,7 +152,7 @@ pub async fn create(
     State(state): State<AppState>,
     Json(body): Json<CreateTraining>,
 ) -> Result<(StatusCode, String), ApiError> {
-    if !valid_name(&body.name) {
+    if !valid_name(&body.name) || !valid_duration(body.duration_minutes) {
         return Err(StatusCode::BAD_REQUEST);
     }
     let role=organization::user_role(&state,claims.sub).await?;
@@ -164,6 +169,7 @@ pub async fn create(
         name: Set(body.name.trim().to_string()),
         date: Set(body.date),
         notes: Set(String::new()),
+        duration_minutes:Set(body.duration_minutes),
         ..Default::default()
     };
     let item = new.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -240,7 +246,7 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateTraining>,
 ) -> Result<StatusCode, ApiError> {
-    if !valid_name(&body.name) || body.notes.len() > 20_000 {
+    if !valid_name(&body.name) || body.notes.len() > 20_000 || !valid_duration(body.duration_minutes) {
         return Err(StatusCode::BAD_REQUEST);
     }
     let training = owned_training(&claims, &state, id).await?;
@@ -248,6 +254,7 @@ pub async fn update(
     active.name = Set(body.name.trim().to_string());
     active.date = Set(body.date);
     active.notes = Set(body.notes);
+    active.duration_minutes=Set(body.duration_minutes);
     active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -528,7 +535,7 @@ pub async fn set_score(
             return Err(StatusCode::FORBIDDEN);
         }
     }
-    if !valid_score(body.score) {
+    if !valid_score(body.score) || body.comment.as_ref().is_some_and(|c|c.len()>4000) {
         return Err(StatusCode::BAD_REQUEST);
     }
     let Some(attendance) = training_attendance::Entity::find_by_id((id, body.player_id))
@@ -551,6 +558,7 @@ pub async fn set_score(
             (Some(score), Some(value)) => {
                 let mut active: training_score::ActiveModel = score.into();
                 active.score = Set(value);
+                if let Some(comment)=body.comment.as_deref(){active.comment=Set(if comment.trim().is_empty(){None}else{Some(comment.trim().into())});}
                 active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             (None, Some(value)) => {
@@ -558,6 +566,7 @@ pub async fn set_score(
                     activity_id: Set(activity_id),
                     player_id: Set(body.player_id),
                     score: Set(value),
+                    comment:Set(body.comment.as_deref().filter(|s|!s.trim().is_empty()).map(str::trim).map(str::to_owned)),
                     ..Default::default()
                 }.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
@@ -566,6 +575,7 @@ pub async fn set_score(
     } else {
         let mut active: training_attendance::ActiveModel = attendance.into();
         active.score = Set(body.score);
+        if let Some(comment)=body.comment.as_deref(){active.score_comment=Set(if comment.trim().is_empty(){None}else{Some(comment.trim().into())});}
         active.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok(StatusCode::NO_CONTENT)

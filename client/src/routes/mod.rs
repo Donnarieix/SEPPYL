@@ -20,6 +20,9 @@ mod administration;
 mod membership;
 mod team_management;
 mod public_directory;
+mod matches;
+mod tickets;
+mod announcements;
 mod audit;
 pub mod changelog;
 pub mod legal;
@@ -62,6 +65,9 @@ use tactics::Tactics;
 use organization::Organization;
 use administration::Administration;
 use public_directory::PublicDirectory;
+use matches::{Matches,MatchDetail};
+use tickets::{Tickets,TicketDetail};
+use announcements::AnnouncementAdmin;
 use audit::AuditLog;
 use legal::{LegalNotice,PrivacyPolicy,TermsOfUse};
 
@@ -83,6 +89,16 @@ pub enum Route {
     #[layout(RequireAuth)]
     #[route("/trainings")]
     Trainings {},
+    #[route("/matches")]
+    Matches {},
+    #[route("/matches/:id")]
+    MatchDetail { id:String },
+    #[route("/tickets")]
+    Tickets {},
+    #[route("/tickets/:id")]
+    TicketDetail {id:String},
+    #[route("/announcements/manage")]
+    AnnouncementAdmin {},
     #[route("/spreadsheet")]
     Home {},
     #[route("/players")]

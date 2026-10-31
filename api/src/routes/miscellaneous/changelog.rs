@@ -8,7 +8,7 @@ use crate::{entities::{changelog_entry,changelog_read},
 
 /// The deployed application's release. Adding/editing historical entries is
 /// independent of deploying the client and does not mark them as unread again.
-pub const CURRENT_VERSION:&str="v0.1";
+pub const CURRENT_VERSION:&str=concat!("v",env!("CARGO_PKG_VERSION"));
 fn now()->i64{
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
         .map(|v|v.as_secs() as i64).unwrap_or(0)
@@ -137,7 +137,7 @@ mod tests{
         seed(&state.db).await.unwrap();
         let a=Claims{sub:Uuid::new_v4(),exp:u64::MAX};
         let b=Claims{sub:Uuid::new_v4(),exp:u64::MAX};
-        assert_eq!(list(Extension(CurrentRole(Role::Trainer)),State(state.clone())).await.unwrap().0.len(),2);
+        assert_eq!(list(Extension(CurrentRole(Role::Trainer)),State(state.clone())).await.unwrap().0.len(),3);
         assert!(status(Extension(a.clone()),State(state.clone())).await.unwrap().0.unread);
         acknowledge(Extension(a.clone()),Extension(CurrentRole(Role::Trainer)),
             State(state.clone()),Path(CURRENT_VERSION.into())).await.unwrap();
@@ -145,7 +145,7 @@ mod tests{
             State(state.clone()),Path(CURRENT_VERSION.into())).await.unwrap();
         assert!(!status(Extension(a),State(state.clone())).await.unwrap().0.unread);
         assert!(status(Extension(b),State(state.clone())).await.unwrap().0.unread);
-        assert_eq!(list(Extension(CurrentRole(Role::Trainer)),State(state)).await.unwrap().0.len(),2);
+        assert_eq!(list(Extension(CurrentRole(Role::Trainer)),State(state)).await.unwrap().0.len(),3);
     }
     #[tokio::test]
     async fn hidden_releases_are_private_to_maintainers_and_not_announced(){
@@ -160,10 +160,10 @@ mod tests{
         save(Extension(CurrentRole(Role::Maintainer)),State(state.clone()),
             Path(CURRENT_VERSION.into()),Json(draft)).await.unwrap();
         assert_eq!(list(Extension(CurrentRole(Role::Trainer)),
-            State(state.clone())).await.unwrap().0.len(),1);
+            State(state.clone())).await.unwrap().0.len(),2);
         let maintainer=list(Extension(CurrentRole(Role::Maintainer)),
             State(state.clone())).await.unwrap().0;
-        assert_eq!(maintainer.len(),2);
+        assert_eq!(maintainer.len(),3);
         assert!(maintainer.iter().any(|entry|entry.version==CURRENT_VERSION && entry.is_hidden));
         let trainer=Claims{sub:Uuid::new_v4(),exp:u64::MAX};
         assert!(!status(Extension(trainer.clone()),State(state.clone())).await.unwrap().0.unread);
@@ -207,9 +207,10 @@ mod tests{
 
 /// Preserve human edits across deployments. Only insert missing releases.
 pub async fn seed(db:&sea_orm::DatabaseConnection)->Result<(),sea_orm::DbErr>{
-    const ENTRIES:[(&str,&str,&str);2]=[
+    const ENTRIES:[(&str,&str,&str);3]=[
       ("v0","Version initiale","Première version de SEPPYL.\n\n• Gestion des joueuses et des entraînements.\n• Présences et évaluations de 0 à 5, globales ou par activité.\n• Création d'activités et suivi du matériel.\n• Tableur historique des activités et des joueuses.\n• Fiche d'entraînement imprimable au format PDF via le navigateur.\n• Compte personnel et préférences d'affichage."),
-      ("v0.1","Nouvelle interface et gestion des clubs","Cette version prépare le déploiement de SEPPYL.\n\n• Clubs, équipes, effectifs partagés et droits d'accès.\n• Administration séparée de l'utilisation courante.\n• Tableau tactique interactif, flèches, couleurs et mode plein écran.\n• Activités réutilisables et éditeur de texte enrichi.\n• Journal d'activité lisible avec détails des modifications.\n• Logos personnalisés et recadrage des images pour clubs et équipes.\n• Thèmes clair, sombre, système et contrasté.\n• Navigation responsive, sélecteurs avec recherche et notifications discrètes.\n• Historique des versions consultable dans l'application.")
+      ("v0.1","Nouvelle interface et gestion des clubs","Cette version prépare le déploiement de SEPPYL.\n\n• Clubs, équipes, effectifs partagés et droits d'accès.\n• Administration séparée de l'utilisation courante.\n• Tableau tactique interactif, flèches, couleurs et mode plein écran.\n• Activités réutilisables et éditeur de texte enrichi.\n• Journal d'activité lisible avec détails des modifications.\n• Logos personnalisés et recadrage des images pour clubs et équipes.\n• Thèmes clair, sombre, système et contrasté.\n• Navigation responsive, sélecteurs avec recherche et notifications discrètes.\n• Historique des versions consultable dans l'application."),
+      ("v0.1.1","Sécurité et fiabilité","Cette mise à jour renforce la sécurité et la fiabilité de SEPPYL.\n\n• Amélioration de la sécurité des comptes et des accès.\n• Renforcement des vérifications avant chaque mise en production.\n• Corrections de stabilité et améliorations techniques.")
     ];
     for (i,(version,title,body)) in ENTRIES.into_iter().enumerate(){
         if changelog_entry::Entity::find_by_id(version.to_string()).one(db).await?.is_none(){

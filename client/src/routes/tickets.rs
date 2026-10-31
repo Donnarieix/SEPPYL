@@ -33,7 +33,7 @@ pub fn Tickets()->Element{
                             if items.is_empty(){p{class:"muted-small","Aucun ticket pour le moment."}}
                             for ticket in items{
                                 button{class:"ticket-row",key:"{ticket.id}",r#type:"button",
-                                    onclick:{let id=ticket.id.clone();move |_|navigator.push(Route::TicketDetail{id:id.clone()})},
+                                    onclick:{let id=ticket.id.clone();move |_|{navigator.push(Route::TicketDetail{id:id.clone()});}},
                                     div{strong{"{ticket.subject}"}
                                         span{class:"muted-small"," · {status_label(&ticket.status)}"}
                                     }

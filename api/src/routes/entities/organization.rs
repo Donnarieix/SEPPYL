@@ -128,6 +128,8 @@ pub async fn update_club_information(
     active.logo_y=Set(Some(body.logo_y.unwrap_or(0)));
     active.logo_zoom=Set(Some(body.logo_zoom.unwrap_or(100)));
     active.is_public=Set(Some(body.is_public));
+    active.show_public_teams=Set(Some(body.is_public&&body.show_public_teams));
+    active.show_public_roster=Set(Some(body.is_public&&body.show_public_teams&&body.show_public_roster));
     let saved=active.update(&state.db).await.map_err(db_error)?;
     tracing::info!(actor=%claims.sub,club=%id,"Club information updated");
     Ok(Json(saved))
@@ -573,7 +575,11 @@ pub async fn list_team_players_internal(state:&AppState,id:Uuid)->ApiResult<Vec<
 }
 
 #[derive(Deserialize)]
-pub struct SetPublic {pub is_public:bool}
+pub struct SetPublic {
+    pub is_public:bool,
+    #[serde(default)]pub show_public_teams:bool,
+    #[serde(default)]pub show_public_roster:bool,
+}
 pub async fn update_public_visibility(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
     State(state):State<AppState>,Path(id):Path<Uuid>,Json(body):Json<SetPublic>,
@@ -598,10 +604,25 @@ pub async fn public_teams(State(state):State<AppState>,Path(id):Path<Uuid>)
     ->ApiResult<Json<Vec<team::Model>>>{
     let club=club::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    if club.is_public!=Some(true){return Err(StatusCode::NOT_FOUND);}
+    if club.is_public!=Some(true)||club.show_public_teams!=Some(true){
+        return Err(StatusCode::NOT_FOUND);
+    }
     let teams=team::Entity::find()
         .filter(team::COLUMN.club_id.eq(id)).all(&state.db).await.map_err(db_error)?;
     Ok(Json(teams))
+}
+
+pub async fn public_team_roster(State(state):State<AppState>,Path(id):Path<Uuid>)
+    ->ApiResult<Json<Vec<player::Model>>>{
+    let squad=team::Entity::find_by_id(id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let club=club::Entity::find_by_id(squad.club_id).one(&state.db).await.map_err(db_error)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if club.is_public!=Some(true)||club.show_public_teams!=Some(true)
+        ||club.show_public_roster!=Some(true) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(Json(list_team_players_internal(&state,id).await?))
 }
 
 
@@ -628,7 +649,7 @@ mod public_visibility_tests {
         assert!(public_clubs(State(state.clone())).await.unwrap().0.is_empty());
         update_public_visibility(
             Extension(claims),Extension(CurrentRole(Role::Administrator)),
-            State(state.clone()),Path(id),Json(SetPublic{is_public:true})
+            State(state.clone()),Path(id),Json(SetPublic{is_public:true,show_public_teams:false,show_public_roster:false})
         ).await.unwrap();
         let visible=public_clubs(State(state)).await.unwrap().0;
         assert_eq!(visible.len(),1);

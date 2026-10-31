@@ -105,7 +105,7 @@ test('tickets and announcement pages render in Chromium without browser errors',
   await page.goto('/matches');
   await expect(page.getByRole('heading',{name:'Matchs'})).toBeVisible();
   await page.goto('/announcements/manage');
-  await expect(page.getByRole('heading',{name:'Annonces'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Annonces',level:1})).toBeVisible();
   await page.goto('/news');
   await expect(page.getByRole('heading',{name:'Nouveautés'})).toBeVisible();
 });

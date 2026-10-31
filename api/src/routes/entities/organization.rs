@@ -593,6 +593,8 @@ pub async fn update_public_visibility(
         .ok_or(StatusCode::NOT_FOUND)?;
     let mut active:club::ActiveModel=club.into();
     active.is_public=Set(Some(body.is_public));
+    active.show_public_teams=Set(Some(body.is_public && body.show_public_teams));
+    active.show_public_roster=Set(Some(body.is_public && body.show_public_teams && body.show_public_roster));
     active.update(&state.db).await.map_err(db_error)?;
     tracing::warn!(actor=%claims.sub,club=%id,is_public=body.is_public,action="club.visibility.update");
     Ok(StatusCode::NO_CONTENT)

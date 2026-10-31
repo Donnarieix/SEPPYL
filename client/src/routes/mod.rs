@@ -22,7 +22,7 @@ mod team_management;
 mod public_directory;
 mod matches;
 mod tickets;
-mod announcements;
+pub mod announcements;
 mod news;
 mod audit;
 pub mod changelog;

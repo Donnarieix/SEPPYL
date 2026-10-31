@@ -91,6 +91,8 @@ pub struct ClubInformation {
     #[serde(default)]pub logo_y:Option<i32>,
     #[serde(default)]pub logo_zoom:Option<i32>,
     pub is_public:bool,
+    #[serde(default)] pub show_public_teams:bool,
+    #[serde(default)] pub show_public_roster:bool,
 }
 fn valid_crop(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->bool {
     (-100..=100).contains(&x.unwrap_or(0)) && (-100..=100).contains(&y.unwrap_or(0))
@@ -128,6 +130,8 @@ pub async fn update_club_information(
     active.logo_y=Set(Some(body.logo_y.unwrap_or(0)));
     active.logo_zoom=Set(Some(body.logo_zoom.unwrap_or(100)));
     active.is_public=Set(Some(body.is_public));
+    active.show_public_teams=Set(Some(body.is_public&&body.show_public_teams));
+    active.show_public_roster=Set(Some(body.is_public&&body.show_public_teams&&body.show_public_roster));
     active.show_public_teams=Set(Some(body.is_public&&body.show_public_teams));
     active.show_public_roster=Set(Some(body.is_public&&body.show_public_teams&&body.show_public_roster));
     let saved=active.update(&state.db).await.map_err(db_error)?;

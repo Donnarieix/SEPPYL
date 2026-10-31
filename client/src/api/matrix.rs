@@ -149,7 +149,7 @@ pub async fn create_player(
 /// Each account has private data until shared-team support is added.
 pub async fn register(username: &str, password: &str) -> Result<(), String> {
     let response = Client::new()
-        .post(format!("{}/register", api_url()))
+        .post(format!("{}/signup", api_url()))
         .json(&Credentials { username, password })
         .send()
         .await

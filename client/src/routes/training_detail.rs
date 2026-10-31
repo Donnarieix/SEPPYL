@@ -70,12 +70,15 @@ pub fn TrainingDetail(id: String) -> Element {
                             div {
                                 h1 { "{detail.training.name}" }
                                 p { "{detail.training.date.get(..10).unwrap_or(&detail.training.date)}" }
+                                p{"Durée : {detail.training.duration_minutes.map(|m|format!("{m} min")).unwrap_or_else(||"Non renseignée".into())}"}
                             }
                             Link { to: Route::TrainingPrint { id: id.clone() }, class: "button outline print-link",
                                 "Fiche imprimable ↗"
                             }
                         }
 
+                        TrainingDuration{token:token.clone(),training_id:id.clone(),training:detail.training.clone(),
+                            on_saved:move |_|data.restart(),on_error:move |e|notice.set(Some(e))}
                         div { class: "tabs", role: "tablist", "aria-label": "Étapes de l'entraînement",
                             button { class: if *tab.read() == "presence" { "tab active" } else { "tab" },
                                 onclick: move |_| tab.set("presence".into()), "1. Présences" }
@@ -383,6 +386,37 @@ fn Notes(
                     }
                 }
             }
+        }
+    }
+}
+
+
+#[component]
+fn TrainingDuration(
+    token:String,training_id:String,training:trainings::Training,
+    on_saved:EventHandler<()>,on_error:EventHandler<String>,
+)->Element{
+    let mut duration=use_signal(||training.duration_minutes.map(|n|n.to_string()).unwrap_or_default());
+    let mut busy=use_signal(||false);
+    rsx!{
+        div{class:"training-duration-editor",
+            label{"Durée (minutes)"}
+            input{r#type:"number",min:"1",max:"1440",value:"{duration}",
+                oninput:move |e|duration.set(e.value())}
+            button{class:"button outline small",disabled:*busy.read(),
+                onclick:move |_|{
+                    let t=token.clone();let id=training_id.clone();
+                    let name=training.name.clone();let date=training.date.get(..10).unwrap_or("").to_string();
+                    let notes=training.notes.clone();
+                    let minutes=duration.read().parse::<i32>().ok().filter(|m|(1..=1440).contains(m));
+                    busy.set(true);
+                    spawn(async move{
+                        match trainings::update(&t,&id,&name,&date,&notes,minutes).await{
+                            Ok(())=>on_saved.call(()),Err(e)=>on_error.call(e)
+                        }
+                        busy.set(false);
+                    });
+                },"Enregistrer"}
         }
     }
 }
@@ -720,7 +754,7 @@ fn ActivityCard(
                         disabled:*busy.read(),onclick:move |_|editing.set(true),
                         "Modifier"
                     }
-                button { class: "remove-link", title: "Supprimer cet exercice", disabled: *busy.read(),
+                button { class: "remove-link", title: "Retirer cette activité de l’entraînement", disabled: *busy.read(),
                     onclick: {
                         let token = token.clone();
                         let training_id = training_id.clone();
@@ -740,7 +774,7 @@ fn ActivityCard(
                             });
                         }
                     },
-                    "Supprimer"
+                    "Retirer de l’entraînement"
                 }
                 }
             }

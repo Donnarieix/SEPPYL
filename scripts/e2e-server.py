@@ -33,22 +33,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(413)
                 return
             body = self.rfile.read(length) if length else None
-            conn = http.client.HTTPConnection("127.0.0.1", 3101, timeout=15)
+            # Live ticket SSE connections may last up to 115 seconds.
+            conn = http.client.HTTPConnection("127.0.0.1", 3101, timeout=140)
             headers = {k: v for k, v in self.headers.items()
                        if k.lower() in ("authorization", "content-type")}
             try:
                 conn.request(self.command, target, body=body, headers=headers)
                 response = conn.getresponse()
-                payload = response.read()
-                self.send_response(response.status)
-                for h in ("Content-Type", "Cache-Control"):
-                    val = response.getheader(h)
-                    if val:
-                        self.send_header(h, val)
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-            except OSError as exc:
+                mime = response.getheader("Content-Type", "")
+                if mime.startswith("text/event-stream"):
+                    # Streaming responses MUST be forwarded as they arrive.
+                    # Reading to EOF first makes an SSE channel unusable.
+                    self.send_response(response.status)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Cache-Control", "no-cache, no-transform")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.close_connection = True
+                    while True:
+                        line = response.fp.readline()
+                        if not line:
+                            break
+                        self.wfile.write(line)
+                        self.wfile.flush()
+                else:
+                    payload = response.read()
+                    self.send_response(response.status)
+                    for h in ("Content-Type", "Cache-Control"):
+                        val = response.getheader(h)
+                        if val:
+                            self.send_header(h, val)
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+            except (OSError, TimeoutError, BrokenPipeError, ConnectionResetError) as exc:
                 self.send_error(502, "E2E API unavailable: " + str(exc))
             finally:
                 conn.close()

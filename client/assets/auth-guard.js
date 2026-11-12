@@ -83,7 +83,7 @@
     let value = esc(raw);
     value = value.replace(/\x60([^\x60\n]+)\x60/g, (_, v) => "<code>" + v + "</code>");
     value = value.replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)<]{1,1000})\)/g,
-      (_, label, url) => '<a href="' + url.replace(/&amp;/g, "&") +
+      (_, label, url) => '<a href="' + url +
         '" target="_blank" rel="noopener noreferrer nofollow">' + label + "</a>");
     return value.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")

@@ -1,6 +1,6 @@
 //! Private ticket attachments: allowlisted raster formats, magic-byte checks,
 //! scoped filenames, bounded uploads and an authenticated read route.
-use axum::{Extension,body::Bytes,extract::{Path,State},http::{StatusCode,header},response::{IntoResponse,Response},Json};
+use axum::{Extension,body::Bytes,extract::{Path,State},http::{StatusCode,header,HeaderValue},response::{IntoResponse,Response},Json};
 use sea_orm::{ActiveModelTrait,ActiveValue::Set,EntityTrait};
 use uuid::Uuid;
 use crate::{entities::{ticket,ticket_message},middleware::CurrentRole,
@@ -60,9 +60,10 @@ pub async fn download(
     let path=format!("data/ticket-uploads/{ticket_id}/{name}");
     let data=tokio::fs::read(path).await.map_err(|_|StatusCode::NOT_FOUND)?;
     if data.len()>LIMIT{return Err(StatusCode::NOT_FOUND);}
-    Ok(([(header::CONTENT_TYPE,mime),
-         (header::CACHE_CONTROL,"private, no-store"),
-         (header::X_CONTENT_TYPE_OPTIONS,"nosniff")],data).into_response())
+    let mut response=([(header::CONTENT_TYPE,mime),
+         (header::CACHE_CONTROL,"private, no-store")],data).into_response();
+    response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS,HeaderValue::from_static("nosniff"));
+    Ok(response)
 }
 #[cfg(test)]
 mod tests{

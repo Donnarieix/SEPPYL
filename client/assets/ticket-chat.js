@@ -3,7 +3,16 @@
 (() => {
   if (window.__seppylTicketChatInstalled) return;
   window.__seppylTicketChatInstalled = true;
-  const readToken = () => { try { return localStorage.getItem("seppyl.session.v1") || ""; } catch { return ""; } };
+  const readToken = () => {
+    try {
+      // gloo-storage JSON-encodes Strings; localStorage returns the quoted JSON.
+      const stored = localStorage.getItem("seppyl.session.v1") || "";
+      if (!stored) return "";
+      try { const decoded = JSON.parse(stored); if (typeof decoded === "string") return decoded; }
+      catch {}
+      return stored;
+    } catch { return ""; }
+  };
   const connections = new WeakMap(), rendered = new WeakMap(), loaded = new WeakMap(), timers = new WeakMap();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const esc = value => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")

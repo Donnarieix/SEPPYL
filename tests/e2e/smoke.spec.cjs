@@ -139,7 +139,7 @@ test('tickets and Maintainer announcement tab render in Chromium without browser
   await page.getByRole('button',{name:/Nouveau ticket/}).click();
   await page.getByRole('dialog').locator('input[maxlength="160"]').fill('Incident de test E2E');
   await page.getByRole('dialog').locator('textarea').fill('Rapport synthétique E2E');
-  await page.getByRole('dialog').getByRole('button',{name:'Envoyer'}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Créer le ticket'}).click();
   await expect(page).toHaveURL(/\/tickets\/[\w-]+$/);
   await expect(page.getByText('Rapport synthétique E2E')).toBeVisible();
   await page.goto('/matches');
@@ -337,6 +337,32 @@ test('ticket composer and custom checkbox controls respect dark theme',async ({p
   await expect(checkbox).toBeVisible();
   const custom=await checkbox.evaluate(node=>getComputedStyle(node).appearance);
   expect(custom).toBe('none');
+});
+
+
+test('live support conversation streams messages and typing without navigation',async ({page,request})=>{
+  const account=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  expect(account.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await account.json()).token};
+  const opened=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Conversation SSE E2E',message:'Bonjour, besoin d’aide'}});
+  expect(opened.status()).toBe(201);
+  const id=(await opened.json()).id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect(page.locator('[data-ticket-live-status]')).toHaveText('En direct',{timeout:20000});
+  const typing=await request.post('/api/tickets/'+id+'/typing',{headers:user,data:{typing:true}});
+  expect(typing.status()).toBe(204);
+  await expect(page.locator('.ticket-typing-indicator')).toContainText('fixture-user',{timeout:10000});
+  const reply=await request.post('/api/tickets/'+id+'/messages',{
+    headers:user,data:{message:'**Le message arrive immédiatement** 😃'}});
+  expect(reply.status()).toBe(201);
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('Le message arrive immédiatement',{timeout:12000});
+  await expect(page.locator('.ticket-chat-markdown strong').last()).toHaveText('Le message arrive immédiatement');
 });
 
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{

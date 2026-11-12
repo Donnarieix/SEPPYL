@@ -193,18 +193,62 @@ pub fn TicketDetail(id:String)->Element{
                                         }
                                     }
                                 }
-                                div{class:"ticket-chat-presence",
-                                    span{class:"ticket-presence-dot"}
-                                    span{"data-ticket-live-status":"true","Connexion…"}
+                                // Live transport state is exposed to assistive tech, not as a
+                                // distracting "En direct" item in the conversation header.
+                                span{class:"ticket-live-a11y","data-ticket-live-status":"true","Connexion…"}
+                                if is_staff {
+                                    div{class:"ticket-chat-admin","aria-label":"Gestion du ticket",
+                                        div{class:"ticket-admin-status",
+                                            label{r#for:"ticket-status-select","Statut"}
+                                            select{id:"ticket-status-select",
+                                                value:"{status}",
+                                                onchange:move |e|status.set(e.value()),
+                                                option{value:"","{status_label(&current.ticket.status)}"}
+                                                option{value:"open","Ouvert"}
+                                                option{value:"in_progress","En cours"}
+                                                option{value:"resolved","Résolu"}
+                                                option{value:"closed","Fermé"}
+                                            }
+                                        }
+                                        label{class:"ticket-admin-maintainer",
+                                            title:"Signaler que le ticket nécessite un Maintainer",
+                                            input{r#type:"checkbox",
+                                                checked:escalation.read().unwrap_or(current.ticket.maintainer_required),
+                                                onchange:move |e|escalation.set(Some(e.checked()))}
+                                            span{"Maintainer"}
+                                        }
+                                        button{r#type:"button",class:"button solid ticket-admin-save",
+                                            disabled:*busy.read(),
+                                        onclick:{
+                                            let token=token.clone();let id=id.clone();
+                                            let current_status=current.ticket.status.clone();
+                                            let current_flag=current.ticket.maintainer_required;
+                                            move |_|{
+                                                if *busy.read(){return;}
+                                                let t=token.clone();let id=id.clone();
+                                                let next=status.read().clone();
+                                                let flag=escalation.read().unwrap_or(current_flag);
+                                                let actual=if next.is_empty(){current_status.clone()}else{next};
+                                                busy.set(true);
+                                                spawn(async move{
+                                                    match tickets::status(&t,&id,&actual,flag).await{
+                                                        Ok(())=>{detail.restart();error.set(None);},
+                                                        Err(e)=>error.set(Some(e))
+                                                    }
+                                                    busy.set(false);
+                                                });
+                                            }
+                                        }
+                                            ,"Appliquer"
+                                        }
+                                    }
                                 }
                             }
                             div{class:"ticket-chat-feed",role:"log","aria-label":"Messages du ticket","aria-live":"polite",
                                 for msg in current.messages{
                                     article{key:"{msg.id}",
-                                        class:if msg.author_id==current_user{"ticket-chat-message own"}else{"ticket-chat-message"},
-                                        div{class:"ticket-chat-avatar",
-                                            if msg.author_id==current_user{"V"}else if is_staff{"D"}else{"S"}
-                                        }
+                                        class:if msg.author_id==current_user{"ticket-chat-message ticket-message own"}else{"ticket-chat-message ticket-message"},
+                                        "data-message-id":"{msg.id}",
                                         div{class:"ticket-chat-content",
                                             div{class:"ticket-chat-meta",
                                                 strong{
@@ -229,14 +273,14 @@ pub fn TicketDetail(id:String)->Element{
                                         }
                                     }
                                 }
-                            }
-                            div{class:"ticket-chat-composer",
                                 if let Some(name)=peer_typing.read().as_ref(){
                                     div{class:"ticket-typing-indicator",role:"status",
                                         span{class:"typing-dots",i{} i{} i{}}
                                         "{name} est en train d'écrire…"
                                     }
                                 }
+                            }
+                            div{class:"ticket-chat-composer",
                                 if current.ticket.status!="closed" || is_staff{
                                     form{class:"ticket-message-form",
                                         onsubmit:{
@@ -257,30 +301,36 @@ pub fn TicketDetail(id:String)->Element{
                                             }
                                         },
                                         div{class:"ticket-composer-surface",
-                                            textarea{rows:"3",maxlength:"10000","aria-label":"Écrire un message",
+                                            label{class:"ticket-chat-tool ticket-add-attachment",
+                                                title:"Joindre une image","aria-label":"Joindre une image",
+                                                span{"+"}
+                                                input{r#type:"file","data-ticket-attach-input":"true",
+                                                    accept:"image/png,image/jpeg,image/webp,image/gif"}
+                                            }
+                                            textarea{rows:"1",maxlength:"10000","aria-label":"Écrire un message",
                                                 "data-ticket-composer":"true",
                                                 placeholder:"Écrire un message…",
                                                 value:"{reply}",
                                                 oninput:move |e|reply.set(e.value())}
-                                            div{class:"ticket-composer-toolbar",
-                                                div{class:"ticket-compose-tools",
-                                                    label{class:"ticket-chat-tool",title:"Joindre une image",
-                                                        "aria-label":"Joindre une image",
-                                                        span{"＋"}
-                                                        input{r#type:"file","data-ticket-attach-input":"true",
-                                                            accept:"image/png,image/jpeg,image/webp,image/gif"}
-                                                    }
-                                                    button{r#type:"button",class:"ticket-chat-tool",title:"Émojis",
-                                                        "aria-label":"Insérer un émoji",
-                                                        onclick:move |_|{let next=!*emoji_open.read();emoji_open.set(next);},"☺"}
-                                                    button{r#type:"button",class:"ticket-chat-tool",title:"Gras Markdown",
-                                                        onclick:move |_|reply.set(format!("{}**texte**",reply.read().as_str())),"B"}
-                                                    button{r#type:"button",class:"ticket-chat-tool",title:"Italique Markdown",
-                                                        onclick:move |_|reply.set(format!("{}*texte*",reply.read().as_str())),"I"}
+                                            button{r#type:"button",class:"ticket-chat-tool ticket-emoji-toggle",
+                                                title:"Insérer un émoji","aria-label":"Insérer un émoji",
+                                                onclick:move |_|{let next=!*emoji_open.read();emoji_open.set(next);},
+                                                svg{width:"22",height:"22",view_box:"0 0 24 24",
+                                                    fill:"none",stroke:"currentColor",stroke_width:"1.8",
+                                                    stroke_linecap:"round",stroke_linejoin:"round",
+                                                    circle{cx:"12",cy:"12",r:"9"}
+                                                    path{d:"M8 14s1.5 2 4 2 4-2 4-2"}
+                                                    path{d:"M9 9h.01M15 9h.01"}
                                                 }
-                                                button{class:"button solid ticket-send-button",r#type:"submit",
-                                                    disabled:*busy.read()||reply.read().trim().is_empty(),
-                                                    if *busy.read(){"Envoi…"}else{"Envoyer"}
+                                            }
+                                            button{r#type:"submit",class:"ticket-send-icon",
+                                                title:"Envoyer le message","aria-label":"Envoyer",
+                                                disabled:*busy.read()||reply.read().trim().is_empty(),
+                                                svg{width:"20",height:"20",view_box:"0 0 24 24",
+                                                    fill:"none",stroke:"currentColor",stroke_width:"1.9",
+                                                    stroke_linecap:"round",stroke_linejoin:"round",
+                                                    path{d:"m22 2-7 20-4-9-9-4Z"}
+                                                    path{d:"M22 2 11 13"}
                                                 }
                                             }
                                         }
@@ -303,54 +353,6 @@ pub fn TicketDetail(id:String)->Element{
                                     }
                                 }else{
                                     div{class:"ticket-conversation-closed","Ce ticket est fermé."}
-                                }
-                            }
-                        }
-                        if is_staff{
-                            section{class:"panel ticket-moderation",
-                                div{class:"panel-head",
-                                    div{h2{"Gestion du ticket"}p{"Suivi visible par le demandeur."}}
-                                }
-                                div{class:"ticket-moderation-controls",
-                                    div{class:"field",
-                                        label{"Statut"}
-                                        select{value:"{status}",onchange:move |e|status.set(e.value()),
-                                            option{value:"","Conserver : {status_label(&current.ticket.status)}"}
-                                            option{value:"open","Ouvert"}
-                                            option{value:"in_progress","En cours"}
-                                            option{value:"resolved","Résolu"}
-                                            option{value:"closed","Fermé"}
-                                        }
-                                    }
-                                    label{class:"seppyl-switch-row",
-                                        span{strong{"Intervention Maintainer"}
-                                            small{"Signaler que ce ticket nécessite un Maintainer."}}
-                                        input{r#type:"checkbox",
-                                            checked:escalation.read().unwrap_or(current.ticket.maintainer_required),
-                                            onchange:move |e|escalation.set(Some(e.checked()))}
-                                    }
-                                    button{class:"button outline",r#type:"button",disabled:*busy.read(),
-                                        onclick:{
-                                            let token=token.clone();let id=id.clone();
-                                            let current_status=current.ticket.status.clone();
-                                            let current_flag=current.ticket.maintainer_required;
-                                            move |_|{
-                                                if *busy.read(){return;}
-                                                let t=token.clone();let id=id.clone();
-                                                let next=status.read().clone();
-                                                let flag=escalation.read().unwrap_or(current_flag);
-                                                let actual=if next.is_empty(){current_status.clone()}else{next};
-                                                busy.set(true);
-                                                spawn(async move{
-                                                    match tickets::status(&t,&id,&actual,flag).await{
-                                                        Ok(())=>{detail.restart();error.set(None);},
-                                                        Err(e)=>error.set(Some(e))
-                                                    }
-                                                    busy.set(false);
-                                                });
-                                            }
-                                        },"Enregistrer"
-                                    }
                                 }
                             }
                         }

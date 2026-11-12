@@ -373,6 +373,65 @@ test('live support conversation streams messages and typing without navigation',
   await expect(page.locator('.ticket-chat-markdown strong').last()).toHaveText('Le message arrive immédiatement');
 });
 
+
+test('ticket chat uses compact composer, inline controls and follows new messages',async ({page,request})=>{
+  const supportAuth=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(supportAuth.status()).toBe(200);
+  const support={Authorization:'Bearer '+(await supportAuth.json()).token};
+  const memberAuth=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  expect(memberAuth.status()).toBe(200);
+  const member={Authorization:'Bearer '+(await memberAuth.json()).token};
+  const created=await request.post('/api/tickets',{headers:member,
+    data:{subject:'Chat compact et défilement',message:'Première conversation'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  for(let i=0;i<11;i++){
+    expect((await request.post('/api/tickets/'+id+'/messages',{
+      headers:member,data:{message:'Historique '+i+' : '+('Contenu de la conversation. '.repeat(11))}
+    })).status()).toBe(201);
+  }
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  const feed=page.locator('.ticket-chat-feed');
+  await expect(feed).toBeVisible();
+  expect(await page.locator('.ticket-chat-avatar').count()).toBe(0);
+  await expect(page.locator('.ticket-chat-admin')).toBeVisible();
+  expect(await page.locator('.ticket-moderation').count()).toBe(0);
+  expect(await page.locator('[data-ticket-live-status]').isVisible()).toBe(false);
+  const surface=page.locator('.ticket-composer-surface');
+  await expect(surface).toBeVisible();
+  const children=await surface.locator(':scope > *').evaluateAll(nodes=>nodes.map(node=>node.tagName.toLowerCase()));
+  expect(children).toEqual(['label','textarea','button','button']);
+  expect(await page.getByRole('button',{name:'Gras Markdown'}).count()).toBe(0);
+  expect(await page.getByRole('button',{name:'Italique Markdown'}).count()).toBe(0);
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(0);
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  const incoming=await request.post('/api/tickets/'+id+'/messages',{
+    headers:member,data:{message:'Message reçu après ouverture du chat'}});
+  expect(incoming.status()).toBe(201);
+  await expect(feed.getByText('Message reçu après ouverture du chat')).toBeVisible({timeout:12000});
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  const editor=page.locator('[data-ticket-composer]');
+  await editor.fill('Bonjour depuis le clavier');
+  await editor.press('Enter');
+  await expect(feed.getByText('Bonjour depuis le clavier')).toBeVisible();
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  await editor.fill('Ligne 1');
+  await editor.press('Shift+Enter');
+  await editor.type('Ligne 2');
+  await expect(editor).toHaveValue('Ligne 1\\nLigne 2');
+  await page.locator('.ticket-emoji-toggle').click();
+  await expect(page.getByRole('group',{name:'Choisir un émoji'})).toBeVisible();
+  const typing=await request.post('/api/tickets/'+id+'/typing',{headers:member,data:{typing:true}});
+  expect(typing.status()).toBe(204);
+  await expect(feed.locator('.ticket-typing-indicator')).toContainText('fixture-user',{timeout:12000});
+  expect(await page.locator('.ticket-chat-composer .ticket-typing-indicator').count()).toBe(0);
+});
+
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
   const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   expect(response.status()).toBe(200);

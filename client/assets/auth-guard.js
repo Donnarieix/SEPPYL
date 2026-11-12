@@ -75,7 +75,7 @@
       return stored;
     } catch { return ""; }
   };
-  const connections = new WeakMap(), rendered = new WeakMap(), loaded = new WeakMap(), timers = new WeakMap();
+  const connections = new WeakMap(), rendered = new WeakMap(), loaded = new WeakMap(), timers = new WeakMap(), feeds = new WeakMap();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const esc = value => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -180,10 +180,37 @@
         loaded.delete(node);
       }
     });
+    // Follow the latest message on opening the conversation and on new
+    // messages. Keep the scroll position when someone is reading older posts;
+    // outgoing messages always return to the bottom.
     const feed = root.querySelector(".ticket-chat-feed");
-    if (feed && !feed.dataset.initialized) {
-      feed.dataset.initialized = "true";
-      feed.scrollTop = feed.scrollHeight;
+    if (feed) {
+      let tracked = feeds.get(feed);
+      const messages = feed.querySelectorAll("[data-message-id]");
+      const latest = messages[messages.length - 1];
+      const lastId = latest?.getAttribute("data-message-id") || "";
+      const typing = !!feed.querySelector(".ticket-typing-indicator");
+      if (!tracked) {
+        tracked = { lastId, typing, pinned: true };
+        feeds.set(feed, tracked);
+        feed.addEventListener("scroll", () => {
+          const distance = feed.scrollHeight - feed.scrollTop - feed.clientHeight;
+          tracked.pinned = distance < 90;
+        }, { passive: true });
+        feed.scrollTop = feed.scrollHeight;
+      } else {
+        const newMessage = lastId && lastId !== tracked.lastId;
+        const typingAppeared = typing && !tracked.typing;
+        const outgoing = newMessage && latest.classList.contains("own");
+        const shouldScroll = (newMessage || typingAppeared) &&
+          (tracked.pinned || outgoing);
+        tracked.lastId = lastId;
+        tracked.typing = typing;
+        if (shouldScroll) {
+          feed.scrollTop = feed.scrollHeight;
+          tracked.pinned = true;
+        }
+      }
     }
   }
   async function sendTyping(root, typing) {
@@ -269,9 +296,21 @@
       if (statusNode) statusNode.textContent = "Échec de l'envoi. Réessayez.";
     }
   }
+  // Enter sends; Shift+Enter inserts a newline. IME composition is never sent.
+  document.addEventListener("keydown", event => {
+    if (!event.target.matches?.("[data-ticket-composer]")) return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing ||
+        event.ctrlKey || event.altKey || event.metaKey) return;
+    event.preventDefault();
+    if (event.target.value.trim()) event.target.closest("form")?.requestSubmit();
+  });
   document.addEventListener("input", event => {
-    const root = event.target.closest?.(".ticket-chat");
-    if (root && event.target.matches("[data-ticket-composer]")) onTyping(root);
+    const input = event.target;
+    const root = input.closest?.(".ticket-chat");
+    if (!root || !input.matches("[data-ticket-composer]")) return;
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 150) + "px";
+    onTyping(root);
   });
   document.addEventListener("focusout", event => {
     const root = event.target.closest?.(".ticket-chat");
@@ -300,6 +339,10 @@
         });
       }
       decorate(root);
+      const composer = root.querySelector("[data-ticket-composer]");
+      if (composer && !composer.value && composer.style.height) {
+        composer.style.height = "";
+      }
     });
   };
   const observer = new MutationObserver(attachPendingChats);

@@ -36,6 +36,10 @@ pub async fn stream(
     tickets::access(&state,&claims,role.0,ticket_id).await?;
     let mut events=channel().subscribe();
     let (tx,rx)=mpsc::channel::<Result<Event,Infallible>>(32);
+    // Flush SSE headers immediately; waiting for keep-alives delays the UI.
+    let _=tx.send(Ok(Event::default().event("ticket")
+        .data(r#"{"kind":"connected"}"#))).await;
+
     tokio::spawn(async move{
         let expiration=tokio::time::sleep(Duration::from_secs(115));
         tokio::pin!(expiration);

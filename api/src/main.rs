@@ -1,6 +1,9 @@
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
+    extract::Request,
+    middleware::Next,
+    response::Response,
     middleware as axum_middleware,
     routing::{delete, get, post, put},
 };
@@ -162,6 +165,7 @@ async fn main() {
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Apply CORS after merging, so it covers protected routes too.
         .layer(cors)
+        .layer(axum_middleware::from_fn(nosniff))
         .with_state(state);
 
     // The deployed systemd service provides SEPPYL_BIND=127.0.0.1:3101;
@@ -173,6 +177,14 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+
+// Enforce safe MIME handling across API responses, including private media.
+async fn nosniff(request:Request,next:Next)->Response{
+    let mut response=next.run(request).await;
+    response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"));
+    response
+}
 
 // A browser's Origin header must match the exact local hostname and (optional)
 // numeric port. Prefix matching alone would also allow localhost.evil.example.

@@ -48,7 +48,7 @@ pub fn AnnouncementManager()->Element{
                     if let Some(e)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{e}"}}
                     section{class:"panel",
                         div{class:"panel-head",h2{"Nouvelle annonce"}
-                            p{"Le bandeau global apparaît uniquement pour les annonces urgentes publiées."}}
+                            p{"Chaque annonce publiée et active apparaît en haut de toutes les pages."}}
                         form{onsubmit:{
                             let t=token.clone();
                             move |event|{

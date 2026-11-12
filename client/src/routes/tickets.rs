@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::{tickets,account};
+use std::collections::HashMap;
 use super::{Route,layout::Header};
 
 fn status_label(value:&str)->&str{
@@ -14,6 +15,23 @@ pub fn Tickets()->Element{
     let navigator=use_navigator();
     let t=token.clone();
     let mut list=use_resource(move ||{let t=t.clone();async move{tickets::list(&t).await}});
+    let u=token.clone();
+    let mut unread=use_resource(move ||{let u=u.clone();async move{tickets::unread(&u).await}});
+    let owner_token=token.clone();
+    let account=use_resource(move ||{let t=owner_token.clone();async move{account::get(&t).await}});
+    let is_staff=matches!(account.read().as_ref(),Some(Ok(a)) if a.role=="administrator"||a.role=="maintainer");
+    let pending=unread.read().as_ref().and_then(|r|r.as_ref().ok())
+        .map(|r|r.tickets.iter().map(|item|(item.ticket_id.clone(),item.count))
+            .collect::<HashMap<_,_>>()).unwrap_or_default();
+    let mut list_poll=list;
+    let mut unread_poll=unread;
+    use_future(move ||async move{
+        loop{
+            gloo_timers::future::TimeoutFuture::new(20_000).await;
+            list_poll.restart();
+            unread_poll.restart();
+        }
+    });
     let mut subject=use_signal(String::new);
     let mut message=use_signal(String::new);
     let mut creating=use_signal(||false);
@@ -21,9 +39,9 @@ pub fn Tickets()->Element{
     let mut notice=use_signal(||None::<String>);
     rsx!{
         div{class:"app",Header{},
-            main{class:"page workspace-page",
+            main{class:"page workspace-page tickets-page",
                 div{class:"page-heading",
-                    div{h1{"Mes tickets"}p{"Suivez vos demandes et échangez avec l'équipe de support."}}
+                    div{h1{if is_staff{"Tous les tickets"}else{"Mes tickets"}}p{"Suivez vos demandes et échangez avec l'équipe de support."}}
                     button{class:"button solid",onclick:move |_|creating.set(true),"+ Nouveau ticket"}
                 }
                 if let Some(n)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{n}"}}
@@ -37,8 +55,13 @@ pub fn Tickets()->Element{
                                     div{strong{"{ticket.subject}"}
                                         span{class:"muted-small"," · {status_label(&ticket.status)}"}
                                     }
-                                    if ticket.maintainer_required {
-                                        span{class:"ticket-escalation","Maintainer"}
+                                    div{class:"ticket-row-meta",
+                                        if ticket.maintainer_required {
+                                            span{class:"ticket-escalation","Maintainer"}
+                                        }
+                                        if let Some(count)=pending.get(&ticket.id){
+                                            span{class:"ticket-row-unread",title:"Messages non lus","{count} nouveau(x)"}
+                                        }
                                     }
                                 }
                             }
@@ -137,12 +160,13 @@ pub fn TicketDetail(id:String)->Element{
                         section{class:"panel",aria_label:"Conversation du ticket",
                             div{class:"ticket-conversation",
                                 for msg in current.messages{
-                                    article{class:"ticket-message",key:"{msg.id}",
+                                    article{class:if user.read().as_ref().is_some_and(|v|v.as_ref().is_ok_and(|a|a.id==msg.author_id)){"ticket-message is-own"}else{"ticket-message"},key:"{msg.id}",
                                         strong{if msg.author_id==current.ticket.author_id{"Demandeur"}else{"Équipe support"}}
                                         p{"{msg.message}"}
                                     }
                                 }
                             }
+                            if current.ticket.status!="closed" || is_staff {
                             form{onsubmit:{
                                 let t=token.clone();let id=id.clone();
                                 move |event|{
@@ -165,6 +189,7 @@ pub fn TicketDetail(id:String)->Element{
                                         oninput:move |e|reply.set(e.value())}}
                                 button{class:"button solid",r#type:"submit",disabled:*busy.read(),"Envoyer la réponse"}
                             }
+                            }else{p{class:"muted-small","Ce ticket est fermé. Vous ne pouvez plus y répondre."}}
                         }
                         if is_staff {
                             section{class:"panel",

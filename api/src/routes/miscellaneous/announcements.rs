@@ -41,7 +41,7 @@ pub async fn all(
 pub async fn create(
     Extension(role):Extension<CurrentRole>,State(state):State<AppState>,Json(p):Json<Payload>,
 )->R<(StatusCode,Json<announcement::Model>)>{
-    if !role.0.is_admin(){return Err(StatusCode::FORBIDDEN);}
+    if role.0!=Role::Maintainer{return Err(StatusCode::FORBIDDEN);}
     if !valid(&p){return Err(StatusCode::BAD_REQUEST);}
     let row=announcement::ActiveModel{
         id:Set(Uuid::new_v4()),title:Set(p.title.trim().to_owned()),
@@ -55,7 +55,7 @@ pub async fn update(
     Extension(role):Extension<CurrentRole>,State(state):State<AppState>,
     Path(id):Path<Uuid>,Json(p):Json<Payload>,
 )->R<StatusCode>{
-    if !role.0.is_admin(){return Err(StatusCode::FORBIDDEN);}
+    if role.0!=Role::Maintainer{return Err(StatusCode::FORBIDDEN);}
     if !valid(&p){return Err(StatusCode::BAD_REQUEST);}
     let row=announcement::Entity::find_by_id(id).one(&state.db).await.map_err(err)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -69,7 +69,7 @@ pub async fn update(
 pub async fn remove(
     Extension(role):Extension<CurrentRole>,State(state):State<AppState>,Path(id):Path<Uuid>,
 )->R<StatusCode>{
-    if !role.0.is_admin(){return Err(StatusCode::FORBIDDEN);}
+    if role.0!=Role::Maintainer{return Err(StatusCode::FORBIDDEN);}
     let result=announcement::Entity::delete_by_id(id).exec(&state.db).await.map_err(err)?;
     if result.rows_affected==0{return Err(StatusCode::NOT_FOUND);}
     Ok(StatusCode::NO_CONTENT)

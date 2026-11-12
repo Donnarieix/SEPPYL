@@ -235,7 +235,7 @@ test('ticket unread notifications are scoped, persistent, and clear upon reading
 test('Administrators can manage tickets but not service announcements',async ({request})=>{
   const owner=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   const ownerHeaders={Authorization:'Bearer '+(await owner.json()).token};
-  const username='admin-announcement-e2e';
+  const username='admin-announcement-'+require('node:crypto').randomUUID().slice(0,12);
   const password='admin-announcement-password-2026';
   expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
   const userLogin=await request.post('/api/login',{data:{username,password}});

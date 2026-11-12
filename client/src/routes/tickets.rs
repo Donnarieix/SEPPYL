@@ -60,7 +60,7 @@ pub fn Tickets()->Element{
                                             span{class:"ticket-escalation","Maintainer"}
                                         }
                                         if let Some(count)=pending.get(&ticket.id){
-                                            span{class:"ticket-row-unread",title:"Messages non lus","{count} nouveau(x)"}
+                                            span{class:"ticket-row-unread",title:"Messages non lus","{count} non lu(s)"}
                                         }
                                     }
                                 }

@@ -1,9 +1,9 @@
 //! Private support tickets. Ownership and staff role are checked at every read/write.
 use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
-use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder,TransactionTrait};
+use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder,TransactionTrait,ConnectionTrait,Statement,DbBackend};
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::{HashMap,HashSet};
 use crate::{
     entities::{ticket,ticket_message,ticket_read},
     middleware::{CurrentRole,Role},
@@ -68,23 +68,18 @@ pub async fn unread(
         .filter(ticket_read::COLUMN.user_id.eq(claims.sub))
         .filter(ticket_read::COLUMN.ticket_id.is_in(ids.clone()))
         .all(&state.db).await.map_err(db)?;
-    let seen=reads.into_iter().map(|r|(r.ticket_id,r.seen_count.max(0) as usize))
-        .collect::<HashMap<_,_>>();
+    let seen=reads.into_iter().map(|r|r.message_id).collect::<HashSet<_>>();
     let messages=ticket_message::Entity::find()
         .filter(ticket_message::COLUMN.ticket_id.is_in(ids))
         .order_by_asc(ticket_message::COLUMN.ticket_id)
         .order_by_asc(ticket_message::COLUMN.created_at)
         .order_by_asc(ticket_message::COLUMN.id)
         .all(&state.db).await.map_err(db)?;
-    let mut index=HashMap::<Uuid,usize>::new();
     let mut pending=HashMap::<Uuid,u64>::new();
     for message in messages{
-        let position=index.entry(message.ticket_id).or_default();
-        if *position >= seen.get(&message.ticket_id).copied().unwrap_or(0)
-            && message.author_id!=claims.sub {
+        if !seen.contains(&message.id) && message.author_id!=claims.sub {
             *pending.entry(message.ticket_id).or_default()+=1;
         }
-        *position+=1;
     }
     let mut tickets=pending.into_iter().map(|(ticket_id,count)|UnreadTicket{ticket_id,count})
         .collect::<Vec<_>>();
@@ -125,21 +120,19 @@ pub async fn get(
         .order_by_asc(ticket_message::COLUMN.created_at)
         .order_by_asc(ticket_message::COLUMN.id)
         .all(&state.db).await.map_err(db)?;
-    // Reading an authorized conversation marks exactly the fetched messages as seen.
-    // Cursors use a count, never second-resolution timestamps, so rapid replies are safe.
-    match ticket_read::Entity::find_by_id((claims.sub,id)).one(&state.db).await.map_err(db)?{
-        Some(read)=>{
-            if read.seen_count < messages.len() as i64{
-                let mut active:ticket_read::ActiveModel=read.into();
-                active.seen_count=Set(messages.len() as i64);
-                active.update(&state.db).await.map_err(db)?;
-            }
-        },
-        None=>{
-            ticket_read::ActiveModel{
-                user_id:Set(claims.sub),ticket_id:Set(id),
-                seen_count:Set(messages.len() as i64),..Default::default()
-            }.insert(&state.db).await.map_err(db)?;
+    // Persist a receipt for each fetched message. UUIDs and timestamps do
+    // not determine read order, so replies in the same second are safe.
+    let seen=ticket_read::Entity::find()
+        .filter(ticket_read::COLUMN.user_id.eq(claims.sub))
+        .filter(ticket_read::COLUMN.ticket_id.eq(id))
+        .all(&state.db).await.map_err(db)?;
+    let known=seen.into_iter().map(|r|r.message_id).collect::<HashSet<_>>();
+    for message in &messages{
+        if !known.contains(&message.id){
+            state.db.execute(Statement::from_sql_and_values(DbBackend::Sqlite,
+                "INSERT OR IGNORE INTO support_ticket_reads (user_id, message_id, ticket_id) VALUES (?, ?, ?)",
+                vec![claims.sub.into(),message.id.into(),id.into()]
+            )).await.map_err(db)?;
         }
     }
     Ok(Json(TicketDetail{ticket:row,messages}))

@@ -1,4 +1,4 @@
-//! Per-account ticket read receipts. Message-count cursors avoid timestamp collisions.
+//! Per-account, per-message read receipts. Independent of timestamps or UUID ordering.
 use sea_orm::entity::prelude::*;
 use sea_orm::DeriveEntityModel;
 #[sea_orm::model]
@@ -8,7 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key,auto_increment=false)]
     pub user_id:Uuid,
     #[sea_orm(primary_key,auto_increment=false)]
+    pub message_id:Uuid,
     pub ticket_id:Uuid,
-    pub seen_count:i64,
 }
 impl ActiveModelBehavior for ActiveModel {}

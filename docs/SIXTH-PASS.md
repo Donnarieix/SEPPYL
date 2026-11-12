@@ -40,7 +40,7 @@ La notification est « best effort », avec délai réseau limité, sur créatio
 
 ## Annonces
 
-Les annonces ne sont pas des changelogs. Elles comportent publication, début et fin de validité en timestamps Unix et un drapeau urgent. Seuls les administrateurs et maintainer peuvent les publier ou supprimer. Le bandeau global affiche exclusivement les annonces urgentes, publiées et actives. Le flux « Nouveautés » peut afficher toutes les annonces publiées ; l'historique des versions reste séparé.
+Les annonces ne sont pas des changelogs. Elles comportent publication, début et fin de validité en timestamps Unix et un drapeau urgent. Seuls les administrateurs et maintainer peuvent les publier ou supprimer. Le bandeau global affiche exclusivement les annonces urgentes, publiées et actives. Le bouton « Nouveautés » ouvre l'historique des versions, jamais une liste d'annonces. Les annonces publiées et actives sont uniquement diffusées par le bandeau global. Leur gestion est réservée aux Maintainers depuis l'onglet Administration.
 
 ## CI et livraison
 

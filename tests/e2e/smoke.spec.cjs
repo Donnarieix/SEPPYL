@@ -303,9 +303,12 @@ test('private ticket image upload, file isolation and typing permissions',async 
   const script=await request.post('/api/tickets/'+id+'/images',{
     headers:{...user,'Content-Type':'image/svg+xml'},data:Buffer.from('<svg onload=alert(1)>')});
   expect(script.status()).toBe(415);
+  // Axum/proxy may reject the body before Playwright finishes writing it.
   const uploadTooBig=await request.post('/api/tickets/'+id+'/images',{
-    headers:{...user,'Content-Type':'image/png'},data:Buffer.alloc(4*1024*1024+10)});
-  expect(uploadTooBig.status()).toBe(413);
+    headers:{...user,'Content-Type':'image/png'},data:Buffer.alloc(4*1024*1024+10)})
+    .then(response=>({status:response.status()}))
+    .catch(error=>({transportError:String(error)}));
+  expect(uploadTooBig.status===413 || /EPIPE|ECONNRESET|socket hang up/.test(uploadTooBig.transportError||'')).toBe(true);
   const userTyping=await request.post('/api/tickets/'+id+'/typing',{
     headers:user,data:{typing:true}});
   expect(userTyping.status()).toBe(204);
@@ -360,6 +363,7 @@ test('live support conversation streams messages and typing without navigation',
     hasChat:!!document.querySelector('.ticket-chat'),
     hasSession:!!localStorage.getItem('seppyl.session.v1'),
     base:document.querySelector('.ticket-chat')?.getAttribute('data-ticket-base'),
+    storage:localStorage.getItem('seppyl.session.v1')?.slice(0,20),
   }));
   expect(diagnostics.installed,'ticket chat script is installed').toBe(true);
   expect(diagnostics.hasChat,'chat DOM rendered').toBe(true);

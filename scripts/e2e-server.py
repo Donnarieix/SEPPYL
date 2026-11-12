@@ -51,10 +51,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.close_connection = True
                     while True:
-                        line = response.fp.readline()
-                        if not line:
+                        chunk = response.read1(4096)
+                        if not chunk:
                             break
-                        self.wfile.write(line)
+                        self.wfile.write(chunk)
                         self.wfile.flush()
                 else:
                     payload = response.read()

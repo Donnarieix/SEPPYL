@@ -162,7 +162,7 @@ pub fn Administration()->Element{
                                                 selected_user.set(id.clone());
                                                 role.set(user_role.clone());
                                                 show_lifecycle.set(false);
-                                                confirm_name.set(String::new);
+                                                confirm_name.set(String::new());
                                                 dependencies.set(None);
                                             }
                                         },

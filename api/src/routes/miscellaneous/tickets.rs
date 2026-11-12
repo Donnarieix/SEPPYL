@@ -95,6 +95,7 @@ pub async fn message(
     let mut active:ticket::ActiveModel=row.into();
     active.updated_at=Set(stamp);
     active.update(&state.db).await.map_err(db)?;
+    notify_discord(id,&format!("Nouveau message dans le ticket : {}",entry.ticket_id));
     Ok((StatusCode::CREATED,Json(entry)))
 }
 pub async fn status(

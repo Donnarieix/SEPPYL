@@ -63,6 +63,10 @@ pub fn Administration()->Element{
                 None=>Err("Connexion requise.".into())}}
         }
     });
+    let mut delete_mode=use_signal(||"transfer".to_string());
+    let mut confirm_name=use_signal(String::new);
+    let mut show_lifecycle=use_signal(||false);
+    let mut dependencies=use_signal(||None::<org::AccountDependencies>);
     let mut busy=use_signal(||false);
     let mut notice=use_signal(||None::<String>);
     if token.is_none(){
@@ -157,6 +161,9 @@ pub fn Administration()->Element{
                                             move |_|{
                                                 selected_user.set(id.clone());
                                                 role.set(user_role.clone());
+                                                show_lifecycle.set(false);
+                                                confirm_name.set(String::new);
+                                                dependencies.set(None);
                                             }
                                         },
                                         span{class:"admin-user-avatar","{user.username.chars().next().unwrap_or('?').to_uppercase()}"}
@@ -170,6 +177,7 @@ pub fn Administration()->Element{
                                                 "visitor"=>"Visiteur",
                                                 _=>"Utilisateur",
                                             }}}
+                                        if user.disabled{small{"Désactivé"}}
                                         span{class:"admin-user-arrow","›"}
                                     }
                                 }
@@ -228,6 +236,100 @@ pub fn Administration()->Element{
                                     }
                                 }
                                 p{class:"organization-note","Choisissez ensuite le club ou l'équipe à laquelle rattacher ce compte."}
+
+                                if is_maintainer && user.id != identity.read().as_ref().and_then(|v|v.as_ref().ok()).map(|a|a.id.clone()).unwrap_or_default() {
+                                    section{class:"panel account-lifecycle",
+                                        h3{"Gestion du compte"}
+                                        p{class:"organization-note","La désactivation coupe immédiatement les connexions et sessions existantes."}
+                                        button{r#type:"button",class:"button outline",disabled:*busy.read(),
+                                            onclick:{
+                                                let token=token.clone();let id=user.id.clone();let disabled=!user.disabled;
+                                                move |_|{
+                                                    if *busy.read(){return;}
+                                                    busy.set(true);
+                                                    let token=token.clone();let id=id.clone();
+                                                    spawn(async move{
+                                                        match org::set_account_disabled(&token,&id,disabled).await{
+                                                            Ok(())=>{users.restart();notice.set(Some(if disabled{"Compte désactivé.".into()}else{"Compte réactivé.".into()}));}
+                                                            Err(e)=>notice.set(Some(e)),
+                                                        }
+                                                        busy.set(false);
+                                                    });
+                                                }
+                                            },
+                                            if user.disabled{"Réactiver"}else{"Désactiver"}
+                                        }
+                                        button{r#type:"button",class:"button outline",disabled:*busy.read(),
+                                            onclick:{
+                                                let token=token.clone();let id=user.id.clone();
+                                                move |_|{
+                                                    let open=!*show_lifecycle.read();
+                                                    show_lifecycle.set(open);
+                                                    confirm_name.set(String::new());
+                                                    dependencies.set(None);
+                                                    if open {
+                                                        let token=token.clone();let id=id.clone();
+                                                        spawn(async move{
+                                                            match org::account_dependencies(&token,&id).await{
+                                                                Ok(d)=>dependencies.set(Some(d)),
+                                                                Err(e)=>notice.set(Some(e)),
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            },
+                                            if *show_lifecycle.read(){"Annuler"}else{"Supprimer le compte"}
+                                        }
+                                        if *show_lifecycle.read(){
+                                            div{class:"workspace-form",
+                                                h3{"Suppression définitive"}
+                                                p{"Les joueuses, clubs et équipes partagés seront conservés."}
+                                                if let Some(d)=dependencies.read().as_ref(){
+                                                    p{"{d.trainings} entraînement(s), {d.catalog_activities} activité(s), {d.tactical_diagrams} schéma(s), {d.matches_created} match(s), {d.tickets} ticket(s), {d.linked_players} joueuse(s) liée(s)."}
+                                                }else{p{"Analyse des données liées…"}}
+                                                div{class:"field",
+                                                    label{"Traitement des données personnelles"}
+                                                    select{value:"{delete_mode}",onchange:move |e|delete_mode.set(e.value()),
+                                                        option{value:"transfer","Réattribuer au Maintainer"}
+                                                        option{value:"delete","Supprimer les données personnelles"}
+                                                    }
+                                                }
+                                                p{class:"organization-note",
+                                                    if *delete_mode.read()=="delete"{
+                                                        "Les entraînements, activités, schémas et tickets personnels seront supprimés. Les matchs restent conservés pour les statistiques."
+                                                    }else{
+                                                        "Les entraînements, activités, schémas, tickets et créations seront réattribués."
+                                                    }
+                                                }
+                                                div{class:"field",
+                                                    label{"Saisir {user.username} pour confirmer"}
+                                                    input{r#type:"text",autocomplete:"off",value:"{confirm_name}",
+                                                        oninput:move |e|confirm_name.set(e.value())}
+                                                }
+                                                button{r#type:"button",class:"button solid",
+                                                    disabled:*busy.read()||dependencies.read().is_none()||*confirm_name.read()!=user.username,
+                                                    onclick:{
+                                                        let token=token.clone();let id=user.id.clone();let username=user.username.clone();
+                                                        move |_|{
+                                                            if *busy.read()||*confirm_name.read()!=username{return;}
+                                                            busy.set(true);
+                                                            let token=token.clone();let id=id.clone();let username=username.clone();let mode=delete_mode.read().clone();
+                                                            spawn(async move{
+                                                                match org::delete_account(&token,&id,&mode,&username).await{
+                                                                    Ok(())=>{users.restart();selected_user.set(String::new());show_lifecycle.set(false);notice.set(Some("Compte supprimé.".into()));}
+                                                                    Err(e)=>notice.set(Some(e)),
+                                                                }
+                                                                busy.set(false);
+                                                            });
+                                                        }
+                                                    },
+                                                    "Confirmer la suppression"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                             }
                         }
                     }else if *tab.read()=="memberships"{

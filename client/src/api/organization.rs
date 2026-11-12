@@ -36,7 +36,7 @@ pub fn logo_style(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->String {
         y as f32*(z-100) as f32/200.0,z as f32/100.0)
 }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
-pub struct User{pub id:String,pub username:String,pub role:String}
+pub struct User{pub id:String,pub username:String,pub role:String,#[serde(default)]pub disabled:bool}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct ClubMember{pub club_id:String,pub user_id:String,pub role:String}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
@@ -242,4 +242,28 @@ pub async fn public_roster(team_id:&str)->Result<Vec<crate::api::players::Player
         .send().await.map_err(|e|e.to_string())?;
     check(response.status())?;
     response.json().await.map_err(|e|e.to_string())
+}
+
+#[derive(Clone,Debug,Deserialize,PartialEq)]
+pub struct AccountDependencies {
+    pub trainings:u64,pub catalog_activities:u64,pub tactical_diagrams:u64,
+    pub matches_created:u64,pub tickets:u64,pub ticket_messages:u64,
+    pub linked_players:u64,pub club_memberships:u64,pub team_memberships:u64,
+}
+pub async fn account_dependencies(token:&str,id:&str)->Result<AccountDependencies,String>{
+    let r=Client::new().get(format!("{}/admin/users/{id}/dependencies",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}
+pub async fn set_account_disabled(token:&str,id:&str,disabled:bool)->Result<(),String>{
+    let r=Client::new().put(format!("{}/admin/users/{id}/status",base()))
+        .bearer_auth(token).json(&serde_json::json!({"disabled":disabled}))
+        .send().await.map_err(|e|e.to_string())?;
+    check(r.status())
+}
+pub async fn delete_account(token:&str,id:&str,mode:&str,confirmation:&str)->Result<(),String>{
+    let r=Client::new().delete(format!("{}/admin/users/{id}",base()))
+        .bearer_auth(token).json(&serde_json::json!({"mode":mode,"confirmation":confirmation}))
+        .send().await.map_err(|e|e.to_string())?;
+    check(r.status())
 }

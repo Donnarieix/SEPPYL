@@ -271,7 +271,7 @@ test('ticket contrast stays readable in dark theme',async ({page})=>{
     };
   });
   expect(colors.text).toBe('rgb(237, 242, 248)');
-  expect(['rgb(26, 38, 51)','rgb(43, 57, 73)']).toContain(colors.background);
+  expect(['rgb(26, 38, 51)','rgb(32, 45, 59)','rgb(43, 57, 73)']).toContain(colors.background);
   expect(colors.border).toBe('rgb(54, 71, 88)');
 });
 

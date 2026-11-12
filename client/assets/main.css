@@ -3310,3 +3310,6 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
   .site-root .ticket-chat-composer{padding:8px}
   .site-root .ticket-composer-surface{gap:2px}
 }
+
+/* The transport-status sentinel is for internal stream management only. */
+.site-root .ticket-live-a11y{display:none!important}

@@ -282,3 +282,50 @@ test('match event timeline and public-roster opt-in are enforced end to end',asy
   expect(fullStats.status()).toBe(200);
   expect((await fullStats.json()).training_minutes).toBe(95);
 });
+
+test('maintainer can disable, reactivate and delete accounts without allowing admin escalation', async ({request}) => {
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(staffLogin.status()).toBe(200);
+  const staffToken=(await staffLogin.json()).token;
+  const headers={Authorization:'Bearer '+staffToken};
+  const username='account-lifecycle-e2e';
+  const password='strong-password-lifecycle-2026';
+  const created=await request.post('/api/signup',{data:{username,password}});
+  expect(created.status()).toBe(200);
+  const memberLogin=await request.post('/api/login',{data:{username,password}});
+  expect(memberLogin.status()).toBe(200);
+  const userToken=(await memberLogin.json()).token;
+  const userHeaders={Authorization:'Bearer '+userToken};
+  const member=await request.get('/api/account',{headers:userHeaders});
+  expect(member.status()).toBe(200);
+  const id=(await member.json()).id;
+  const denied=await request.put('/api/admin/users/'+id+'/status',{headers:userHeaders,data:{disabled:true}});
+  expect(denied.status()).toBe(403);
+  const selfDelete=await request.delete('/api/admin/users/'+id,{
+    headers:userHeaders,data:{mode:'delete',confirmation:username}});
+  expect(selfDelete.status()).toBe(403);
+  const dependencies=await request.get('/api/admin/users/'+id+'/dependencies',{headers});
+  expect(dependencies.status()).toBe(200);
+  const summary=await dependencies.json();
+  expect(summary.trainings).toBe(0);
+  const disabled=await request.put('/api/admin/users/'+id+'/status',{headers,data:{disabled:true}});
+  expect(disabled.status()).toBe(204);
+  const blocked=await request.get('/api/account',{headers:userHeaders});
+  expect(blocked.status()).toBe(401);
+  const loginBlocked=await request.post('/api/login',{data:{username,password}});
+  expect(loginBlocked.status()).toBe(401);
+  const reenabled=await request.put('/api/admin/users/'+id+'/status',{headers,data:{disabled:false}});
+  expect(reenabled.status()).toBe(204);
+  const loginAgain=await request.post('/api/login',{data:{username,password}});
+  expect(loginAgain.status()).toBe(200);
+  const badConfirmation=await request.delete('/api/admin/users/'+id,{
+    headers,data:{mode:'transfer',confirmation:'wrong'}});
+  expect(badConfirmation.status()).toBe(400);
+  const removed=await request.delete('/api/admin/users/'+id,{
+    headers,data:{mode:'transfer',confirmation:username}});
+  expect(removed.status()).toBe(204);
+  const gone=await request.post('/api/login',{data:{username,password}});
+  expect(gone.status()).toBe(401);
+  const stillExists=await request.get('/api/account',{headers});
+  expect(stillExists.status()).toBe(200);
+});

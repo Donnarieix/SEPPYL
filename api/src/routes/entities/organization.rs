@@ -677,6 +677,7 @@ pub async fn eligible_users(
     Ok(Json(users.into_iter().map(|u|UserSummary{
         id:u.id,username:u.username,
         role:u.role.unwrap_or_else(||"user".into()),
+        disabled:u.disabled.unwrap_or(false),
     }).collect()))
 }
 

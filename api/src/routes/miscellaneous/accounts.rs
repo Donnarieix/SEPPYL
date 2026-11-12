@@ -113,7 +113,7 @@ pub async fn remove(
             }
             for activity in catalog_activity::Entity::find().filter(catalog_activity::COLUMN.user_id.eq(id)).all(&tx).await.map_err(failure)?{
                 // Other users' training sessions keep a historical snapshot, but no dangling catalog link.
-                for linked in training_activity::Entity::find().filter(training_activity::COLUMN.catalog_id.eq(Some(activity.id))).all(&tx).await.map_err(failure)?{
+                for linked in training_activity::Entity::find().filter(training_activity::COLUMN.catalog_id.eq(activity.id)).all(&tx).await.map_err(failure)?{
                     let mut m:training_activity::ActiveModel=linked.into();m.catalog_id=Set(None);m.update(&tx).await.map_err(failure)?;
                 }
                 catalog_material::Entity::delete_many().filter(catalog_material::COLUMN.activity_id.eq(activity.id)).exec(&tx).await.map_err(failure)?;

@@ -265,34 +265,23 @@
       event.target.value = "";
     }
   });
-  const observer = new MutationObserver(() => {
+  const attachPendingChats = () => {
     document.querySelectorAll(".ticket-chat[data-ticket-id]").forEach(root => {
+      // A keyed route can be rendered before localStorage hydration has
+      // finished. Do not register a dead connection that cannot recover.
+      if (!root.isConnected || !readToken()) return;
       if (!connections.has(root)) {
         const controller = new AbortController();
         connections.set(root, controller);
-        stream(root, controller);
-      }
-      decorate(root);
-    });
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  // Dioxus can update views without inserting a fresh subtree visible to this
-  // observer (e.g. keyed route reuse). A bounded-cost fallback is required.
-  const attachPendingChats=() => {
-    document.querySelectorAll(".ticket-chat[data-ticket-id]").forEach(root => {
-      if (!connections.has(root)) {
-        const controller = new AbortController();
-        connections.set(root, controller);
-        stream(root, controller);
+        stream(root, controller).finally(() => {
+          if (connections.get(root) === controller) connections.delete(root);
+        });
       }
       decorate(root);
     });
   };
+  const observer = new MutationObserver(attachPendingChats);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   setInterval(attachPendingChats, 1000);
-  document.querySelectorAll(".ticket-chat[data-ticket-id]").forEach(root => {
-    const controller = new AbortController();
-    connections.set(root, controller);
-    stream(root, controller);
-    decorate(root);
-  });
+  attachPendingChats();
 })();

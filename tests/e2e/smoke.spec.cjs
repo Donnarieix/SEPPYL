@@ -358,16 +358,10 @@ test('live support conversation streams messages and typing without navigation',
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/trainings$/);
   await page.goto('/tickets/'+id);
-  const diagnostics=await page.evaluate(()=>({
-    installed:!!window.__seppylTicketChatInstalled,
-    hasChat:!!document.querySelector('.ticket-chat'),
-    hasSession:!!localStorage.getItem('seppyl.session.v1'),
-    base:document.querySelector('.ticket-chat')?.getAttribute('data-ticket-base'),
-    storage:localStorage.getItem('seppyl.session.v1')?.slice(0,20),
-  }));
-  expect(diagnostics.installed,'ticket chat script is installed').toBe(true);
-  expect(diagnostics.hasChat,'chat DOM rendered').toBe(true);
-  expect(diagnostics.hasSession,'session stored').toBe(true);
+  await expect.poll(async()=>page.evaluate(()=>
+    !!window.__seppylTicketChatInstalled && !!document.querySelector('.ticket-chat')
+      && !!localStorage.getItem('seppyl.session.v1')
+  ),{timeout:15000}).toBe(true);
   await expect(page.locator('[data-ticket-live-status]')).toHaveText('En direct',{timeout:20000});
   const typing=await request.post('/api/tickets/'+id+'/typing',{headers:user,data:{typing:true}});
   expect(typing.status()).toBe(204);

@@ -423,7 +423,7 @@ test('ticket chat uses compact composer, inline controls and follows new message
   await editor.fill('Ligne 1');
   await editor.press('Shift+Enter');
   await editor.type('Ligne 2');
-  await expect(editor).toHaveValue('Ligne 1\\nLigne 2');
+  await expect(editor).toHaveValue('Ligne 1\nLigne 2');
   await page.locator('.ticket-emoji-toggle').click();
   await expect(page.getByRole('group',{name:'Choisir un émoji'})).toBeVisible();
   const typing=await request.post('/api/tickets/'+id+'/typing',{headers:member,data:{typing:true}});

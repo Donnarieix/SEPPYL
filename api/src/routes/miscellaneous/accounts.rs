@@ -4,7 +4,7 @@ use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFil
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use crate::{
-    entities::{user,training,catalog_activity,tactical_diagram,match_game,ticket,ticket_message,
+    entities::{user,training,ticket_read,catalog_activity,tactical_diagram,match_game,ticket,ticket_message,
         player_user,club_membership,team_membership,user_preference,changelog_read,
         catalog_result,catalog_selection,catalog_material,training_activity,training_attendance,
         training_material,training_score},
@@ -129,6 +129,7 @@ pub async fn remove(
             }
             for ticket in ticket::Entity::find().filter(ticket::COLUMN.author_id.eq(id)).all(&tx).await.map_err(failure)?{
                 ticket_message::Entity::delete_many().filter(ticket_message::COLUMN.ticket_id.eq(ticket.id)).exec(&tx).await.map_err(failure)?;
+                ticket_read::Entity::delete_many().filter(ticket_read::COLUMN.ticket_id.eq(ticket.id)).exec(&tx).await.map_err(failure)?;
                 ticket::Entity::delete_by_id(ticket.id).exec(&tx).await.map_err(failure)?;
             }
             ticket_message::Entity::delete_many().filter(ticket_message::COLUMN.author_id.eq(id)).exec(&tx).await.map_err(failure)?;
@@ -148,6 +149,7 @@ pub async fn remove(
     club_membership::Entity::delete_many().filter(club_membership::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     team_membership::Entity::delete_many().filter(team_membership::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     user_preference::Entity::delete_many().filter(user_preference::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
+    ticket_read::Entity::delete_many().filter(ticket_read::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     changelog_read::Entity::delete_many().filter(changelog_read::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     catalog_result::Entity::delete_many().filter(catalog_result::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     catalog_selection::Entity::delete_many().filter(catalog_selection::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;

@@ -62,6 +62,7 @@ async fn main() {
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
         .route("/tickets",get(tickets::list).post(tickets::create))
+        .route("/tickets/unread",get(tickets::unread))
         .route("/tickets/{id}",get(tickets::get))
         .route("/tickets/{id}/messages",post(tickets::message))
         .route("/tickets/{id}/status",put(tickets::status))

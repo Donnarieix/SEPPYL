@@ -31,3 +31,5 @@ pub mod match_event;
 pub mod ticket;
 pub mod ticket_message;
 pub mod announcement;
+
+pub mod ticket_read;

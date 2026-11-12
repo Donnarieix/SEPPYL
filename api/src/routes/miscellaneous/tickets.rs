@@ -3,8 +3,9 @@ use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
 use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder,TransactionTrait};
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
+use std::collections::HashMap;
 use crate::{
-    entities::{ticket,ticket_message},
+    entities::{ticket,ticket_message,ticket_read},
     middleware::{CurrentRole,Role},
     routes::authentication::login::Claims,state::AppState,
 };
@@ -45,6 +46,52 @@ pub async fn list(
     else{query.filter(ticket::COLUMN.author_id.eq(claims.sub)).all(&state.db).await.map_err(db)?};
     Ok(Json(rows))
 }
+#[derive(Serialize)]
+pub struct UnreadTicket{pub ticket_id:Uuid,pub count:u64}
+#[derive(Serialize)]
+pub struct UnreadSummary{pub total:u64,pub tickets:Vec<UnreadTicket>}
+/// A new ticket (its first message) is unread for staff; a requester only
+/// receives notifications for replies by someone else. Reads are per account.
+pub async fn unread(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,
+)->R<Json<UnreadSummary>>{
+    let query=ticket::Entity::find();
+    let visible=if staff(role.0){query.all(&state.db).await.map_err(db)?}
+        else{query.filter(ticket::COLUMN.author_id.eq(claims.sub))
+            .all(&state.db).await.map_err(db)?};
+    if visible.is_empty(){
+        return Ok(Json(UnreadSummary{total:0,tickets:Vec::new()}));
+    }
+    let ids=visible.iter().map(|t|t.id).collect::<Vec<_>>();
+    let reads=ticket_read::Entity::find()
+        .filter(ticket_read::COLUMN.user_id.eq(claims.sub))
+        .filter(ticket_read::COLUMN.ticket_id.is_in(ids.clone()))
+        .all(&state.db).await.map_err(db)?;
+    let seen=reads.into_iter().map(|r|(r.ticket_id,r.seen_count.max(0) as usize))
+        .collect::<HashMap<_,_>>();
+    let messages=ticket_message::Entity::find()
+        .filter(ticket_message::COLUMN.ticket_id.is_in(ids))
+        .order_by_asc(ticket_message::COLUMN.ticket_id)
+        .order_by_asc(ticket_message::COLUMN.created_at)
+        .order_by_asc(ticket_message::COLUMN.id)
+        .all(&state.db).await.map_err(db)?;
+    let mut index=HashMap::<Uuid,usize>::new();
+    let mut pending=HashMap::<Uuid,u64>::new();
+    for message in messages{
+        let position=index.entry(message.ticket_id).or_default();
+        if *position >= seen.get(&message.ticket_id).copied().unwrap_or(0)
+            && message.author_id!=claims.sub {
+            *pending.entry(message.ticket_id).or_default()+=1;
+        }
+        *position+=1;
+    }
+    let mut tickets=pending.into_iter().map(|(ticket_id,count)|UnreadTicket{ticket_id,count})
+        .collect::<Vec<_>>();
+    tickets.sort_by_key(|t|t.ticket_id);
+    let total=tickets.iter().map(|t|t.count).sum();
+    Ok(Json(UnreadSummary{total,tickets}))
+}
 pub async fn create(
     Extension(claims):Extension<Claims>,State(state):State<AppState>,
     Json(payload):Json<NewTicket>,
@@ -76,7 +123,25 @@ pub async fn get(
     let messages=ticket_message::Entity::find()
         .filter(ticket_message::COLUMN.ticket_id.eq(id))
         .order_by_asc(ticket_message::COLUMN.created_at)
+        .order_by_asc(ticket_message::COLUMN.id)
         .all(&state.db).await.map_err(db)?;
+    // Reading an authorized conversation marks exactly the fetched messages as seen.
+    // Cursors use a count, never second-resolution timestamps, so rapid replies are safe.
+    match ticket_read::Entity::find_by_id((claims.sub,id)).one(&state.db).await.map_err(db)?{
+        Some(read)=>{
+            if read.seen_count < messages.len() as i64{
+                let mut active:ticket_read::ActiveModel=read.into();
+                active.seen_count=Set(messages.len() as i64);
+                active.update(&state.db).await.map_err(db)?;
+            }
+        },
+        None=>{
+            ticket_read::ActiveModel{
+                user_id:Set(claims.sub),ticket_id:Set(id),
+                seen_count:Set(messages.len() as i64),..Default::default()
+            }.insert(&state.db).await.map_err(db)?;
+        }
+    }
     Ok(Json(TicketDetail{ticket:row,messages}))
 }
 pub async fn message(

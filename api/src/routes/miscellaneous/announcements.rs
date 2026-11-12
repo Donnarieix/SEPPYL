@@ -3,7 +3,7 @@ use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
 use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,QueryOrder};
 use serde::Deserialize;
 use uuid::Uuid;
-use crate::{entities::announcement,middleware::CurrentRole,state::AppState};
+use crate::{entities::announcement,middleware::{CurrentRole,Role},state::AppState};
 type R<T>=Result<T,StatusCode>;
 fn err(e:sea_orm::DbErr)->StatusCode{
     tracing::error!(%e,"Announcements database failure");
@@ -13,7 +13,7 @@ fn now()->i64{std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
     .map(|t|t.as_secs() as i64).unwrap_or(0)}
 #[derive(Deserialize)]
 pub struct Payload{
-    pub title:String,pub body:String,pub urgent:bool,
+    pub title:String,pub body:String,#[serde(default)]pub urgent:bool,
     pub published:bool,pub starts_at:i64,pub ends_at:Option<i64>,
 }
 fn valid(p:&Payload)->bool{
@@ -33,7 +33,7 @@ pub async fn public(State(state):State<AppState>)->R<Json<Vec<announcement::Mode
 pub async fn all(
     Extension(role):Extension<CurrentRole>,State(state):State<AppState>,
 )->R<Json<Vec<announcement::Model>>>{
-    if !role.0.is_admin(){return Err(StatusCode::FORBIDDEN);}
+    if role.0!=Role::Maintainer{return Err(StatusCode::FORBIDDEN);}
     Ok(Json(announcement::Entity::find()
         .order_by_desc(announcement::COLUMN.created_at)
         .all(&state.db).await.map_err(err)?))
@@ -45,7 +45,7 @@ pub async fn create(
     if !valid(&p){return Err(StatusCode::BAD_REQUEST);}
     let row=announcement::ActiveModel{
         id:Set(Uuid::new_v4()),title:Set(p.title.trim().to_owned()),
-        body:Set(p.body.trim().to_owned()),urgent:Set(p.urgent),published:Set(p.published),
+        body:Set(p.body.trim().to_owned()),urgent:Set(true),published:Set(p.published),
         starts_at:Set(p.starts_at),ends_at:Set(p.ends_at),created_at:Set(now()),
         ..Default::default()
     }.insert(&state.db).await.map_err(err)?;
@@ -61,7 +61,7 @@ pub async fn update(
         .ok_or(StatusCode::NOT_FOUND)?;
     let mut active:announcement::ActiveModel=row.into();
     active.title=Set(p.title.trim().to_owned());active.body=Set(p.body.trim().to_owned());
-    active.urgent=Set(p.urgent);active.published=Set(p.published);
+    active.urgent=Set(true);active.published=Set(p.published);
     active.starts_at=Set(p.starts_at);active.ends_at=Set(p.ends_at);
     active.update(&state.db).await.map_err(err)?;
     Ok(StatusCode::NO_CONTENT)

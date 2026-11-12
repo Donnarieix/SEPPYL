@@ -29,3 +29,6 @@ pub mod organization;
 pub mod audit;
 
 pub mod changelog;
+pub mod matches;
+pub mod tickets;
+pub mod announcements;

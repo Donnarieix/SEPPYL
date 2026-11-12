@@ -2887,3 +2887,36 @@ html::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:hover,
   }
   .site-root:not(:has(.mobile-nav)) > .site-footer{padding-bottom:0}
 }
+
+/* Sixth pass: match tracking, private support, announcements */
+.global-urgent-banner{position:relative;z-index:30;background:#9c2626;color:#fff;
+ padding:12px max(18px,calc((100vw - 1200px)/2));display:flex;flex-wrap:wrap;
+ gap:12px;align-items:center;box-shadow:0 3px 12px #0002}
+.global-urgent-banner strong{font-weight:750}
+.ticket-row{width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;
+ align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--border,#bcc6c9);
+ border-radius:12px;background:var(--surface,#fff);color:inherit;text-align:left;margin:8px 0}
+button.ticket-row{cursor:pointer}
+button.ticket-row:hover{border-color:var(--accent,#478b8d)}
+.ticket-escalation{border:1px solid #d38c43;color:#b87421;padding:4px 8px;
+ font-size:.8rem;border-radius:30px;font-weight:700}
+.ticket-conversation{display:grid;gap:12px;margin-bottom:20px}
+.ticket-message{padding:14px;background:var(--surface-secondary,#eff4f5);
+ border-radius:14px;border:1px solid var(--border,#ccc);overflow-wrap:anywhere}
+.ticket-message p{white-space:pre-wrap;margin:.5rem 0 0}
+.ticket-checkbox{display:flex;align-items:center;gap:10px;margin-block:12px}
+.match-card{display:flex;flex-direction:column;gap:8px;cursor:pointer;text-align:left;
+ color:inherit;width:100%}
+.match-detail-page .ticket-row input{min-width:120px;max-width:250px}
+.score-comment-field{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+ margin:8px 0;width:min(100%,470px)}
+.score-comment-field input{flex:1;min-width:180px}
+.training-duration-editor{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+ margin:10px 0 18px}
+.training-duration-editor input{width:110px}
+.public-roster{margin:12px 0;padding:12px;border-radius:10px;
+ border:1px solid var(--border,#ccc)}
+.public-roster p{margin:6px 0;font-size:.9rem}
+.news-page .panel{margin-block:16px;white-space:pre-wrap}
+@media(max-width:700px){.global-urgent-banner{padding:12px 16px}
+ .ticket-row{align-items:flex-start}.ticket-detail-page .field textarea{width:100%}}

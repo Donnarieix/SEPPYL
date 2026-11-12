@@ -42,3 +42,19 @@ pub async fn delete(token:&str,id:&str)->Result<(),String>{
         status=>Err(format!("Suppression impossible (HTTP {status}).")),
     }
 }
+
+#[derive(Clone,Debug,PartialEq,serde::Deserialize)]
+pub struct TimeTotals{
+    pub player_id:String,
+    pub training_minutes:i64,
+    pub match_minutes:i64,
+    pub training_attended:i32,
+    pub trainings_without_duration:i32,
+    pub matches_played:i32,
+}
+pub async fn time_totals(token:&str,id:&str)->Result<TimeTotals,String>{
+    let r=reqwest::Client::new().get(format!("{}/players/{id}/time-totals",super::base_url()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    if !r.status().is_success(){return Err(format!("Erreur API (HTTP {})",r.status()));}
+    r.json().await.map_err(|e|e.to_string())
+}

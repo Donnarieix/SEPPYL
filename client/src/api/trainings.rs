@@ -12,6 +12,7 @@ pub struct Training {
     pub date: String,
     pub notes: String,
     pub team_id: Option<String>,
+    #[serde(default)] pub duration_minutes:Option<i32>,
 }
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Player {
@@ -25,6 +26,7 @@ pub struct Attendance {
     pub player_id: String,
     pub present: bool,
     pub score: Option<i32>,
+    #[serde(default)]pub score_comment:Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Activity {
@@ -48,6 +50,7 @@ pub struct Score {
     pub activity_id: String,
     pub player_id: String,
     pub score: i32,
+    #[serde(default)]pub comment:Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Detail {
@@ -64,12 +67,14 @@ struct TrainingRequest<'a> {
     name: &'a str,
     date: String,
     team_id: Option<&'a str>,
+    duration_minutes:Option<i32>,
 }
 #[derive(Serialize)]
 struct UpdateTrainingRequest<'a> {
     name: &'a str,
     date: String,
     notes: &'a str,
+    duration_minutes:Option<i32>,
 }
 #[derive(Serialize)]
 struct ActivityRequest<'a> {
@@ -91,6 +96,7 @@ struct ScoreRequest<'a> {
     player_id: &'a str,
     activity_id: Option<&'a str>,
     score: Option<i32>,
+    comment:Option<&'a str>,
 }
 
 fn date_time(date: &str) -> String {
@@ -130,9 +136,13 @@ pub async fn get(token: &str, id: &str) -> Result<Detail, String> {
     response.json::<Detail>().await.map_err(|e| e.to_string())
 }
 pub async fn create(token: &str, name: &str, date: &str, team_id: Option<&str>) -> Result<String, String> {
+    create_with_duration(token,name,date,team_id,None).await
+}
+pub async fn create_with_duration(token: &str, name: &str, date: &str,
+    team_id: Option<&str>,duration_minutes:Option<i32>)->Result<String,String>{
     let response = client().post(format!("{}/trainings", base_url()))
         .bearer_auth(token)
-        .json(&TrainingRequest { name, date: date_time(date), team_id })
+        .json(&TrainingRequest { name, date: date_time(date), team_id, duration_minutes })
         .send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         success(response).await?;
@@ -141,11 +151,11 @@ pub async fn create(token: &str, name: &str, date: &str, team_id: Option<&str>) 
     response.text().await.map_err(|e| e.to_string())
 }
 pub async fn update(
-    token: &str, id: &str, name: &str, date: &str, notes: &str,
+    token: &str, id: &str, name: &str, date: &str, notes: &str, duration_minutes:Option<i32>,
 ) -> Result<(), String> {
     let response = client().put(format!("{}/trainings/{id}", base_url()))
         .bearer_auth(token)
-        .json(&UpdateTrainingRequest { name, date: date_time(date), notes })
+        .json(&UpdateTrainingRequest { name, date: date_time(date), notes, duration_minutes })
         .send().await.map_err(|e| e.to_string())?;
     success(response).await
 }
@@ -205,9 +215,15 @@ pub async fn save_attendance(token: &str, id: &str, player_ids: &[String]) -> Re
 pub async fn save_score(
     token: &str, id: &str, player_id: &str, activity_id: Option<&str>, score: Option<i32>,
 ) -> Result<(), String> {
+    save_score_comment(token,id,player_id,activity_id,score,None).await
+}
+pub async fn save_score_comment(
+    token: &str, id: &str, player_id: &str, activity_id: Option<&str>, score: Option<i32>,
+    comment:Option<&str>,
+) -> Result<(), String> {
     let response = client().put(format!("{}/trainings/{id}/scores", base_url()))
         .bearer_auth(token)
-        .json(&ScoreRequest { player_id, activity_id, score })
+        .json(&ScoreRequest { player_id, activity_id, score, comment })
         .send().await.map_err(|e| e.to_string())?;
     success(response).await
 }

@@ -36,15 +36,20 @@ pub fn Header() -> Element {
                     Link { to: Route::Activities {},
                         class: if matches!(&current, Route::Activities {}) { "active" } else { "" },
                         "Activités" }
+                    Link { to: Route::Matches {},
+                        class: if matches!(&current,Route::Matches{}|Route::MatchDetail{..}){"active"}else{""},
+                        "Matchs" }
                     Link { to: Route::Tactics {},
                         class: if matches!(&current, Route::Tactics {}) { "active" } else { "" },
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
+                    Link{to:Route::News{},class:"topbar-account","Annonces"}
+                    Link{to:Route::Tickets{},class:"topbar-account","Tickets"}
                     button{class:"topbar-changelog",r#type:"button",
                         title:"Historique des versions",
                         onclick:move |_|changelog_open.set(true),
-                        "Nouveautés"
+                        "Versions"
                     }
                     if can_audit {
                         Link { to: Route::AuditLog {},
@@ -55,6 +60,7 @@ pub fn Header() -> Element {
                         class: if matches!(&current,Route::Organization{}){"topbar-account active"}else{"topbar-account"},
                         "Mon club" }
                     if is_admin {
+                        Link{to:Route::AnnouncementAdmin{},class:"topbar-account","Gérer les annonces"}
                         Link{to:Route::Administration{},
                             class:if matches!(&current,Route::Administration{}){"topbar-account active"}else{"topbar-account"},
                             "Administration"}
@@ -144,6 +150,9 @@ pub fn Header() -> Element {
                     span { "Journal" }
                 }
             }
+            Link { to: Route::Matches{},class:"mobile-nav-link","Matchs" }
+            Link { to: Route::Tickets{},class:"mobile-nav-link","Tickets" }
+            Link { to: Route::News{},class:"mobile-nav-link","Annonces" }
             Link { to: Route::AccountPage {},
                 class: if matches!(&current, Route::AccountPage {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
                 svg { width: "21", height: "21", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "1.8",

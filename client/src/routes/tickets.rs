@@ -272,7 +272,7 @@ pub fn TicketDetail(id:String)->Element{
                                                     }
                                                     button{r#type:"button",class:"ticket-chat-tool",title:"Émojis",
                                                         "aria-label":"Insérer un émoji",
-                                                        onclick:move |_|emoji_open.set(!*emoji_open.read()),"☺"}
+                                                        onclick:move |_|{let next=!*emoji_open.read();emoji_open.set(next);},"☺"}
                                                     button{r#type:"button",class:"ticket-chat-tool",title:"Gras Markdown",
                                                         onclick:move |_|reply.set(format!("{}**texte**",reply.read().as_str())),"B"}
                                                     button{r#type:"button",class:"ticket-chat-tool",title:"Italique Markdown",

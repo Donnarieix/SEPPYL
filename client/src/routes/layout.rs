@@ -31,6 +31,7 @@ pub fn Header() -> Element {
     });
     let unread_total=unread.read().as_ref().and_then(|r|r.as_ref().ok())
         .map(|r|r.total).unwrap_or(0);
+    let unread_label=if unread_total>99{"99+".to_string()}else{unread_total.to_string()};
     let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
         if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
@@ -69,7 +70,7 @@ pub fn Header() -> Element {
                         "Tickets"
                         if unread_total>0{
                             span{class:"ticket-unread-count",title:"Tickets ou messages non lus",
-                                "{if unread_total>99{"99+".to_string()}else{unread_total.to_string()}}"}
+                                "{unread_label}"}
                         }
                     }
                     if can_audit {
@@ -177,7 +178,7 @@ pub fn Header() -> Element {
                 class:if matches!(&current,Route::Tickets{}|Route::TicketDetail{..}){"mobile-nav-link active ticket-nav-link"}else{"mobile-nav-link ticket-nav-link"},
                 span{"Tickets"}
                 if unread_total>0{
-                    span{class:"ticket-unread-count","{if unread_total>99{"99+".to_string()}else{unread_total.to_string()}}"}
+                    span{class:"ticket-unread-count","{unread_label}"}
                 }
             }
             Link { to: Route::AccountPage {},

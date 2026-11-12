@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use crate::api::{account,organization as org};
 use super::{Route,layout::Header,membership::MembershipPanel,
     team_management::{TeamManagerRow,CreateTeamPlayer},club_information::ClubInformationEditor,
-    team_information::TeamInformationEditor};
+    team_information::TeamInformationEditor,announcements::AnnouncementManager};
 
 #[component]
 pub fn Administration()->Element{
@@ -141,6 +141,10 @@ pub fn Administration()->Element{
                         onclick:move |_|tab.set("memberships".into()),"Rattachements"}
                     button{class:if *tab.read()=="clubs"{"selected"}else{""},
                         onclick:move |_|tab.set("clubs".into()),"Clubs"}
+                    if is_maintainer{
+                        button{class:if *tab.read()=="announcements"{"selected"}else{""},
+                            onclick:move |_|tab.set("announcements".into()),"Annonces"}
+                    }
                 }
                 div{class:"workspace-tab-panel",
                     if *tab.read()=="users"{
@@ -363,6 +367,8 @@ pub fn Administration()->Element{
                                 can_manage:true,default_user:Some(selected_user.read().clone()),
                             }
                         }
+                    }else if *tab.read()=="announcements" && is_maintainer{
+                        AnnouncementManager{}
                     }else if *tab.read()=="clubs"{
                         div{class:"club-layout admin-club-layout",
                             aside{class:"club-sidebar",

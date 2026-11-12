@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use super::Route;
-use crate::api::account;
+use crate::api::{account,tickets};
 
 /// Desktop navigation stays in the header. On touch devices, primary routes
 /// move to a bottom navigation bar with comfortable touch targets.
@@ -16,6 +16,21 @@ pub fn Header() -> Element {
         async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
     });
     let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if matches!(a.role.as_str(),"administrator"|"maintainer"));
+    let unread_token=session.read().clone();
+    let mut unread=use_resource(move ||{
+        let token=unread_token.clone();
+        async move{match token{Some(token)=>tickets::unread(&token).await,
+            None=>Ok(tickets::UnreadSummary::default())}}
+    });
+    let mut unread_poll=unread;
+    use_future(move ||async move{
+        loop{
+            gloo_timers::future::TimeoutFuture::new(20_000).await;
+            unread_poll.restart();
+        }
+    });
+    let unread_total=unread.read().as_ref().and_then(|r|r.as_ref().ok())
+        .map(|r|r.total).unwrap_or(0);
     let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
         if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
@@ -44,12 +59,18 @@ pub fn Header() -> Element {
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
-                    Link{to:Route::News{},class:"topbar-account","Annonces"}
-                    Link{to:Route::Tickets{},class:"topbar-account","Tickets"}
                     button{class:"topbar-changelog",r#type:"button",
-                        title:"Historique des versions",
+                        title:"Historique des nouveautés",
                         onclick:move |_|changelog_open.set(true),
-                        "Versions"
+                        "Nouveautés"
+                    }
+                    Link{to:Route::Tickets{},
+                        class:if matches!(&current,Route::Tickets{}|Route::TicketDetail{..}){"topbar-account active ticket-nav-link"}else{"topbar-account ticket-nav-link"},
+                        "Tickets"
+                        if unread_total>0{
+                            span{class:"ticket-unread-count",title:"Tickets ou messages non lus",
+                                "{if unread_total>99{"99+".to_string()}else{unread_total.to_string()}}"}
+                        }
                     }
                     if can_audit {
                         Link { to: Route::AuditLog {},
@@ -60,7 +81,6 @@ pub fn Header() -> Element {
                         class: if matches!(&current,Route::Organization{}){"topbar-account active"}else{"topbar-account"},
                         "Mon club" }
                     if is_admin {
-                        Link{to:Route::AnnouncementAdmin{},class:"topbar-account","Gérer les annonces"}
                         Link{to:Route::Administration{},
                             class:if matches!(&current,Route::Administration{}){"topbar-account active"}else{"topbar-account"},
                             "Administration"}
@@ -151,8 +171,15 @@ pub fn Header() -> Element {
                 }
             }
             Link { to: Route::Matches{},class:"mobile-nav-link","Matchs" }
-            Link { to: Route::Tickets{},class:"mobile-nav-link","Tickets" }
-            Link { to: Route::News{},class:"mobile-nav-link","Annonces" }
+            button{class:"mobile-nav-link",r#type:"button",
+                onclick:move |_|changelog_open.set(true),"Nouveautés"}
+            Link{to:Route::Tickets{},
+                class:if matches!(&current,Route::Tickets{}|Route::TicketDetail{..}){"mobile-nav-link active ticket-nav-link"}else{"mobile-nav-link ticket-nav-link"},
+                span{"Tickets"}
+                if unread_total>0{
+                    span{class:"ticket-unread-count","{if unread_total>99{"99+".to_string()}else{unread_total.to_string()}}"}
+                }
+            }
             Link { to: Route::AccountPage {},
                 class: if matches!(&current, Route::AccountPage {}) { "mobile-nav-link active" } else { "mobile-nav-link" },
                 svg { width: "21", height: "21", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "1.8",

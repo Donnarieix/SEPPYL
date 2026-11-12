@@ -1,10 +1,7 @@
 use dioxus::prelude::*;
-use crate::api::{announcements,account};
-use super::layout::Header;
+use crate::api::announcements;
 
-/// Rendered above the Router to reach both public and protected pages.
-/// Normal announcements stay in the dedicated page; only urgent ones display
-/// as persistent banners across navigation.
+/// Published active announcements are shown across all public and private pages.
 #[component]
 pub fn UrgentBanner()->Element{
     let mut active=use_resource(||async{announcements::active().await});
@@ -17,7 +14,7 @@ pub fn UrgentBanner()->Element{
     });
     rsx!{
         if let Some(Ok(items))=active.read().clone(){
-            for item in items.into_iter().filter(|a|a.urgent){
+            for item in items {
                 div{class:"global-urgent-banner",role:"status",key:"{item.id}",
                     strong{"{item.title}"} span{"{item.body}"}
                 }
@@ -26,18 +23,15 @@ pub fn UrgentBanner()->Element{
     }
 }
 
+/// The parent Administration tab and the API independently check Maintainer rights.
 #[component]
-pub fn AnnouncementAdmin()->Element{
+pub fn AnnouncementManager()->Element{
     let session=use_context::<Signal<Option<String>>>();
     let token=session.read().clone().unwrap_or_default();
-    let user_token=token.clone();
-    let account=use_resource(move ||{let t=user_token.clone();async move{account::get(&t).await}});
     let t=token.clone();
     let mut list=use_resource(move ||{let t=t.clone();async move{announcements::all(&t).await}});
-    let admin=matches!(account.read().as_ref(),Some(Ok(a)) if a.role=="maintainer"||a.role=="administrator");
     let mut title=use_signal(String::new);
     let mut body=use_signal(String::new);
-    let mut urgent=use_signal(||false);
     let mut published=use_signal(||true);
     let mut starts=use_signal(||"0".to_string());
     let mut ends=use_signal(String::new);
@@ -45,14 +39,12 @@ pub fn AnnouncementAdmin()->Element{
     let mut editing=use_signal(||None::<String>);
     let mut busy=use_signal(||false);
     rsx!{
-        div{class:"app",Header{},
-            main{class:"page workspace-page",
-                div{class:"page-heading",
-                    div{h1{"Annonces"}p{"Communications distinctes de l'historique des versions."}}
+        div{class:"announcement-manager",
+            div{class:"panel-head",
+                div{h2{"Annonces de service"}
+                    p{"Les annonces publiées et actives apparaissent en haut de toutes les pages. Elles sont distinctes des nouveautés."}
                 }
-                if !admin{
-                    p{class:"form-error","La gestion des annonces est réservée à l'administration."}
-                }else{
+            }
                     if let Some(e)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{e}"}}
                     section{class:"panel",
                         div{class:"panel-head",h2{"Nouvelle annonce"}
@@ -65,13 +57,13 @@ pub fn AnnouncementAdmin()->Element{
                                 busy.set(true);
                                 let t=t.clone();
                                 let label=title.read().clone();let content=body.read().clone();
-                                let is_urgent=*urgent.read();let is_published=*published.read();
+                                let is_published=*published.read();
                                 let begin=starts.read().parse::<i64>().unwrap_or(0);
                                 let until=ends.read().parse::<i64>().ok();
                                 let edit_id=editing.read().clone();
                                 spawn(async move{
                                     let payload=announcements::Payload{
-                                        title:&label,body:&content,urgent:is_urgent,
+                                        title:&label,body:&content,urgent:true,
                                         published:is_published,starts_at:begin,ends_at:until
                                     };
                                     let result=if let Some(ref id)=edit_id{
@@ -93,10 +85,6 @@ pub fn AnnouncementAdmin()->Element{
                             div{class:"field",label{"Message"}
                                 textarea{required:true,maxlength:"10000",rows:"4",value:"{body}",
                                     oninput:move |e|body.set(e.value())}}
-                            label{class:"ticket-checkbox",
-                                input{r#type:"checkbox",checked:*urgent.read(),onchange:move |e|urgent.set(e.checked())}
-                                "Urgent — afficher sur toutes les pages"
-                            }
                             label{class:"ticket-checkbox",
                                 input{r#type:"checkbox",checked:*published.read(),onchange:move |e|published.set(e.checked())}
                                 "Publier l'annonce"
@@ -133,7 +121,7 @@ pub fn AnnouncementAdmin()->Element{
                                                     editing.set(Some(record.id.clone()));
                                                     title.set(record.title.clone());
                                                     body.set(record.body.clone());
-                                                    urgent.set(record.urgent);
+                                                    
                                                     published.set(record.published);
                                                     starts.set(record.starts_at.to_string());
                                                     ends.set(record.ends_at.map(|n|n.to_string()).unwrap_or_default());
@@ -158,8 +146,7 @@ pub fn AnnouncementAdmin()->Element{
                             None=>rsx!{p{"Chargement…"}}
                         }
                     }
-                }
-            }
+
         }
     }
 }

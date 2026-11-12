@@ -23,7 +23,6 @@ mod public_directory;
 mod matches;
 mod tickets;
 pub mod announcements;
-mod news;
 mod audit;
 pub mod changelog;
 pub mod legal;
@@ -68,8 +67,6 @@ use administration::Administration;
 use public_directory::PublicDirectory;
 use matches::{Matches,MatchDetail};
 use tickets::{Tickets,TicketDetail};
-use announcements::AnnouncementAdmin;
-use news::News;
 use audit::AuditLog;
 use legal::{LegalNotice,PrivacyPolicy,TermsOfUse};
 
@@ -81,8 +78,6 @@ pub enum Route {
     Login {},
     #[route("/public")]
     PublicDirectory {},
-    #[route("/news")]
-    News {},
     #[route("/mentions-legales")]
     LegalNotice {},
     #[route("/confidentialite")]
@@ -101,8 +96,6 @@ pub enum Route {
     Tickets {},
     #[route("/tickets/:id")]
     TicketDetail {id:String},
-    #[route("/announcements/manage")]
-    AnnouncementAdmin {},
     #[route("/spreadsheet")]
     Home {},
     #[route("/players")]

@@ -56,6 +56,7 @@ pub async fn auth(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
     // Pre-existing, role-less users keep their previous write access.
+    if current.disabled.unwrap_or(false){return Err(StatusCode::UNAUTHORIZED);}
     let role = current.role.as_deref().unwrap_or("trainer");
     let role = Role::parse(role).ok_or(StatusCode::FORBIDDEN)?;
     if matches!(role, Role::Visitor) { return Err(StatusCode::UNAUTHORIZED); }

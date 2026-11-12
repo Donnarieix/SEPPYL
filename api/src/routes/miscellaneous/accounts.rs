@@ -1,13 +1,13 @@
 //! Maintainer-only lifecycle management. All destructive changes are atomic.
 use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
-use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,TransactionTrait};
+use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,TransactionTrait,PaginatorTrait};
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use crate::{
     entities::{user,training,catalog_activity,tactical_diagram,match_game,ticket,ticket_message,
         player_user,club_membership,team_membership,user_preference,changelog_read,
         catalog_result,catalog_selection,catalog_material,training_activity,training_attendance,
-        training_material,training_score,activity_player,audit_event},
+        training_material,training_score},
     middleware::{CurrentRole,Role},routes::authentication::login::Claims,state::AppState,
 };
 type R<T>=Result<T,StatusCode>;
@@ -136,6 +136,14 @@ pub async fn remove(
     }
     // Per-user joins and preferences are always removed. Shared players are not owned
     // exclusively by a user: deleting a user must not silently remove club rosters.
+    if matches!(payload.mode,DeleteMode::Transfer){
+        for link in player_user::Entity::find().filter(player_user::COLUMN.user_id.eq(id)).all(&tx).await.map_err(failure)?{
+            if player_user::Entity::find_by_id((destination,link.player_id)).one(&tx).await.map_err(failure)?.is_none(){
+                player_user::ActiveModel{user_id:Set(destination),player_id:Set(link.player_id),..Default::default()}
+                    .insert(&tx).await.map_err(failure)?;
+            }
+        }
+    }
     player_user::Entity::delete_many().filter(player_user::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     club_membership::Entity::delete_many().filter(club_membership::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     team_membership::Entity::delete_many().filter(team_membership::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;

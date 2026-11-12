@@ -28,7 +28,7 @@ use crate::{
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog, tickets, announcements},
+        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, announcements},
     },
     state::AppState,
 };
@@ -78,6 +78,9 @@ async fn main() {
         .route("/changelog/{version}/read",post(changelog::acknowledge))
         .route("/changelog/{version}",put(changelog::save))
         .route("/admin/users", get(organization::list_users))
+        .route("/admin/users/{id}/dependencies",get(accounts::dependencies))
+        .route("/admin/users/{id}/status",put(accounts::set_disabled))
+        .route("/admin/users/{id}",delete(accounts::remove))
         .route("/admin/clubs", get(organization::list_admin_clubs))
         .route("/clubs/{id}/information", put(organization::update_club_information))
         .route("/clubs", get(organization::list_clubs).post(organization::create_club))

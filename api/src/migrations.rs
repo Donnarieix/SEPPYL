@@ -208,6 +208,7 @@ pub async fn add_changelog_fields(db:&DatabaseConnection)->Result<(),DbErr>{
 /// All field additions default to NULL on existing databases.
 pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     for (table, additions) in [
+        ("users", vec![("disabled","INTEGER")]),
         ("trainings", vec![("duration_minutes","INTEGER")]),
         ("training_attendance", vec![("score_comment","TEXT")]),
         ("training_scores", vec![("comment","TEXT")]),

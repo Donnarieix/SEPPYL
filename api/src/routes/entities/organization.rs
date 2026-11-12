@@ -393,6 +393,7 @@ pub struct UserSummary {
     pub id: Uuid,
     pub username: String,
     pub role: String,
+    pub disabled: bool,
 }
 pub async fn list_users(
     Extension(role): Extension<CurrentRole>,
@@ -403,6 +404,7 @@ pub async fn list_users(
     Ok(Json(users.into_iter().map(|u| UserSummary {
         id: u.id, username: u.username,
         role: u.role.unwrap_or_else(|| "trainer".into()),
+        disabled: u.disabled.unwrap_or(false),
     }).collect()))
 }
 pub async fn list_club_members(

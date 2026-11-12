@@ -62,6 +62,7 @@
 /* SEPPYL ticket chat: authenticated SSE, typing and private image transport.
    Tokens never appear in URLs or DOM attributes. Markdown cannot insert raw HTML. */
 (() => {
+  if (typeof document === "undefined" || typeof MutationObserver === "undefined") return;
   if (window.__seppylTicketChatInstalled) return;
   window.__seppylTicketChatInstalled = true;
   const readToken = () => {

@@ -68,6 +68,7 @@ async fn main() {
         .route("/tickets/unread",get(tickets::unread))
         .route("/tickets/{id}/events",get(ticket_live::stream))
         .route("/tickets/{id}/typing",post(ticket_live::typing))
+        .route("/tickets/{id}/presence",get(ticket_live::presence_list))
         .route("/tickets/{id}/images",post(ticket_attachments::upload).layer(axum::extract::DefaultBodyLimit::max(4*1024*1024)))
         .route("/tickets/{id}/images/{filename}",get(ticket_attachments::download))
         .route("/tickets/{id}",get(tickets::get))

@@ -147,7 +147,7 @@ pub fn TicketDetail(id:String)->Element{
     // SSE normally refreshes immediately; polling covers proxies that buffer streams.
     use_future(move ||async move{
         loop{
-            gloo_timers::future::TimeoutFuture::new(30_000).await;
+            gloo_timers::future::TimeoutFuture::new(2_000).await;
             fallback_poll.restart();
         }
     });

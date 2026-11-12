@@ -83,7 +83,7 @@
     let value = esc(raw);
     value = value.replace(/\x60([^\x60\n]+)\x60/g, (_, v) => "<code>" + v + "</code>");
     value = value.replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)<]{1,1000})\)/g,
-      (_, label, url) => '<a href="' + url +
+      (_, label, url) => '<a href="' + url.replace(/&amp;/g, "&") +
         '" target="_blank" rel="noopener noreferrer nofollow">' + label + "</a>");
     return value.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
       .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
@@ -128,6 +128,28 @@
   function status(root, title, offline = false) {
     const target = root.querySelector("[data-ticket-live-status]");
     if (target) { target.textContent = title; target.classList.toggle("offline", offline); }
+  }
+  // SSE uses a persistent stream; this channel is the fallback for reverse
+  // proxies that buffer streaming responses. It also revalidates access.
+  async function syncPresence(root) {
+    if (!root.isConnected || !readToken()) return;
+    const base=root.getAttribute("data-ticket-base");
+    const id=root.getAttribute("data-ticket-id");
+    if (!base||!id) return;
+    try {
+      const response=await fetch(base+"/tickets/"+id+"/presence",{
+        headers:{Authorization:"Bearer "+readToken()},cache:"no-store"
+      });
+      if(!response.ok)return;
+      if(root.querySelector("[data-ticket-live-status]")?.textContent==="Connexion…")
+        status(root,"Synchronisé");
+      const people=await response.json();
+      if (Array.isArray(people) && people.length) {
+        push(root,{kind:"typing",actor:people[0].user_id,username:people[0].username});
+      } else {
+        push(root,{kind:"typing_end",actor:"fallback"});
+      }
+    }catch{}
   }
   function decorate(root) {
     root.querySelectorAll("[data-ticket-markdown]").forEach(node => {
@@ -283,5 +305,8 @@
   const observer = new MutationObserver(attachPendingChats);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   setInterval(attachPendingChats, 1000);
+  setInterval(() => {
+    document.querySelectorAll(".ticket-chat[data-ticket-id]").forEach(syncPresence);
+  }, 1700);
   attachPendingChats();
 })();

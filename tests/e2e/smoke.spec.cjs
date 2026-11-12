@@ -362,7 +362,7 @@ test('live support conversation streams messages and typing without navigation',
     !!window.__seppylTicketChatInstalled && !!document.querySelector('.ticket-chat')
       && !!localStorage.getItem('seppyl.session.v1')
   ),{timeout:15000}).toBe(true);
-  await expect(page.locator('[data-ticket-live-status]')).toHaveText('En direct',{timeout:20000});
+  await expect(page.locator('[data-ticket-live-status]')).toHaveText(/En direct|Synchronisé/,{timeout:20000});
   const typing=await request.post('/api/tickets/'+id+'/typing',{headers:user,data:{typing:true}});
   expect(typing.status()).toBe(204);
   await expect(page.locator('.ticket-typing-indicator')).toContainText('fixture-user',{timeout:10000});

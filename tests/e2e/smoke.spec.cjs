@@ -260,19 +260,83 @@ test('ticket contrast stays readable in dark theme',async ({page})=>{
   const row=page.locator('button.ticket-row').first();
   await expect(row).toBeVisible();
   await row.click();
-  await expect(page.locator('.ticket-message').first()).toBeVisible();
+  await expect(page.locator('.ticket-chat-bubble').first()).toBeVisible();
   const colors=await page.evaluate(()=>{
     const root=document.querySelector('.site-root');
     root.setAttribute('data-theme','dark');
     return {
-      text:getComputedStyle(document.querySelector('.ticket-message')).color,
-      background:getComputedStyle(document.querySelector('.ticket-message')).backgroundColor,
-      border:getComputedStyle(document.querySelector('.ticket-message')).borderColor,
+      text:getComputedStyle(document.querySelector('.ticket-chat-bubble')).color,
+      background:getComputedStyle(document.querySelector('.ticket-chat-bubble')).backgroundColor,
+      border:getComputedStyle(document.querySelector('.ticket-chat-bubble')).borderColor,
     };
   });
   expect(colors.text).toBe('rgb(237, 242, 248)');
-  expect(['rgb(32, 45, 59)','rgb(43, 57, 73)']).toContain(colors.background);
+  expect(['rgb(26, 38, 51)','rgb(43, 57, 73)']).toContain(colors.background);
   expect(colors.border).toBe('rgb(54, 71, 88)');
+});
+
+
+test('private ticket image upload, file isolation and typing permissions',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const support=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(owner.status()).toBe(200); expect(support.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await owner.json()).token};
+  const staff={Authorization:'Bearer '+(await support.json()).token};
+  const created=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Fichier privé E2E',message:'Voici une capture **importante** 🙂'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const image=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/png'},data:png});
+  expect(image.status()).toBe(201);
+  const record=await image.json();
+  expect(record.attachment_name).toMatch(/^[0-9a-f-]+\.png$/);
+  const uri='/api/tickets/'+id+'/images/'+record.attachment_name;
+  const denied=await request.get(uri);
+  expect(denied.status()).toBe(401);
+  const found=await request.get(uri,{headers:user});
+  expect(found.status()).toBe(200);
+  expect(found.headers()['content-type']).toContain('image/png');
+  expect(found.headers()['x-content-type-options']).toBe('nosniff');
+  const script=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/svg+xml'},data:Buffer.from('<svg onload=alert(1)>')});
+  expect(script.status()).toBe(415);
+  const uploadTooBig=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/png'},data:Buffer.alloc(4*1024*1024+10)});
+  expect(uploadTooBig.status()).toBe(413);
+  const userTyping=await request.post('/api/tickets/'+id+'/typing',{
+    headers:user,data:{typing:true}});
+  expect(userTyping.status()).toBe(204);
+  const supportTyping=await request.post('/api/tickets/'+id+'/typing',{
+    headers:staff,data:{typing:false}});
+  expect(supportTyping.status()).toBe(204);
+  expect((await request.post('/api/tickets/'+id+'/typing',{data:{typing:true}})).status()).toBe(401);
+  const detail=await request.get('/api/tickets/'+id,{headers:user});
+  expect(detail.status()).toBe(200);
+  const messages=(await detail.json()).messages;
+  expect(messages.find(m=>m.id===record.id)?.attachment_name).toBe(record.attachment_name);
+});
+test('ticket composer and custom checkbox controls respect dark theme',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  await page.locator('button.ticket-row').first().click();
+  await expect(page.locator('[data-ticket-composer]')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Envoyer',exact:true})).toBeVisible();
+  await expect(page.locator('.ticket-chat-feed')).toBeVisible();
+  await page.locator('[data-ticket-composer]').fill('Bonjour **Markdown** 😀');
+  await page.getByRole('button',{name:'Envoyer',exact:true}).click();
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('Markdown');
+  await page.goto('/admin');
+  await page.getByRole('button',{name:'Annonces',exact:true}).click();
+  const checkbox=page.locator('.announcement-manager input[type="checkbox"]').first();
+  await expect(checkbox).toBeVisible();
+  const custom=await checkbox.evaluate(node=>getComputedStyle(node).appearance);
+  expect(custom).toBe('none');
 });
 
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{

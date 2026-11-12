@@ -8,3 +8,6 @@ pub mod audit;
 pub mod changelog;
 pub mod tickets;
 pub mod announcements;
+
+pub mod ticket_live;
+pub mod ticket_attachments;

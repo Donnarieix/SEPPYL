@@ -13,7 +13,8 @@ async fn check(r:reqwest::Response)->Result<reqwest::Response,String>{
 pub struct Ticket{pub id:String,pub author_id:String,pub subject:String,pub status:String,
     pub maintainer_required:bool,pub created_at:i64,pub updated_at:i64}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
-pub struct Message{pub id:String,pub author_id:String,pub message:String,pub created_at:i64}
+pub struct Message{pub id:String,pub author_id:String,pub message:String,pub created_at:i64,
+    #[serde(default)]pub attachment_name:Option<String>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Detail{pub ticket:Ticket,pub messages:Vec<Message>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]

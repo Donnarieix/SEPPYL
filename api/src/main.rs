@@ -28,7 +28,7 @@ use crate::{
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, announcements},
+        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, ticket_live, ticket_attachments, announcements},
     },
     state::AppState,
 };
@@ -63,6 +63,10 @@ async fn main() {
     let protected = Router::new()
         .route("/tickets",get(tickets::list).post(tickets::create))
         .route("/tickets/unread",get(tickets::unread))
+        .route("/tickets/{id}/events",get(ticket_live::stream))
+        .route("/tickets/{id}/typing",post(ticket_live::typing))
+        .route("/tickets/{id}/images",post(ticket_attachments::upload).layer(axum::extract::DefaultBodyLimit::max(4*1024*1024)))
+        .route("/tickets/{id}/images/{filename}",get(ticket_attachments::download))
         .route("/tickets/{id}",get(tickets::get))
         .route("/tickets/{id}/messages",post(tickets::message))
         .route("/tickets/{id}/status",put(tickets::status))

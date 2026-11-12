@@ -10,6 +10,8 @@ pub struct Model {
     pub ticket_id:Uuid,
     pub author_id:Uuid,
     pub message:String,
+    // Nullable for older messages and new image-only messages.
+    pub attachment_name:Option<String>,
     pub created_at:i64,
 }
 impl ActiveModelBehavior for ActiveModel {}

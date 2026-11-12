@@ -57,6 +57,7 @@ fn App() -> Element {
         document::Script { src: asset!("/assets/select-overlay.js") }
         document::Script { src: asset!("/assets/logo-crop.js") }
         document::Script { src: asset!("/assets/toast.js") }
+        document::Script { src: asset!("/assets/ticket-chat.js") }
         div {
             class: "site-root",
             "data-theme": initial_theme.as_str(),

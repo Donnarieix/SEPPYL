@@ -6,6 +6,7 @@ use uuid::Uuid;
 use std::collections::{HashMap,HashSet};
 use crate::{
     entities::{ticket,ticket_message,ticket_read},
+    routes::miscellaneous::ticket_live,
     middleware::{CurrentRole,Role},
     routes::authentication::login::Claims,state::AppState,
 };
@@ -22,7 +23,7 @@ fn staff(role:Role)->bool{role.is_admin()}
 fn visible(row:&ticket::Model,claims:&Claims,role:Role)->bool{
     staff(role)||row.author_id==claims.sub
 }
-async fn access(state:&AppState,claims:&Claims,role:Role,id:Uuid)->R<ticket::Model>{
+pub(super) async fn access(state:&AppState,claims:&Claims,role:Role,id:Uuid)->R<ticket::Model>{
     let row=ticket::Entity::find_by_id(id).one(&state.db).await.map_err(db)?
         .ok_or(StatusCode::NOT_FOUND)?;
     if !visible(&row,claims,role){return Err(StatusCode::NOT_FOUND);}
@@ -103,11 +104,12 @@ pub async fn create(
     }.insert(&txn).await.map_err(db)?;
     ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(row.id),author_id:Set(claims.sub),
-        message:Set(payload.message.trim().into()),created_at:Set(stamp),
+        message:Set(payload.message.trim().into()),attachment_name:Set(None),created_at:Set(stamp),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     txn.commit().await.map_err(db)?;
     notify_discord(row.id,&row.subject);
+    ticket_live::changed(row.id,claims.sub);
     Ok((StatusCode::CREATED,Json(row)))
 }
 pub async fn get(
@@ -154,6 +156,7 @@ pub async fn message(
     active.updated_at=Set(stamp);
     active.update(&state.db).await.map_err(db)?;
     notify_discord(id,&format!("Nouveau message dans le ticket : {}",entry.ticket_id));
+    ticket_live::changed(id,claims.sub);
     Ok((StatusCode::CREATED,Json(entry)))
 }
 pub async fn status(
@@ -170,6 +173,7 @@ pub async fn status(
     active.status=Set(payload.status);active.maintainer_required=Set(payload.maintainer_required);
     active.updated_at=Set(now());active.update(&state.db).await.map_err(db)?;
     if new_mention{notify_discord(id,&format!("Escalade Maintainer : {}",row.subject));}
+    ticket_live::changed(id,claims.sub);
     Ok(StatusCode::NO_CONTENT)
 }
 /// Optional outbound-only notification. The webhook is a server-side secret,

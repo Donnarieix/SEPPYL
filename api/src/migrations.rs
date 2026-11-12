@@ -209,6 +209,7 @@ pub async fn add_changelog_fields(db:&DatabaseConnection)->Result<(),DbErr>{
 pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     for (table, additions) in [
         ("users", vec![("disabled","INTEGER")]),
+        ("support_ticket_messages",vec![("attachment_name","TEXT")]),
         ("trainings", vec![("duration_minutes","INTEGER")]),
         ("training_attendance", vec![("score_comment","TEXT")]),
         ("training_scores", vec![("comment","TEXT")]),

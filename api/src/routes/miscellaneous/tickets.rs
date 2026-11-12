@@ -129,7 +129,7 @@ pub async fn get(
     let known=seen.into_iter().map(|r|r.message_id).collect::<HashSet<_>>();
     for message in &messages{
         if !known.contains(&message.id){
-            state.db.execute(&Statement::from_sql_and_values(DbBackend::Sqlite,
+            state.db.execute_raw(Statement::from_sql_and_values(DbBackend::Sqlite,
                 "INSERT OR IGNORE INTO support_ticket_reads (user_id, message_id, ticket_id) VALUES (?, ?, ?)",
                 vec![claims.sub.into(),message.id.into(),id.into()]
             )).await.map_err(db)?;

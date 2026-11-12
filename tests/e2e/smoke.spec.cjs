@@ -122,14 +122,14 @@ test('registration form signs up and logs in through production-style proxy', as
   await expect(page.getByRole('heading', { name: 'Entraînements' })).toBeVisible();
 });
 
-test('tickets and announcement pages render in Chromium without browser errors',async ({page})=>{
+test('tickets and Maintainer announcement tab render in Chromium without browser errors',async ({page})=>{
   await page.goto('/login');
   await page.locator('input[autocomplete="username"]').fill('fixture-coach');
   await page.locator('input[type="password"]').fill(ciPassword);
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/trainings$/);
   await page.goto('/tickets');
-  await expect(page.getByRole('heading',{name:'Mes tickets'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Tous les tickets'})).toBeVisible();
   // The release history is legitimately shown to first-time accounts and
   // intercepts clicks until acknowledged. Close it as a real user would.
   const releaseHistory=page.getByRole('dialog',{name:'Historique des versions'});
@@ -144,10 +144,14 @@ test('tickets and announcement pages render in Chromium without browser errors',
   await expect(page.getByText('Rapport synthétique E2E')).toBeVisible();
   await page.goto('/matches');
   await expect(page.getByRole('heading',{name:'Matchs'})).toBeVisible();
-  await page.goto('/announcements/manage');
-  await expect(page.getByRole('heading',{name:'Annonces',level:1})).toBeVisible();
-  await page.goto('/news');
-  await expect(page.getByRole('heading',{name:'Nouveautés'})).toBeVisible();
+  await page.goto('/admin');
+  await page.getByRole('button',{name:'Annonces',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Annonces de service'})).toBeVisible();
+  expect(await page.locator('a[href="/news"], a[href="/announcements/manage"]').count()).toBe(0);
+  const utilities=await page.locator('.topbar-utilities > button, .topbar-utilities > a').allTextContents();
+  const nouveautés=utilities.findIndex(t=>t.includes('Nouveautés'));
+  expect(nouveautés).toBeGreaterThanOrEqual(0);
+  expect(utilities[nouveautés+1]).toContain('Tickets');
 });
 
 test('ticket permission checks and non-public roster are enforced server-side',async ({request})=>{
@@ -191,9 +195,84 @@ test('ticket owner isolation, staff escalation and published urgent banner',asyn
     data:{title:'Maintenance de test',body:'Annonce urgente E2E',
       urgent:true,published:true,starts_at:0,ends_at:null}});
   expect(announcement.status()).toBe(201);
-  await page.goto('/news');
-  await expect(page.getByText('Annonce urgente E2E')).toBeVisible();
+  await page.goto('/public');
   await expect(page.locator('.global-urgent-banner')).toContainText('Maintenance de test');
+});
+
+
+test('ticket unread notifications are scoped, persistent, and clear upon reading',async ({request})=>{
+  const userLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const maintainerLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(userLogin.status()).toBe(200);
+  expect(maintainerLogin.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await userLogin.json()).token};
+  const staff={Authorization:'Bearer '+(await maintainerLogin.json()).token};
+  const created=await request.post('/api/tickets',{
+    headers:user,data:{subject:'Lecture et notifications E2E',message:'Demande initiale'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const memberUnread=await request.get('/api/tickets/unread',{headers:user});
+  expect(memberUnread.status()).toBe(200);
+  expect((await memberUnread.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+  const staffUnread=await request.get('/api/tickets/unread',{headers:staff});
+  expect(staffUnread.status()).toBe(200);
+  expect((await staffUnread.json()).tickets.find(t=>t.ticket_id===id)?.count).toBe(1);
+  const seen=await request.get('/api/tickets/'+id,{headers:staff});
+  expect(seen.status()).toBe(200);
+  const cleared=await request.get('/api/tickets/unread',{headers:staff});
+  expect((await cleared.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+  const answered=await request.post('/api/tickets/'+id+'/messages',{
+    headers:staff,data:{message:'Réponse de l’équipe support'}});
+  expect(answered.status()).toBe(201);
+  const userUnread=await request.get('/api/tickets/unread',{headers:user});
+  expect((await userUnread.json()).tickets.find(t=>t.ticket_id===id)?.count).toBe(1);
+  const viewed=await request.get('/api/tickets/'+id,{headers:user});
+  expect(viewed.status()).toBe(200);
+  const last=await request.get('/api/tickets/unread',{headers:user});
+  expect((await last.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+});
+
+test('Administrators can manage tickets but not service announcements',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  const ownerHeaders={Authorization:'Bearer '+(await owner.json()).token};
+  const username='admin-announcement-e2e';
+  const password='admin-announcement-password-2026';
+  expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+  const userLogin=await request.post('/api/login',{data:{username,password}});
+  const userHeaders={Authorization:'Bearer '+(await userLogin.json()).token};
+  const userId=(await (await request.get('/api/account',{headers:userHeaders})).json()).id;
+  expect((await request.put('/api/admin/users/'+userId+'/role',{
+    headers:ownerHeaders,data:{role:'administrator'}})).status()).toBe(204);
+  expect((await request.get('/api/tickets',{headers:userHeaders})).status()).toBe(200);
+  expect((await request.get('/api/admin/announcements',{headers:userHeaders})).status()).toBe(403);
+  expect((await request.post('/api/admin/announcements',{
+    headers:userHeaders,data:{title:'Interdit',body:'Non publié',published:true,urgent:true,starts_at:0}
+  })).status()).toBe(403);
+});
+
+test('ticket contrast stays readable in dark theme',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  const row=page.locator('button.ticket-row').first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.locator('.ticket-message').first()).toBeVisible();
+  const colors=await page.evaluate(()=>{
+    const root=document.querySelector('.site-root');
+    root.setAttribute('data-theme','dark');
+    return {
+      text:getComputedStyle(document.querySelector('.ticket-message')).color,
+      background:getComputedStyle(document.querySelector('.ticket-message')).backgroundColor,
+      border:getComputedStyle(document.querySelector('.ticket-message')).borderColor,
+    };
+  });
+  expect(colors.text).toBe('rgb(237, 242, 248)');
+  expect(['rgb(32, 45, 59)','rgb(43, 57, 73)']).toContain(colors.background);
+  expect(colors.border).toBe('rgb(54, 71, 88)');
 });
 
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{

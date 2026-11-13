@@ -9,7 +9,7 @@ fn status_label(value:&str)->&str{
 }
 
 #[component]
-pub fn Tickets()->Element{
+fn TicketSidebar(selected:Option<String>)->Element{
     let session=use_context::<Signal<Option<String>>>();
     let token=session.read().clone().unwrap_or_default();
     let navigator=use_navigator();
@@ -38,38 +38,58 @@ pub fn Tickets()->Element{
     let mut busy=use_signal(||false);
     let mut notice=use_signal(||None::<String>);
     rsx!{
-        div{class:"app",Header{},
-            main{class:"page workspace-page tickets-page",
-                div{class:"page-heading",
-                    div{h1{if is_staff{"Tous les tickets"}else{"Mes tickets"}}p{"Suivez vos demandes et échangez avec l'équipe de support."}}
-                    button{class:"button solid",onclick:move |_|creating.set(true),"+ Nouveau ticket"}
+        aside{class:"ticket-sidebar","aria-label":"Conversations de support",
+            div{class:"ticket-sidebar-head",
+                div{class:"ticket-sidebar-headings",
+                    h2{if is_staff{"Tous les tickets"}else{"Mes tickets"}}
+                    p{"Conversations d'assistance"}
                 }
-                if let Some(n)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{n}"}}
-                section{class:"panel",
-                    match list.read().clone(){
-                        Some(Ok(items))=>rsx!{
-                            if items.is_empty(){p{class:"muted-small","Aucun ticket pour le moment."}}
-                            for ticket in items{
-                                button{class:"ticket-row",key:"{ticket.id}",r#type:"button",
-                                    onclick:{let id=ticket.id.clone();move |_|{navigator.push(Route::TicketDetail{id:id.clone()});}},
-                                    div{strong{"{ticket.subject}"}
-                                        span{class:"muted-small"," · {status_label(&ticket.status)}"}
+                button{r#type:"button",class:"ticket-sidebar-create",
+                    title:"Nouveau ticket","aria-label":"Nouveau ticket",
+                    onclick:move |_|creating.set(true),
+                    "+"
+                }
+            }
+            if let Some(n)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{n}"}}
+            nav{class:"ticket-sidebar-list","aria-label":"Liste des tickets",
+                match list.read().clone(){
+                    Some(Ok(items))=>rsx!{
+                        if items.is_empty(){
+                            p{class:"ticket-sidebar-empty","Aucun ticket pour le moment."}
+                        }
+                        for ticket in items {
+                            button{
+                                class:if selected.as_ref().is_some_and(|id|id==&ticket.id){
+                                    "ticket-row ticket-sidebar-item selected"
+                                }else{"ticket-row ticket-sidebar-item"},
+                                key:"{ticket.id}",r#type:"button",
+                                "aria-current":if selected.as_ref().is_some_and(|id|id==&ticket.id){"page"}else{"false"},
+                                onclick:{
+                                    let id=ticket.id.clone();
+                                    move |_|{navigator.push(Route::TicketDetail{id:id.clone()});}
+                                },
+                                div{class:"ticket-sidebar-item-main",
+                                    strong{"{ticket.subject}"}
+                                    span{class:"ticket-sidebar-item-status",
+                                        "{status_label(&ticket.status)}"
                                     }
-                                    div{class:"ticket-row-meta",
-                                        if ticket.maintainer_required {
-                                            span{class:"ticket-escalation","Maintainer"}
-                                        }
-                                        if let Some(count)=pending.get(&ticket.id){
-                                            span{class:"ticket-row-unread",title:"Messages non lus","{count} non lu(s)"}
-                                        }
+                                }
+                                div{class:"ticket-sidebar-item-meta",
+                                    if ticket.maintainer_required {
+                                        span{class:"ticket-escalation","Maintainer"}
+                                    }
+                                    if let Some(count)=pending.get(&ticket.id){
+                                        span{class:"ticket-row-unread",title:"Messages non lus",
+                                            "{count} non lu(s)"}
                                     }
                                 }
                             }
-                        },
-                        Some(Err(e))=>rsx!{p{class:"form-error","{e}"}},
-                        None=>rsx!{p{"Chargement…"}}
-                    }
+                        }
+                    },
+                    Some(Err(e))=>rsx!{p{class:"form-error","{e}"}},
+                    None=>rsx!{p{class:"ticket-sidebar-empty","Chargement des tickets…"}}
                 }
+            }
                 if *creating.read(){
                     div{class:"dialog-backdrop",
                         div{class:"dialog-panel",role:"dialog","aria-modal":"true",
@@ -113,6 +133,27 @@ pub fn Tickets()->Element{
                         }
                     }
                 }
+        }
+    }
+}
+
+#[component]
+pub fn Tickets()->Element{
+    rsx!{
+        div{class:"app ticket-app",Header{},
+            main{class:"ticket-workspace tickets-page",
+                TicketSidebar{selected:None::<String>}
+                section{class:"ticket-conversation-area ticket-conversation-empty",
+                    div{class:"ticket-empty-state",
+                        svg{width:"48",height:"48",view_box:"0 0 24 24",
+                            fill:"none",stroke:"currentColor",stroke_width:"1.2",
+                            stroke_linecap:"round",stroke_linejoin:"round",
+                            path{d:"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"}
+                        }
+                        h1{"Vos conversations"}
+                        p{"Sélectionnez un ticket à gauche pour afficher les échanges."}
+                    }
+                }
             }
         }
     }
@@ -153,11 +194,12 @@ pub fn TicketDetail(id:String)->Element{
     });
     let base=crate::api::base_url();
     rsx!{
-        div{class:"app",Header{},
-            main{class:"page workspace-page ticket-detail-page",
-                Link{to:Route::Tickets{},class:"back-link","← Tickets"}
-                if let Some(e)=error.read().as_ref(){p{class:"form-error",role:"alert","{e}"}}
-                match detail.read().clone(){
+        div{class:"app ticket-app",Header{},
+            main{class:"ticket-workspace ticket-detail-page",
+                TicketSidebar{selected:Some(id.clone())}
+                section{class:"ticket-conversation-area",
+                    if let Some(e)=error.read().as_ref(){p{class:"form-error",role:"alert","{e}"}}
+                    match detail.read().clone(){
                     Some(Ok(current))=>rsx!{
                         div{class:"ticket-chat","data-ticket-id":"{id}","data-ticket-base":"{base}",
                             textarea{
@@ -186,6 +228,13 @@ pub fn TicketDetail(id:String)->Element{
                                 div{class:"ticket-chat-topic",
                                     span{class:"ticket-chat-eyebrow","Conversation d'assistance"}
                                     h1{"{current.ticket.subject}"}
+                                    p{class:"ticket-chat-interlocutor",
+                                        if is_staff{
+                                            "Interlocuteur : {current.requester_name}"
+                                        }else{
+                                            "Interlocuteur : équipe support SEPPYL"
+                                        }
+                                    }
                                     div{class:"ticket-chat-tags",
                                         span{class:"chat-state-pill","{status_label(&current.ticket.status)}"}
                                         if current.ticket.maintainer_required{
@@ -358,7 +407,8 @@ pub fn TicketDetail(id:String)->Element{
                         }
                     },
                     Some(Err(e))=>rsx!{p{class:"form-error","{e}"}},
-                    None=>rsx!{p{"Chargement du ticket…"}}
+                    None=>rsx!{p{class:"ticket-detail-loading","Chargement du ticket…"}}
+                    }
                 }
             }
         }

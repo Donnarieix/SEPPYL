@@ -173,6 +173,17 @@
         const url = URL.createObjectURL(blob);
         if (!node.isConnected) { URL.revokeObjectURL(url); return; }
         loaded.set(node, url);
+        // Image dimensions arrive after the message is rendered: a second scroll
+        // is required, otherwise an attachment can appear below the viewport.
+        node.addEventListener("load", () => {
+          const feed = node.closest(".ticket-chat-feed");
+          const tracking = feed && feeds.get(feed);
+          if (feed && (root.__awaitingAttachmentImage || tracking?.pinned)) {
+            feed.scrollTop = feed.scrollHeight;
+            if (tracking) tracking.pinned = true;
+          }
+          root.__awaitingAttachmentImage = false;
+        }, { once: true });
         node.src = url;
         node.classList.add("loaded");
       } catch {
@@ -202,13 +213,18 @@
         const newMessage = lastId && lastId !== tracked.lastId;
         const typingAppeared = typing && !tracked.typing;
         const outgoing = newMessage && latest.classList.contains("own");
+        const attachmentSent = outgoing && !!root.__pendingAttachmentScroll;
         const shouldScroll = (newMessage || typingAppeared) &&
-          (tracked.pinned || outgoing);
+          (tracked.pinned || outgoing || !!root.__pendingAttachmentScroll);
         tracked.lastId = lastId;
         tracked.typing = typing;
         if (shouldScroll) {
           feed.scrollTop = feed.scrollHeight;
           tracked.pinned = true;
+        }
+        if (attachmentSent) {
+          root.__pendingAttachmentScroll = false;
+          root.__awaitingAttachmentImage = true;
         }
       }
     }
@@ -285,6 +301,9 @@
       return;
     }
     if (statusNode) statusNode.textContent = "Envoi de l'image…";
+    // Always follow an outgoing attachment, even when the user was viewing
+    // older messages before selecting the file.
+    root.__pendingAttachmentScroll = true;
     try {
       const reply = await fetch(base + "/tickets/" + id + "/images", {
         method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": file.type }, body: file
@@ -293,6 +312,8 @@
       if (statusNode) statusNode.textContent = "Image envoyée.";
       push(root, { kind: "message" });
     } catch {
+      root.__pendingAttachmentScroll = false;
+      root.__awaitingAttachmentImage = false;
       if (statusNode) statusNode.textContent = "Échec de l'envoi. Réessayez.";
     }
   }

@@ -432,6 +432,76 @@ test('ticket chat uses compact composer, inline controls and follows new message
   expect(await page.locator('.ticket-chat-composer .ticket-typing-indicator').count()).toBe(0);
 });
 
+
+test('support workspace integrates sidebar, requester header, and attachment autoscroll',async ({page,request})=>{
+  const ownerLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(ownerLogin.status()).toBe(200);
+  expect(staffLogin.status()).toBe(200);
+  const owner={Authorization:'Bearer '+(await ownerLogin.json()).token};
+  const created=await request.post('/api/tickets',{
+    headers:owner,data:{subject:'Ticket avec image jointe et navigation',message:'Demande initiale'}
+  });
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  for(let i=0;i<13;i++){
+    expect((await request.post('/api/tickets/'+id+'/messages',{
+      headers:owner,data:{message:'Message historique '+i+' '+('Texte suffisamment long. '.repeat(8))}
+    })).status()).toBe(201);
+  }
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  const workspace=page.locator('.ticket-workspace');
+  const sidebar=page.locator('.ticket-sidebar');
+  const chat=page.locator('.ticket-conversation-area');
+  const feed=page.locator('.ticket-chat-feed');
+  await expect(workspace).toBeVisible();
+  await expect(sidebar).toBeVisible();
+  await expect(feed).toBeVisible();
+  await expect(page.locator('.ticket-chat-interlocutor')).toContainText('fixture-user');
+  await expect(sidebar.locator('.ticket-sidebar-item.selected')).toContainText('Ticket avec image jointe');
+  expect(await workspace.locator('.panel').count()).toBe(0);
+  const positions=await page.evaluate(()=>{
+    const left=document.querySelector('.ticket-sidebar').getBoundingClientRect();
+    const right=document.querySelector('.ticket-conversation-area').getBoundingClientRect();
+    const outer=document.querySelector('.ticket-chat');
+    return {leftEdge:left.right,rightEdge:right.left,
+      border:getComputedStyle(outer).borderTopWidth,
+      radius:getComputedStyle(outer).borderTopLeftRadius,
+      shadow:getComputedStyle(outer).boxShadow};
+  });
+  expect(Math.abs(positions.leftEdge-positions.rightEdge)).toBeLessThan(2);
+  expect(positions.border).toBe('0px');
+  expect(positions.radius).toBe('0px');
+  expect(positions.shadow).toBe('none');
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(0);
+  await feed.evaluate(el=>{el.scrollTop=0;});
+  await expect.poll(()=>feed.evaluate(el=>el.scrollTop)).toBe(0);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const count=await feed.locator('[data-message-id]').count();
+  await page.locator('[data-ticket-attach-input]').setInputFiles({
+    name:'capture.png',mimeType:'image/png',buffer:png
+  });
+  await expect(page.locator('[data-chat-upload-feedback]')).toContainText('Image envoyée',{timeout:12000});
+  await expect(feed.locator('[data-message-id]')).toHaveCount(count+1,{timeout:12000});
+  const image=feed.locator('.ticket-chat-attachment img').last();
+  await expect(image).toBeVisible();
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  await page.setViewportSize({width:390,height:844});
+  await expect(sidebar).toBeVisible();
+  await expect(chat).toBeVisible();
+  const mobile=await page.evaluate(()=>{
+    const left=document.querySelector('.ticket-sidebar').getBoundingClientRect();
+    const right=document.querySelector('.ticket-conversation-area').getBoundingClientRect();
+    return {sidebarBottom:left.bottom,chatTop:right.top};
+  });
+  expect(mobile.sidebarBottom).toBeLessThanOrEqual(mobile.chatTop+2);
+});
+
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
   const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   expect(response.status()).toBe(200);

@@ -16,7 +16,7 @@ pub struct Ticket{pub id:String,pub author_id:String,pub subject:String,pub stat
 pub struct Message{pub id:String,pub author_id:String,pub message:String,pub created_at:i64,
     #[serde(default)]pub attachment_name:Option<String>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
-pub struct Detail{pub ticket:Ticket,pub messages:Vec<Message>}
+pub struct Detail{pub ticket:Ticket,pub requester_name:String,pub messages:Vec<Message>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct UnreadTicket{pub ticket_id:String,pub count:u64}
 #[derive(Clone,Debug,PartialEq,Deserialize,Default)]

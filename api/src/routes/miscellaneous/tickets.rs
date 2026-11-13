@@ -5,7 +5,7 @@ use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use std::collections::{HashMap,HashSet};
 use crate::{
-    entities::{ticket,ticket_message,ticket_read},
+    entities::{ticket,ticket_message,ticket_read,user},
     routes::miscellaneous::ticket_live,
     middleware::{CurrentRole,Role},
     routes::authentication::login::Claims,state::AppState,
@@ -36,7 +36,7 @@ pub struct NewMessage{pub message:String}
 #[derive(Deserialize)]
 pub struct TicketStatus{pub status:String,pub maintainer_required:bool}
 #[derive(Serialize)]
-pub struct TicketDetail{pub ticket:ticket::Model,pub messages:Vec<ticket_message::Model>}
+pub struct TicketDetail{pub ticket:ticket::Model,pub requester_name:String,pub messages:Vec<ticket_message::Model>}
 fn valid_message(s:&str)->bool{!s.trim().is_empty()&&s.len()<=10_000}
 pub async fn list(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
@@ -137,7 +137,10 @@ pub async fn get(
             )).await.map_err(db)?;
         }
     }
-    Ok(Json(TicketDetail{ticket:row,messages}))
+    let requester_name=user::Entity::find_by_id(row.author_id)
+        .one(&state.db).await.map_err(db)?
+        .map(|account|account.username).unwrap_or_else(||"Compte supprimé".into());
+    Ok(Json(TicketDetail{ticket:row,requester_name,messages}))
 }
 pub async fn message(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,

@@ -1,6 +1,27 @@
 use dioxus::prelude::*;
 use crate::api::{tickets,account};
 use std::collections::HashMap;
+
+/// Group consecutive messages from the same account for at most ten minutes
+/// from the group's first message. Anchoring prevents infinite chaining.
+#[derive(Clone)]
+struct MessageGroup{author_id:String,started_at:i64,messages:Vec<tickets::Message>}
+fn group_messages(messages:Vec<tickets::Message>)->Vec<MessageGroup>{
+    let mut groups:Vec<MessageGroup>=Vec::new();
+    for message in messages{
+        let grouped=groups.last().is_some_and(|group|
+            group.author_id==message.author_id && message.created_at>=group.started_at
+            && message.created_at-group.started_at<600);
+        if grouped{
+            if let Some(group)=groups.last_mut(){group.messages.push(message);}
+        }else{
+            groups.push(MessageGroup{author_id:message.author_id.clone(),
+                started_at:message.created_at,messages:vec![message]});
+        }
+    }
+    groups
+}
+
 use super::{Route,layout::Header};
 
 fn status_label(value:&str)->&str{
@@ -47,7 +68,11 @@ fn TicketSidebar(selected:Option<String>)->Element{
                 button{r#type:"button",class:"ticket-sidebar-create",
                     title:"Nouveau ticket","aria-label":"Nouveau ticket",
                     onclick:move |_|creating.set(true),
-                    "+"
+                    svg{width:"20",height:"20",view_box:"0 0 24 24",fill:"none",
+                        stroke:"currentColor",stroke_width:"2",
+                        stroke_linecap:"round",stroke_linejoin:"round",
+                        path{d:"M12 5v14M5 12h14"}
+                    }
                 }
             }
             if let Some(n)=notice.read().as_ref(){p{class:"inline-notice",role:"status","{n}"}}
@@ -70,17 +95,15 @@ fn TicketSidebar(selected:Option<String>)->Element{
                                 },
                                 div{class:"ticket-sidebar-item-main",
                                     strong{"{ticket.subject}"}
-                                    span{class:"ticket-sidebar-item-status",
-                                        "{status_label(&ticket.status)}"
-                                    }
-                                }
-                                div{class:"ticket-sidebar-item-meta",
-                                    if ticket.maintainer_required {
-                                        span{class:"ticket-escalation","Maintainer"}
-                                    }
-                                    if let Some(count)=pending.get(&ticket.id){
-                                        span{class:"ticket-row-unread",title:"Messages non lus",
-                                            "{count} non lu(s)"}
+                                    div{class:"ticket-sidebar-item-meta",
+                                        span{class:"chat-state-pill","{status_label(&ticket.status)}"}
+                                        if ticket.maintainer_required {
+                                            span{class:"ticket-escalation","Maintainer"}
+                                        }
+                                        if let Some(count)=pending.get(&ticket.id){
+                                            span{class:"ticket-row-unread",title:"Messages non lus",
+                                                "{count} non lu(s)"}
+                                        }
                                     }
                                 }
                             }
@@ -178,6 +201,11 @@ pub fn TicketDetail(id:String)->Element{
     let current_user=user.read().as_ref().and_then(|v|v.as_ref().ok())
         .map(|u|u.id.clone()).unwrap_or_default();
     let mut reply=use_signal(String::new);
+    let mut editing_id=use_signal(||None::<String>);
+    let mut editing_text=use_signal(String::new);
+    let mut confirm_delete=use_signal(||None::<String>);
+    let mut history_for=use_signal(||None::<String>);
+    let mut revisions=use_signal(||None::<Vec<tickets::MessageRevision>>);
     let mut emoji_open=use_signal(||false);
     let mut peer_typing=use_signal(||None::<String>);
     let mut status=use_signal(String::new);
@@ -294,28 +322,132 @@ pub fn TicketDetail(id:String)->Element{
                                 }
                             }
                             div{class:"ticket-chat-feed",role:"log","aria-label":"Messages du ticket","aria-live":"polite",
-                                for msg in current.messages{
-                                    article{key:"{msg.id}",
-                                        class:if msg.author_id==current_user{"ticket-chat-message ticket-message own"}else{"ticket-chat-message ticket-message"},
-                                        "data-message-id":"{msg.id}",
-                                        div{class:"ticket-chat-content",
-                                            div{class:"ticket-chat-meta",
-                                                strong{
-                                                    if msg.author_id==current_user{"Vous"}
-                                                    else if is_staff{"Demandeur"}
-                                                    else{"Équipe support"}
+                                for group in group_messages(current.messages){
+                                    div{class:if group.author_id==current_user{"ticket-message-group own"}else{"ticket-message-group"},
+                                        key:"{group.messages[0].id}",
+                                        "data-group-start":"{group.started_at}",
+                                        div{class:"ticket-group-author",
+                                            if group.author_id==current_user{"Vous"}
+                                            else if is_staff{"Demandeur"}
+                                            else{"Équipe support"}
+                                        }
+                                        for msg in group.messages{
+                                            article{key:"{msg.id}",
+                                                class:if msg.author_id==current_user{"ticket-chat-message ticket-message own"}else{"ticket-chat-message ticket-message"},
+                                                "data-message-id":"{msg.id}",
+                                                div{class:"ticket-chat-line",
+                                                    if editing_id.read().as_ref().is_some_and(|v|v==&msg.id){
+                                                        form{class:"ticket-inline-edit",
+                                                            onsubmit:{
+                                                                let token=token.clone();let tid=id.clone();let mid=msg.id.clone();
+                                                                move |event|{
+                                                                    event.prevent_default();
+                                                                    let next=editing_text.read().trim().to_string();
+                                                                    if next.is_empty()||*busy.read(){return;}
+                                                                    busy.set(true);
+                                                                    let token=token.clone();let tid=tid.clone();let mid=mid.clone();
+                                                                    spawn(async move{
+                                                                        match tickets::edit_message(&token,&tid,&mid,&next).await{
+                                                                            Ok(())=>{editing_id.set(None);detail.restart();error.set(None);},
+                                                                            Err(e)=>error.set(Some(e))
+                                                                        }
+                                                                        busy.set(false);
+                                                                    });
+                                                                }
+                                                            },
+                                                            textarea{"data-ticket-edit-composer":"true",
+                                                                rows:"3",maxlength:"10000",
+                                                                value:"{editing_text}",oninput:move |e|editing_text.set(e.value())}
+                                                            div{class:"ticket-edit-actions",
+                                                                button{r#type:"button",class:"button quiet",
+                                                                    onclick:move |_|editing_id.set(None),"Annuler"}
+                                                                button{r#type:"submit",class:"button solid",
+                                                                    disabled:*busy.read()||editing_text.read().trim().is_empty(),
+                                                                    "Enregistrer la modification"}
+                                                            }
+                                                        }
+                                                    }else{
+                                                        div{class:"ticket-chat-bubble",
+                                                            if msg.deleted_at.is_some(){
+                                                                em{class:"ticket-message-deleted","Message supprimé par un administrateur"}
+                                                            }else{
+                                                                if !msg.message.is_empty(){
+                                                                    div{class:"ticket-chat-markdown","data-ticket-markdown":"true",
+                                                                        "data-ticket-raw":"{msg.message}","{msg.message}"}
+                                                                }
+                                                                if let Some(filename)=msg.attachment_name.as_ref(){
+                                                                    div{class:"ticket-chat-attachment",
+                                                                        img{"data-ticket-image":format!("/tickets/{}/images/{}",id,filename),
+                                                                            alt:"Image jointe au message",loading:"lazy"}
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    time{class:"ticket-message-hover-time",
+                                                        title:"{format_time(msg.created_at)}",
+                                                        "{format_time(msg.created_at)}"
+                                                    }
+                                                    if msg.edited_at.is_some() && msg.deleted_at.is_none(){
+                                                        span{class:"ticket-edited-flag",title:"Message modifié","modifié"}
+                                                    }
+                                                    div{class:"ticket-message-actions",
+                                                        if msg.author_id==current_user && msg.deleted_at.is_none() && !msg.message.is_empty(){
+                                                            button{r#type:"button",class:"ticket-msg-action",
+                                                                "data-ticket-edit":"true",
+                                                                title:"Modifier ce message",
+                                                                onclick:{
+                                                                    let mid=msg.id.clone();let content=msg.message.clone();
+                                                                    move |_|{editing_id.set(Some(mid.clone()));editing_text.set(content.clone());}
+                                                                },"Modifier"}
+                                                        }
+                                                        if is_staff && (msg.edited_at.is_some() || msg.deleted_at.is_some()){
+                                                            button{r#type:"button",class:"ticket-msg-action",
+                                                                onclick:{
+                                                                    let token=token.clone();let tid=id.clone();let mid=msg.id.clone();
+                                                                    move |_|{
+                                                                        history_for.set(Some(mid.clone()));revisions.set(None);
+                                                                        let token=token.clone();let tid=tid.clone();let mid=mid.clone();
+                                                                        spawn(async move{
+                                                                            match tickets::message_history(&token,&tid,&mid).await{
+                                                                                Ok(rows)=>revisions.set(Some(rows)),
+                                                                                Err(e)=>{history_for.set(None);error.set(Some(e));}
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                },"Historique"}
+                                                        }
+                                                        if is_staff && msg.deleted_at.is_none(){
+                                                            button{r#type:"button",class:"ticket-msg-action danger",
+                                                                onclick:{
+                                                                    let mid=msg.id.clone();
+                                                                    move |_|confirm_delete.set(Some(mid.clone()))
+                                                                },"Supprimer"}
+                                                        }
+                                                    }
                                                 }
-                                                time{"{format_time(msg.created_at)}"}
-                                            }
-                                            div{class:"ticket-chat-bubble",
-                                                if !msg.message.is_empty(){
-                                                    div{class:"ticket-chat-markdown","data-ticket-markdown":"true",
-                                                        "data-ticket-raw":"{msg.message}","{msg.message}"}
-                                                }
-                                                if let Some(filename)=msg.attachment_name.as_ref(){
-                                                    div{class:"ticket-chat-attachment",
-                                                        img{"data-ticket-image":format!("/tickets/{}/images/{}",id,filename),
-                                                            alt:"Image jointe au message",loading:"lazy"}
+                                                if confirm_delete.read().as_ref().is_some_and(|v|v==&msg.id){
+                                                    div{class:"ticket-delete-confirm",role:"group",
+                                                        span{"Masquer ce message ? Une copie restera dans l’historique."}
+                                                        button{r#type:"button",class:"button quiet",
+                                                            onclick:move |_|confirm_delete.set(None),"Annuler"}
+                                                        button{r#type:"button",class:"button solid",
+                                                            disabled:*busy.read(),
+                                                            onclick:{
+                                                                let token=token.clone();let tid=id.clone();let mid=msg.id.clone();
+                                                                move |_|{
+                                                                    if *busy.read(){return;}
+                                                                    busy.set(true);
+                                                                    let token=token.clone();let tid=tid.clone();let mid=mid.clone();
+                                                                    spawn(async move{
+                                                                        match tickets::delete_message(&token,&tid,&mid).await{
+                                                                            Ok(())=>{confirm_delete.set(None);detail.restart();error.set(None);},
+                                                                            Err(e)=>error.set(Some(e))
+                                                                        }
+                                                                        busy.set(false);
+                                                                    });
+                                                                }
+                                                            },"Confirmer la suppression"}
                                                     }
                                                 }
                                             }
@@ -326,6 +458,57 @@ pub fn TicketDetail(id:String)->Element{
                                     div{class:"ticket-typing-indicator",role:"status",
                                         span{class:"typing-dots",i{} i{} i{}}
                                         "{name} est en train d'écrire…"
+                                    }
+                                }
+                            }
+                            if let Some(mid)=history_for.read().as_ref(){
+                                div{class:"dialog-backdrop",
+                                    div{class:"dialog-panel ticket-history-dialog",role:"dialog",
+                                        "aria-modal":"true","aria-label":"Historique du message",
+                                        div{class:"dialog-header",
+                                            h2{"Historique du message"}
+                                            button{r#type:"button",class:"icon-button",
+                                                onclick:move |_|history_for.set(None),"×"}
+                                        }
+                                        div{class:"dialog-body",
+                                            p{class:"muted-small",
+                                                "Chaque version antérieure est conservée, y compris après suppression."}
+                                            if let Some(versions)=revisions.read().as_ref(){
+                                                for version in versions {
+                                                    div{class:"ticket-revision",key:"{version.id}",
+                                                        div{class:"ticket-revision-meta",
+                                                            strong{if version.action=="delete"{"Suppression"}
+                                                                else if version.action=="restore"{"Restauration"}
+                                                                else{"Modification"}}
+                                                            time{"{format_time(version.changed_at)}"}
+                                                        }
+                                                        pre{"{version.previous_text}"}
+                                                        if let Some(attachment)=version.previous_attachment_name.as_ref(){
+                                                            p{"Image archivée : {attachment}"}
+                                                        }
+                                                        button{r#type:"button",class:"button outline",
+                                                            disabled:*busy.read(),
+                                                            onclick:{
+                                                                let token=token.clone();let tid=id.clone();
+                                                                let mid=mid.clone();let revision_id=version.id.clone();
+                                                                move |_|{
+                                                                    if *busy.read(){return;}
+                                                                    busy.set(true);
+                                                                    let token=token.clone();let tid=tid.clone();
+                                                                    let mid=mid.clone();let revision_id=revision_id.clone();
+                                                                    spawn(async move{
+                                                                        match tickets::restore_message(&token,&tid,&mid,&revision_id).await{
+                                                                            Ok(())=>{history_for.set(None);detail.restart();error.set(None);},
+                                                                            Err(e)=>error.set(Some(e))
+                                                                        }
+                                                                        busy.set(false);
+                                                                    });
+                                                                }
+                                                            },"Restaurer cette version"}
+                                                    }
+                                                }
+                                            }else{p{"Chargement de l'historique…"}}
+                                        }
                                     }
                                 }
                             }

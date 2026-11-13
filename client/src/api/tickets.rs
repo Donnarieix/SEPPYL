@@ -81,3 +81,9 @@ pub async fn message_history(token:&str,ticket_id:&str,message_id:&str)->Result<
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r).await?.json().await.map_err(|e|e.to_string())
 }
+
+pub async fn restore_message(token:&str,ticket_id:&str,message_id:&str,revision_id:&str)->Result<(),String>{
+    let r=Client::new().post(url(&format!("/tickets/{ticket_id}/messages/{message_id}/restore/{revision_id}")))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r).await.map(|_|())
+}

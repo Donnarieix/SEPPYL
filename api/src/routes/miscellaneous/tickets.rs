@@ -230,6 +230,41 @@ pub async fn delete_message(
 }
 /// The full revision trail, including pre-deletion contents, never leaves
 /// the authenticated staff API.
+/// Restoring a historical version creates another audit entry. A staff member
+/// can therefore recover pre-edit or pre-deletion content without erasing history.
+pub async fn restore_message(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((ticket_id,message_id,revision_id)):Path<(Uuid,Uuid,Uuid)>,
+)->R<Json<ticket_message::Model>>{
+    if !staff(role.0){return Err(StatusCode::FORBIDDEN);}
+    access(&state,&claims,role.0,ticket_id).await?;
+    let previous=ticket_message_revision::Entity::find_by_id(revision_id)
+        .one(&state.db).await.map_err(db)?.ok_or(StatusCode::NOT_FOUND)?;
+    if previous.ticket_id!=ticket_id||previous.message_id!=message_id{
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let current=ticket_message::Entity::find_by_id(message_id)
+        .one(&state.db).await.map_err(db)?.ok_or(StatusCode::NOT_FOUND)?;
+    if current.ticket_id!=ticket_id{return Err(StatusCode::NOT_FOUND);}
+    let stamp=now();
+    let txn=state.db.begin().await.map_err(db)?;
+    ticket_message_revision::ActiveModel{
+        id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
+        edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
+        previous_attachment_name:Set(current.attachment_name.clone()),
+        action:Set("restore".into()),changed_at:Set(stamp),
+        ..Default::default()
+    }.insert(&txn).await.map_err(db)?;
+    let mut active:ticket_message::ActiveModel=current.into();
+    active.message=Set(previous.previous_text);
+    active.attachment_name=Set(previous.previous_attachment_name);
+    active.deleted_at=Set(None);
+    active.edited_at=Set(Some(stamp));
+    let restored=active.update(&txn).await.map_err(db)?;
+    txn.commit().await.map_err(db)?;
+    ticket_live::changed(ticket_id,claims.sub);
+    Ok(Json(restored))
+}
 pub async fn message_history(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
     State(state):State<AppState>,Path((ticket_id,message_id)):Path<(Uuid,Uuid)>,

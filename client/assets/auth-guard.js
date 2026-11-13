@@ -320,8 +320,27 @@
   // Enter sends; Shift+Enter inserts a newline. IME composition is never sent.
   document.addEventListener("keydown", event => {
     if (!event.target.matches?.("[data-ticket-composer]")) return;
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing ||
-        event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === "ArrowUp" && !event.shiftKey && !event.target.value.trim()) {
+      const root = event.target.closest(".ticket-chat");
+      // The server verifies ownership; the button only exposes the latest
+      // available user-authored, non-deleted message for keyboard editing.
+      const candidates = root?.querySelectorAll('[data-ticket-edit="true"]');
+      const latest = candidates?.[candidates.length - 1];
+      if (latest) {
+        event.preventDefault();
+        latest.click();
+        requestAnimationFrame(() => {
+          const editor = root?.querySelector('[data-ticket-edit-composer="true"]');
+          if (editor) {
+            editor.focus();
+            editor.setSelectionRange(editor.value.length, editor.value.length);
+          }
+        });
+      }
+      return;
+    }
+    if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     if (event.target.value.trim()) event.target.closest("form")?.requestSubmit();
   });

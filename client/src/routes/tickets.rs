@@ -10,13 +10,13 @@ fn group_messages(messages:Vec<tickets::Message>)->Vec<MessageGroup>{
     let mut groups:Vec<MessageGroup>=Vec::new();
     for message in messages{
         let grouped=groups.last().is_some_and(|group|
-            group.author_id==message.author_id && message.created_at>=group.started_at
-            && message.created_at-group.started_at<600);
+            group.author_id==message.author_id && normalize_timestamp(message.created_at)>=group.started_at
+            && normalize_timestamp(message.created_at)-group.started_at<600);
         if grouped{
             if let Some(group)=groups.last_mut(){group.messages.push(message);}
         }else{
             groups.push(MessageGroup{author_id:message.author_id.clone(),
-                started_at:message.created_at,messages:vec![message]});
+                started_at:normalize_timestamp(message.created_at),messages:vec![message]});
         }
     }
     groups
@@ -24,6 +24,10 @@ fn group_messages(messages:Vec<tickets::Message>)->Vec<MessageGroup>{
 
 use super::{Route,layout::Header};
 
+fn normalize_timestamp(stamp:i64)->i64{
+    if stamp>100_000_000_000_000{stamp/1_000_000}
+    else if stamp>100_000_000_000{stamp/1000}else{stamp}
+}
 fn status_label(value:&str)->&str{
     match value{"open"=>"Ouvert","in_progress"=>"En cours","resolved"=>"Résolu",
         "closed"=>"Fermé",_=>"Inconnu"}
@@ -184,7 +188,7 @@ pub fn Tickets()->Element{
 
 
 fn format_time(stamp:i64)->String{
-    chrono::DateTime::<chrono::Utc>::from_timestamp(stamp,0)
+    chrono::DateTime::<chrono::Utc>::from_timestamp(normalize_timestamp(stamp),0)
         .map(|time|time.format("%d/%m/%Y · %H:%M UTC").to_string())
         .unwrap_or_default()
 }
@@ -535,7 +539,11 @@ pub fn TicketDetail(id:String)->Element{
                                         div{class:"ticket-composer-surface",
                                             label{class:"ticket-chat-tool ticket-add-attachment",
                                                 title:"Joindre une image","aria-label":"Joindre une image",
-                                                span{"+"}
+                                                svg{width:"21",height:"21",view_box:"0 0 24 24",fill:"none",
+                                                    stroke:"currentColor",stroke_width:"2",
+                                                    stroke_linecap:"round",stroke_linejoin:"round",
+                                                    path{d:"M12 5v14M5 12h14"}
+                                                }
                                                 input{r#type:"file","data-ticket-attach-input":"true",
                                                     accept:"image/png,image/jpeg,image/webp,image/gif"}
                                             }

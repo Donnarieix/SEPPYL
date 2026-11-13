@@ -3559,3 +3559,8 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
   .site-root .ticket-message-group .ticket-chat-message.ticket-message{max-width:90%}
   .site-root .ticket-message-hover-time{font-size:9px}
 }
+
+/* Keep status and escalation on a single visual row without 200px flex-basis. */
+.site-root .ticket-sidebar-item-meta{flex-wrap:nowrap;white-space:nowrap}
+.site-root .ticket-sidebar-item-meta .ticket-row-unread{margin-left:auto}
+.site-root .ticket-add-attachment svg{display:block;flex:none;stroke:currentColor}

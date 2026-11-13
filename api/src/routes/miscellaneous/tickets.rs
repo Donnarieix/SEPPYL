@@ -19,6 +19,10 @@ fn now()->i64{
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
         .map(|t|t.as_secs() as i64).unwrap_or(0)
 }
+fn precise_now()->i64{
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|t|t.as_micros() as i64).unwrap_or(0)
+}
 fn staff(role:Role)->bool{role.is_admin()}
 fn visible(row:&ticket::Model,claims:&Claims,role:Role)->bool{
     staff(role)||row.author_id==claims.sub
@@ -104,7 +108,7 @@ pub async fn create(
     }.insert(&txn).await.map_err(db)?;
     ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(row.id),author_id:Set(claims.sub),
-        message:Set(payload.message.trim().into()),attachment_name:Set(None),created_at:Set(stamp),
+        message:Set(payload.message.trim().into()),attachment_name:Set(None),created_at:Set(precise_now()),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     txn.commit().await.map_err(db)?;
@@ -152,7 +156,7 @@ pub async fn message(
     let stamp=now();
     let entry=ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(id),author_id:Set(claims.sub),
-        message:Set(payload.message.trim().into()),created_at:Set(stamp),
+        message:Set(payload.message.trim().into()),created_at:Set(precise_now()),
         ..Default::default()
     }.insert(&state.db).await.map_err(db)?;
     let mut active:ticket::ActiveModel=row.into();
@@ -187,7 +191,7 @@ pub async fn edit_message(
         id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
         edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
         previous_attachment_name:Set(current.attachment_name.clone()),
-        action:Set("edit".into()),changed_at:Set(timestamp),
+        action:Set("edit".into()),changed_at:Set(precise_now()),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     let mut active:ticket_message::ActiveModel=current.into();
@@ -216,7 +220,7 @@ pub async fn delete_message(
         id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
         edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
         previous_attachment_name:Set(current.attachment_name.clone()),
-        action:Set("delete".into()),changed_at:Set(timestamp),
+        action:Set("delete".into()),changed_at:Set(precise_now()),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     let mut active:ticket_message::ActiveModel=current.into();
@@ -252,7 +256,7 @@ pub async fn restore_message(
         id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
         edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
         previous_attachment_name:Set(current.attachment_name.clone()),
-        action:Set("restore".into()),changed_at:Set(stamp),
+        action:Set("restore".into()),changed_at:Set(precise_now()),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     let mut active:ticket_message::ActiveModel=current.into();

@@ -37,7 +37,9 @@ pub async fn upload(
     let record=ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),author_id:Set(claims.sub),
         message:Set(String::new()),attachment_name:Set(Some(filename)),
-        created_at:Set(stamp),..Default::default()
+        created_at:Set(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|time|time.as_micros() as i64).unwrap_or_default()),..Default::default()
     }.insert(&state.db).await.map_err(|e|{
         tracing::error!(%e,"Ticket upload database failure");
         let _=std::fs::remove_file(&path);

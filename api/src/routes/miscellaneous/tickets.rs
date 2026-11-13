@@ -165,7 +165,7 @@ pub async fn get(
     // alone. Administrators never acknowledge it on a maintainer's behalf.
     if role.0==Role::Maintainer && row.maintainer_required && row.maintainer_generation>0 {
         state.db.execute_raw(Statement::from_sql_and_values(DbBackend::Sqlite,
-            "INSERT INTO support_ticket_maintainer_reads (user_id, ticket_id, generation) VALUES (?, ?, ?) \\\n             ON CONFLICT(user_id, ticket_id) DO UPDATE SET generation = MAX(generation, excluded.generation)",
+            "INSERT INTO support_ticket_maintainer_reads (user_id, ticket_id, generation) VALUES (?, ?, ?) ON CONFLICT(user_id, ticket_id) DO UPDATE SET generation = MAX(generation, excluded.generation)",
             vec![claims.sub.into(),id.into(),row.maintainer_generation.into()]
         )).await.map_err(db)?;
     }

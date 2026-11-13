@@ -11,5 +11,6 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub player_id: Uuid,
     pub score: i32,
+    pub comment: Option<String>,
 }
 impl ActiveModelBehavior for ActiveModel {}

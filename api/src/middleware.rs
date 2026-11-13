@@ -56,6 +56,7 @@ pub async fn auth(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
     // Pre-existing, role-less users keep their previous write access.
+    if current.disabled.unwrap_or(false){return Err(StatusCode::UNAUTHORIZED);}
     let role = current.role.as_deref().unwrap_or("trainer");
     let role = Role::parse(role).ok_or(StatusCode::FORBIDDEN)?;
     if matches!(role, Role::Visitor) { return Err(StatusCode::UNAUTHORIZED); }
@@ -63,7 +64,7 @@ pub async fn auth(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let mutation = matches!(method, Method::POST | Method::PUT | Method::PATCH | Method::DELETE);
-    let self_service = path.starts_with("/account/") || path == "/preferences"
+    let self_service = path.starts_with("/account/") || path == "/preferences" || path.starts_with("/tickets")
         || path.starts_with("/clubs") || path.starts_with("/teams")
         || path.starts_with("/admin/")
         // Read receipts belong to the authenticated account, even when that

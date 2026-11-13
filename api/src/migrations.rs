@@ -203,6 +203,34 @@ pub async fn add_changelog_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     Ok(())
 }
 
+
+/// Add optional columns without rebuilding or deleting historical rows.
+/// All field additions default to NULL on existing databases.
+pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
+    for (table, additions) in [
+        ("users", vec![("disabled","INTEGER")]),
+        ("support_tickets",vec![("maintainer_generation","INTEGER NOT NULL DEFAULT 0")]),
+        ("support_ticket_messages",vec![("attachment_name","TEXT"),("edited_at","INTEGER"),("deleted_at","INTEGER"),("reply_to_id","TEXT")]),
+        ("trainings", vec![("duration_minutes","INTEGER")]),
+        ("training_attendance", vec![("score_comment","TEXT")]),
+        ("training_scores", vec![("comment","TEXT")]),
+        ("clubs", vec![("show_public_teams","INTEGER"),("show_public_roster","INTEGER")]),
+    ] {
+        let columns=query_rows(db,format!("PRAGMA table_info({})",quote_identifier(table))).await?;
+        if columns.is_empty(){continue;}
+        let existing=columns.iter().map(|row|row.try_get::<String>("","name"))
+            .collect::<Result<Vec<_>,_>>()?;
+        for (field,kind) in additions {
+            if !existing.iter().any(|name|name==field) {
+                db.execute_unprepared(&format!(
+                    "ALTER TABLE {} ADD COLUMN {} {}",quote_identifier(table),quote_identifier(field),kind
+                )).await?;
+                tracing::info!(table,field,"Added optional sixth-pass field");
+            }
+        }
+    }
+    Ok(())
+}
 pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
     // A migration must never arbitrarily merge existing player IDs.
     let duplicates=query_rows(db,

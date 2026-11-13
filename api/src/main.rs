@@ -1,6 +1,9 @@
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
+    extract::Request,
+    middleware::Next,
+    response::Response,
     middleware as axum_middleware,
     routing::{delete, get, post, put},
 };
@@ -23,10 +26,12 @@ use crate::{
             catalog,
             training,
             organization,
+            matches,
+            player_stats,
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, audit as audit_routes, changelog},
+        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, ticket_live, ticket_attachments, announcements},
     },
     state::AppState,
 };
@@ -53,17 +58,41 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| is_allowed_origin(origin)))
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::HeaderName::from_static("x-ticket-reply-to")]);
 
     let state = AppState::default().await;
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
-.route("/changelog",get(changelog::list))
+        .route("/tickets",get(tickets::list).post(tickets::create))
+        .route("/tickets/unread",get(tickets::unread))
+        .route("/tickets/{id}/events",get(ticket_live::stream))
+        .route("/tickets/{id}/typing",post(ticket_live::typing))
+        .route("/tickets/{id}/presence",get(ticket_live::presence_list))
+        .route("/tickets/{id}/images",post(ticket_attachments::upload).layer(axum::extract::DefaultBodyLimit::max(4*1024*1024)))
+        .route("/tickets/{id}/images/{filename}",get(ticket_attachments::download))
+        .route("/tickets/{id}",get(tickets::get))
+        .route("/tickets/{id}/messages",post(tickets::message))
+        .route("/tickets/{id}/messages/{message_id}",put(tickets::edit_message).delete(tickets::delete_message))
+        .route("/tickets/{id}/messages/{message_id}/history",get(tickets::message_history))
+        .route("/tickets/{id}/messages/{message_id}/restore/{revision_id}",post(tickets::restore_message))
+        .route("/tickets/{id}/status",put(tickets::status))
+        .route("/admin/announcements",get(announcements::all).post(announcements::create))
+        .route("/admin/announcements/{id}",put(announcements::update).delete(announcements::remove))
+        .route("/matches",get(matches::list).post(matches::create))
+        .route("/matches/{id}",get(matches::get).put(matches::update))
+        .route("/matches/{id}/lineup",put(matches::set_lineup))
+        .route("/matches/{id}/event-types",post(matches::create_type))
+        .route("/matches/{id}/events",post(matches::add_event))
+        .route("/matches/{id}/events/{event_id}",delete(matches::remove_event))
+        .route("/changelog",get(changelog::list))
         .route("/changelog/status",get(changelog::status))
         .route("/changelog/{version}/read",post(changelog::acknowledge))
         .route("/changelog/{version}",put(changelog::save))
         .route("/admin/users", get(organization::list_users))
+        .route("/admin/users/{id}/dependencies",get(accounts::dependencies))
+        .route("/admin/users/{id}/status",put(accounts::set_disabled))
+        .route("/admin/users/{id}",delete(accounts::remove))
         .route("/admin/clubs", get(organization::list_admin_clubs))
         .route("/clubs/{id}/information", put(organization::update_club_information))
         .route("/clubs", get(organization::list_clubs).post(organization::create_club))
@@ -88,6 +117,7 @@ async fn main() {
         .route("/account", get(account::get))
         .route("/account/profile", put(account::update_profile))
         .route("/account/password", put(account::change_password))
+        .route("/players/{id}/time-totals",get(player_stats::get))
         .route("/player/list", get(get_players))
         .route("/player/get/{id}", get(get_player))
         .route("/player/create", post(create_player))
@@ -124,8 +154,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/announcements",get(announcements::public))
         .route("/public/clubs", get(organization::public_clubs))
         .route("/public/clubs/{id}/teams", get(organization::public_teams))
+        .route("/public/teams/{id}/players",get(organization::public_team_roster))
         .route("/login", post(login))
         // /api/register remains blocked by the installed production Nginx
         // configuration. /api/signup is the public registration entry point;
@@ -137,6 +169,7 @@ async fn main() {
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Apply CORS after merging, so it covers protected routes too.
         .layer(cors)
+        .layer(axum_middleware::from_fn(nosniff))
         .with_state(state);
 
     // The deployed systemd service provides SEPPYL_BIND=127.0.0.1:3101;
@@ -148,6 +181,14 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+
+// Enforce safe MIME handling across API responses, including private media.
+async fn nosniff(request:Request,next:Next)->Response{
+    let mut response=next.run(request).await;
+    response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"));
+    response
+}
 
 // A browser's Origin header must match the exact local hostname and (optional)
 // numeric port. Prefix matching alone would also allow localhost.evil.example.

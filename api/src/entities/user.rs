@@ -12,6 +12,7 @@ pub struct Model {
     pub password: String,
     /// None preserves existing accounts as trainers during migration.
     pub role: Option<String>,
+    pub disabled: Option<bool>,
 
     #[sea_orm(has_many)]
     pub players: HasMany<super::player::Entity>,

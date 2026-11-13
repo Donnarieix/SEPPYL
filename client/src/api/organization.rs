@@ -4,6 +4,8 @@ fn base()->&'static str{ super::base_url() }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct Club{
     pub id:String,pub name:String,pub is_public:Option<bool>,
+    #[serde(default)]pub show_public_teams:Option<bool>,
+    #[serde(default)]pub show_public_roster:Option<bool>,
     #[serde(default)]pub description:Option<String>,
     #[serde(default)]pub logo_url:Option<String>,
     #[serde(default)]pub logo_x:Option<i32>,
@@ -34,7 +36,7 @@ pub fn logo_style(x:Option<i32>,y:Option<i32>,zoom:Option<i32>)->String {
         y as f32*(z-100) as f32/200.0,z as f32/100.0)
 }
 #[derive(Clone,Debug,Deserialize,PartialEq)]
-pub struct User{pub id:String,pub username:String,pub role:String}
+pub struct User{pub id:String,pub username:String,pub role:String,#[serde(default)]pub disabled:bool}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
 pub struct ClubMember{pub club_id:String,pub user_id:String,pub role:String}
 #[derive(Clone,Debug,Deserialize,PartialEq)]
@@ -60,15 +62,17 @@ pub async fn admin_clubs(token:&str)->Result<Vec<Club>,String>{
 #[derive(Serialize)]
 struct ClubInformation<'a>{
     name:&'a str,description:&'a str,logo_url:Option<&'a str>,is_public:bool,
+    show_public_teams:bool,show_public_roster:bool,
     logo_x:i32,logo_y:i32,logo_zoom:i32,
 }
 pub async fn update_club_information(
     token:&str,id:&str,name:&str,description:&str,logo_url:Option<&str>,is_public:bool,
     logo_x:i32,logo_y:i32,logo_zoom:i32,
+    show_public_teams:bool,show_public_roster:bool,
 )->Result<(),String>{
     let response=Client::new().put(format!("{}/clubs/{id}/information",base()))
         .bearer_auth(token)
-        .json(&ClubInformation{name,description,logo_url,is_public,logo_x,logo_y,logo_zoom})
+        .json(&ClubInformation{name,description,logo_url,is_public,show_public_teams,show_public_roster,logo_x,logo_y,logo_zoom})
         .send().await.map_err(|e|e.to_string())?;
     check(response.status())
 }
@@ -231,4 +235,35 @@ pub async fn club_players(token:&str,club_id:&str)->Result<Vec<crate::api::playe
     let r=Client::new().get(format!("{}/clubs/{club_id}/players",base()))
         .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}
+
+pub async fn public_roster(team_id:&str)->Result<Vec<crate::api::players::Player>,String>{
+    let response=Client::new().get(format!("{}/public/teams/{team_id}/players",base()))
+        .send().await.map_err(|e|e.to_string())?;
+    check(response.status())?;
+    response.json().await.map_err(|e|e.to_string())
+}
+
+#[derive(Clone,Debug,Deserialize,PartialEq)]
+pub struct AccountDependencies {
+    pub trainings:u64,pub catalog_activities:u64,pub tactical_diagrams:u64,
+    pub matches_created:u64,pub tickets:u64,pub ticket_messages:u64,
+    pub linked_players:u64,pub club_memberships:u64,pub team_memberships:u64,
+}
+pub async fn account_dependencies(token:&str,id:&str)->Result<AccountDependencies,String>{
+    let r=Client::new().get(format!("{}/admin/users/{id}/dependencies",base()))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r.status())?;r.json().await.map_err(|e|e.to_string())
+}
+pub async fn set_account_disabled(token:&str,id:&str,disabled:bool)->Result<(),String>{
+    let r=Client::new().put(format!("{}/admin/users/{id}/status",base()))
+        .bearer_auth(token).json(&serde_json::json!({"disabled":disabled}))
+        .send().await.map_err(|e|e.to_string())?;
+    check(r.status())
+}
+pub async fn delete_account(token:&str,id:&str,mode:&str,confirmation:&str)->Result<(),String>{
+    let r=Client::new().delete(format!("{}/admin/users/{id}",base()))
+        .bearer_auth(token).json(&serde_json::json!({"mode":mode,"confirmation":confirmation}))
+        .send().await.map_err(|e|e.to_string())?;
+    check(r.status())
 }

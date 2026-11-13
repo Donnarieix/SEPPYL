@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use super::Route;
-use crate::api::account;
+use crate::api::{account,tickets};
 
 /// Desktop navigation stays in the header. On touch devices, primary routes
 /// move to a bottom navigation bar with comfortable touch targets.
@@ -16,6 +16,23 @@ pub fn Header() -> Element {
         async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
     });
     let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if matches!(a.role.as_str(),"administrator"|"maintainer"));
+    // The header is present on every authenticated route. Read session inside
+    // the resource so token changes are observed, and poll without a reload.
+    let mut unread=use_resource(move ||{
+        let token=session.read().clone();
+        async move{match token{Some(token)=>tickets::unread(&token).await,
+            None=>Ok(tickets::UnreadSummary::default())}}
+    });
+    let mut unread_poll=unread;
+    use_future(move ||async move{
+        loop{
+            gloo_timers::future::TimeoutFuture::new(10_000).await;
+            unread_poll.restart();
+        }
+    });
+    let unread_total=unread.read().as_ref().and_then(|r|r.as_ref().ok())
+        .map(|r|r.total).unwrap_or(0);
+    let unread_label=if unread_total>99{"99+".to_string()}else{unread_total.to_string()};
     let can_audit=matches!(info.read().as_ref(),Some(Ok(a))
         if matches!(a.role.as_str(),"trainer"|"manager"|"administrator"|"maintainer"));
     rsx! {
@@ -36,15 +53,26 @@ pub fn Header() -> Element {
                     Link { to: Route::Activities {},
                         class: if matches!(&current, Route::Activities {}) { "active" } else { "" },
                         "Activités" }
+                    Link { to: Route::Matches {},
+                        class: if matches!(&current,Route::Matches{}|Route::MatchDetail{..}){"active"}else{""},
+                        "Matchs" }
                     Link { to: Route::Tactics {},
                         class: if matches!(&current, Route::Tactics {}) { "active" } else { "" },
                         "Tactiques" }
                 }
                 div { class: "topbar-utilities",
                     button{class:"topbar-changelog",r#type:"button",
-                        title:"Historique des versions",
+                        title:"Historique des nouveautés",
                         onclick:move |_|changelog_open.set(true),
                         "Nouveautés"
+                    }
+                    Link{to:Route::Tickets{},
+                        class:if matches!(&current,Route::Tickets{}|Route::TicketDetail{..}){"topbar-account active ticket-nav-link"}else{"topbar-account ticket-nav-link"},
+                        "Tickets"
+                        if unread_total>0{
+                            span{class:"ticket-unread-count",title:"Tickets ou messages non lus",
+                                "{unread_label}"}
+                        }
                     }
                     if can_audit {
                         Link { to: Route::AuditLog {},
@@ -142,6 +170,16 @@ pub fn Header() -> Element {
                         path { d: "M8 9h8M8 13h8M8 17h6" }
                     }
                     span { "Journal" }
+                }
+            }
+            Link { to: Route::Matches{},class:"mobile-nav-link","Matchs" }
+            button{class:"mobile-nav-link",r#type:"button",
+                onclick:move |_|changelog_open.set(true),"Nouveautés"}
+            Link{to:Route::Tickets{},
+                class:if matches!(&current,Route::Tickets{}|Route::TicketDetail{..}){"mobile-nav-link active ticket-nav-link"}else{"mobile-nav-link ticket-nav-link"},
+                span{"Tickets"}
+                if unread_total>0{
+                    span{class:"ticket-unread-count","{unread_label}"}
                 }
             }
             Link { to: Route::AccountPage {},

@@ -36,7 +36,7 @@ pub(super) async fn access(state:&AppState,claims:&Claims,role:Role,id:Uuid)->R<
 #[derive(Deserialize)]
 pub struct NewTicket{pub subject:String,pub message:String}
 #[derive(Deserialize)]
-pub struct NewMessage{pub message:String}
+pub struct NewMessage{pub message:String,#[serde(default)]pub reply_to_id:Option<Uuid>}
 #[derive(Deserialize)]
 pub struct TicketStatus{pub status:String,pub maintainer_required:bool}
 #[derive(Serialize)]
@@ -153,10 +153,16 @@ pub async fn message(
     let row=access(&state,&claims,role.0,id).await?;
     if !valid_message(&payload.message){return Err(StatusCode::BAD_REQUEST);}
     if row.status=="closed"&&!staff(role.0){return Err(StatusCode::CONFLICT);}
+    if let Some(parent_id)=payload.reply_to_id{
+        let parent=ticket_message::Entity::find_by_id(parent_id)
+            .one(&state.db).await.map_err(db)?.ok_or(StatusCode::BAD_REQUEST)?;
+        if parent.ticket_id!=id{return Err(StatusCode::BAD_REQUEST);}
+    }
     let stamp=now();
     let entry=ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(id),author_id:Set(claims.sub),
-        message:Set(payload.message.trim().into()),created_at:Set(precise_now()),
+        message:Set(payload.message.trim().into()),reply_to_id:Set(payload.reply_to_id),
+        created_at:Set(precise_now()),
         ..Default::default()
     }.insert(&state.db).await.map_err(db)?;
     let mut active:ticket::ActiveModel=row.into();

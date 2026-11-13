@@ -58,7 +58,7 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| is_allowed_origin(origin)))
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::HeaderName::from_static("x-ticket-reply-to")]);
 
     let state = AppState::default().await;
 

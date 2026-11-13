@@ -8,6 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id:Uuid,
     pub ticket_id:Uuid,
+    pub reply_to_id:Option<Uuid>,
     pub author_id:Uuid,
     pub message:String,
     // Nullable for older messages and new image-only messages.

@@ -15,7 +15,8 @@ pub struct Ticket{pub id:String,pub author_id:String,pub subject:String,pub stat
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Message{pub id:String,pub author_id:String,pub message:String,pub created_at:i64,
     #[serde(default)]pub edited_at:Option<i64>,#[serde(default)]pub deleted_at:Option<i64>,
-    #[serde(default)]pub attachment_name:Option<String>}
+    #[serde(default)]pub attachment_name:Option<String>,
+    #[serde(default)]pub reply_to_id:Option<String>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Detail{pub ticket:Ticket,pub requester_name:String,pub messages:Vec<Message>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
@@ -25,7 +26,7 @@ pub struct UnreadSummary{pub total:u64,pub tickets:Vec<UnreadTicket>}
 #[derive(Serialize)]
 struct Create<'a>{subject:&'a str,message:&'a str}
 #[derive(Serialize)]
-struct Reply<'a>{message:&'a str}
+struct Reply<'a>{message:&'a str,#[serde(skip_serializing_if="Option::is_none")]reply_to_id:Option<&'a str>}
 #[derive(Serialize)]
 struct Status<'a>{status:&'a str,maintainer_required:bool}
 pub async fn list(token:&str)->Result<Vec<Ticket>,String>{
@@ -43,9 +44,9 @@ pub async fn create(token:&str,subject:&str,message:&str)->Result<Ticket,String>
         .json(&Create{subject,message}).send().await.map_err(|e|e.to_string())?;
     check(r).await?.json().await.map_err(|e|e.to_string())
 }
-pub async fn reply(token:&str,id:&str,message:&str)->Result<(),String>{
+pub async fn reply(token:&str,id:&str,message:&str,reply_to_id:Option<&str>)->Result<(),String>{
     let r=Client::new().post(url(&format!("/tickets/{id}/messages"))).bearer_auth(token)
-        .json(&Reply{message}).send().await.map_err(|e|e.to_string())?;
+        .json(&Reply{message,reply_to_id}).send().await.map_err(|e|e.to_string())?;
     check(r).await.map(|_|())
 }
 pub async fn status(token:&str,id:&str,status:&str,maintainer_required:bool)->Result<(),String>{

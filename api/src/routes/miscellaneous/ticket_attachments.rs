@@ -1,6 +1,6 @@
 //! Private ticket attachments: allowlisted raster formats, magic-byte checks,
 //! scoped filenames, bounded uploads and an authenticated read route.
-use axum::{Extension,body::Bytes,extract::{Path,State},http::{StatusCode,header,HeaderValue},response::{IntoResponse,Response},Json};
+use axum::{Extension,body::Bytes,extract::{Path,State},http::{StatusCode,header,HeaderValue,HeaderMap},response::{IntoResponse,Response},Json};
 use sea_orm::{ActiveModelTrait,ActiveValue::Set,EntityTrait};
 use uuid::Uuid;
 use crate::{entities::{ticket,ticket_message},middleware::CurrentRole,
@@ -21,11 +21,23 @@ fn allowed_file(name:&str)->Option<&'static str>{
 }
 pub async fn upload(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
-    State(state):State<AppState>,Path(ticket_id):Path<Uuid>,bytes:Bytes,
+    State(state):State<AppState>,Path(ticket_id):Path<Uuid>,headers:HeaderMap,bytes:Bytes,
 )->Result<(StatusCode,Json<ticket_message::Model>),StatusCode>{
     let row=tickets::access(&state,&claims,role.0,ticket_id).await?;
     if row.status=="closed"&&!role.0.is_admin(){return Err(StatusCode::CONFLICT);}
     if bytes.is_empty()||bytes.len()>LIMIT{return Err(StatusCode::PAYLOAD_TOO_LARGE);}
+    let reply_to_id=match headers.get("x-ticket-reply-to"){
+        Some(value)=>{
+            let value=value.to_str().map_err(|_|StatusCode::BAD_REQUEST)?;
+            let target=Uuid::parse_str(value).map_err(|_|StatusCode::BAD_REQUEST)?;
+            let parent=ticket_message::Entity::find_by_id(target)
+                .one(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::BAD_REQUEST)?;
+            if parent.ticket_id!=ticket_id{return Err(StatusCode::BAD_REQUEST);}
+            Some(target)
+        },
+        None=>None,
+    };
     let (extension,_)=kind(&bytes).ok_or(StatusCode::UNSUPPORTED_MEDIA_TYPE)?;
     let filename=format!("{}.{}",Uuid::new_v4(),extension);
     let directory=format!("data/ticket-uploads/{ticket_id}");
@@ -36,7 +48,7 @@ pub async fn upload(
         .map(|time|time.as_secs() as i64).unwrap_or_default();
     let record=ticket_message::ActiveModel{
         id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),author_id:Set(claims.sub),
-        message:Set(String::new()),attachment_name:Set(Some(filename)),
+        message:Set(String::new()),attachment_name:Set(Some(filename)),reply_to_id:Set(reply_to_id),
         created_at:Set(std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|time|time.as_micros() as i64).unwrap_or_default()),..Default::default()

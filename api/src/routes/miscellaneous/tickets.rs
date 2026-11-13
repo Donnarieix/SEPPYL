@@ -5,7 +5,7 @@ use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use std::collections::{HashMap,HashSet};
 use crate::{
-    entities::{ticket,ticket_message,ticket_message_revision,ticket_read,user},
+    entities::{ticket,ticket_message,ticket_message_revision,ticket_read,ticket_maintainer_read,user},
     routes::miscellaneous::ticket_live,
     middleware::{CurrentRole,Role},
     routes::authentication::login::Claims,state::AppState,
@@ -86,6 +86,26 @@ pub async fn unread(
             *pending.entry(message.ticket_id).or_default()+=1;
         }
     }
+    // Escalation is a separate work item for maintainers, even when all
+    // messages were previously read. Preserve per-user message receipts.
+    if role.0==Role::Maintainer {
+        let escalated=visible.iter().filter(|t|t.maintainer_required && t.maintainer_generation>0)
+            .collect::<Vec<_>>();
+        if !escalated.is_empty(){
+            let acknowledged=ticket_maintainer_read::Entity::find()
+                .filter(ticket_maintainer_read::COLUMN.user_id.eq(claims.sub))
+                .filter(ticket_maintainer_read::COLUMN.ticket_id.is_in(escalated.iter().map(|t|t.id).collect::<Vec<_>>()))
+                .all(&state.db).await.map_err(db)?;
+            let generations=acknowledged.into_iter().map(|receipt|(receipt.ticket_id,receipt.generation))
+                .collect::<HashMap<_,_>>();
+            for ticket in escalated {
+                if generations.get(&ticket.id).copied().unwrap_or(0)<ticket.maintainer_generation {
+                    let count=pending.entry(ticket.id).or_default();
+                    *count=(*count).max(1);
+                }
+            }
+        }
+    }
     let mut tickets=pending.into_iter().map(|(ticket_id,count)|UnreadTicket{ticket_id,count})
         .collect::<Vec<_>>();
     tickets.sort_by_key(|t|t.ticket_id);
@@ -103,7 +123,7 @@ pub async fn create(
     let row=ticket::ActiveModel{
         id:Set(Uuid::new_v4()),author_id:Set(claims.sub),
         subject:Set(payload.subject.trim().into()),status:Set("open".into()),
-        maintainer_required:Set(false),created_at:Set(stamp),updated_at:Set(stamp),
+        maintainer_required:Set(false),maintainer_generation:Set(0),created_at:Set(stamp),updated_at:Set(stamp),
         ..Default::default()
     }.insert(&txn).await.map_err(db)?;
     ticket_message::ActiveModel{
@@ -140,6 +160,14 @@ pub async fn get(
                 vec![claims.sub.into(),message.id.into(),id.into()]
             )).await.map_err(db)?;
         }
+    }
+    // Viewing the thread acknowledges the current escalation for this maintainer
+    // alone. Administrators never acknowledge it on a maintainer's behalf.
+    if role.0==Role::Maintainer && row.maintainer_required && row.maintainer_generation>0 {
+        state.db.execute_raw(Statement::from_sql_and_values(DbBackend::Sqlite,
+            "INSERT INTO support_ticket_maintainer_reads (user_id, ticket_id, generation) VALUES (?, ?, ?) \\\n             ON CONFLICT(user_id, ticket_id) DO UPDATE SET generation = MAX(generation, excluded.generation)",
+            vec![claims.sub.into(),id.into(),row.maintainer_generation.into()]
+        )).await.map_err(db)?;
     }
     let requester_name=user::Entity::find_by_id(row.author_id)
         .one(&state.db).await.map_err(db)?
@@ -303,6 +331,7 @@ pub async fn status(
     let new_mention=payload.maintainer_required&&!row.maintainer_required;
     let mut active:ticket::ActiveModel=row.clone().into();
     active.status=Set(payload.status);active.maintainer_required=Set(payload.maintainer_required);
+    if new_mention {active.maintainer_generation=Set(row.maintainer_generation+1);}
     active.updated_at=Set(now());active.update(&state.db).await.map_err(db)?;
     if new_mention{notify_discord(id,&format!("Escalade Maintainer : {}",row.subject));}
     ticket_live::changed(id,claims.sub);
@@ -341,7 +370,7 @@ mod tests {
     fn ticket_visibility_and_maintainer_escalation_are_not_public(){
         let creator=Uuid::new_v4();
         let t=ticket::Model{id:Uuid::new_v4(),author_id:creator,
-            subject:"Test".into(),status:"open".into(),maintainer_required:false,
+            subject:"Test".into(),status:"open".into(),maintainer_required:false,maintainer_generation:0,
             created_at:1,updated_at:1};
         assert!(visible(&t,&Claims{sub:creator,exp:u64::MAX},Role::User));
         assert!(!visible(&t,&Claims{sub:Uuid::new_v4(),exp:u64::MAX},Role::User));

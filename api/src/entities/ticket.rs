@@ -11,6 +11,7 @@ pub struct Model {
     pub subject:String,
     pub status:String,
     pub maintainer_required:bool,
+    pub maintainer_generation:i64,
     pub created_at:i64,
     pub updated_at:i64,
 }

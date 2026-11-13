@@ -312,11 +312,15 @@
     // older messages before selecting the file.
     root.__pendingAttachmentScroll = true;
     try {
+      const headers = { Authorization: "Bearer " + token, "Content-Type": file.type };
+      const replyId = root.querySelector("[data-ticket-reply-to]")?.getAttribute("data-ticket-reply-to");
+      if (replyId) headers["X-Ticket-Reply-To"] = replyId;
       const reply = await fetch(base + "/tickets/" + id + "/images", {
-        method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": file.type }, body: file
+        method: "POST", headers, body: file
       });
       if (!reply.ok) throw new Error("Envoi impossible");
       if (statusNode) statusNode.textContent = "Image envoyée.";
+      push(root, { kind: "reply_sent" });
       push(root, { kind: "message" });
     } catch {
       root.__pendingAttachmentScroll = false;
@@ -324,6 +328,50 @@
       if (statusNode) statusNode.textContent = "Échec de l'envoi. Réessayez.";
     }
   }
+  // Menus are rendered inline with each message, so the entire gap between
+  // the bubble and its button remains inside the hover/focus area.
+  const dismissMenus = () => {
+    document.querySelectorAll(".ticket-chat [data-ticket-menu-dismiss]").forEach(input => {
+      input.value = "close";
+      input.dispatchEvent(new Event("input", { bubbles:true }));
+    });
+  };
+  document.addEventListener("pointerdown", event => {
+    if (!event.target.closest?.(".ticket-message-actions")) dismissMenus();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") dismissMenus();
+  });
+  document.addEventListener("click", async event => {
+    const target = event.target.closest?.("[data-ticket-copy-text]");
+    if (target) {
+      const text = target.getAttribute("data-ticket-copy-text") || "";
+      const root = target.closest(".ticket-chat");
+      const feedback = root?.querySelector("[data-ticket-copy-feedback]");
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+        await navigator.clipboard.writeText(text);
+        if (feedback) feedback.textContent = "Texte copié.";
+      } catch {
+        if (feedback) feedback.textContent = "Copie impossible. Vérifiez les autorisations du navigateur.";
+      }
+      return;
+    }
+    const quote = event.target.closest?.("[data-ticket-jump-to]");
+    if (quote) {
+      const id = quote.getAttribute("data-ticket-jump-to");
+      const root = quote.closest(".ticket-chat");
+      const match = Array.from(root?.querySelectorAll("[data-message-id]") || [])
+        .find(node => node.getAttribute("data-message-id") === id);
+      if (match) {
+        match.scrollIntoView({ behavior:"smooth", block:"center" });
+        match.classList.remove("ticket-jump-highlight");
+        void match.offsetWidth;
+        match.classList.add("ticket-jump-highlight");
+        setTimeout(() => match.classList.remove("ticket-jump-highlight"), 1600);
+      }
+    }
+  }, true);
   // Enter sends; Shift+Enter inserts a newline. IME composition is never sent.
   // Sending a message should always reveal the new post, including when
   // the sender previously scrolled up to inspect an older discussion.
@@ -396,6 +444,25 @@
         });
       }
       decorate(root);
+      const preview = root.querySelector("[data-ticket-reply-to]");
+      const replyId = preview?.getAttribute("data-ticket-reply-to") || "";
+      if (replyId && root.__focusedReplyId !== replyId) {
+        root.__focusedReplyId = replyId;
+        const composerInput = root.querySelector("[data-ticket-composer]");
+        if (composerInput) {
+          composerInput.focus({ preventScroll:true });
+          const feed = root.querySelector(".ticket-chat-feed");
+          if (feed) feed.scrollTop = feed.scrollHeight;
+        }
+      }
+      if (!replyId) root.__focusedReplyId = "";
+      const menu = root.querySelector(".ticket-message-actions.is-open .ticket-message-menu");
+      if (menu) {
+        const feed = menu.closest(".ticket-chat-feed");
+        const rect = menu.parentElement?.getBoundingClientRect();
+        const bounds = feed?.getBoundingClientRect();
+        if (rect && bounds) menu.classList.toggle("open-below", rect.top - bounds.top < 170);
+      }
       const composer = root.querySelector("[data-ticket-composer]");
       if (composer && !composer.value && composer.style.height) {
         composer.style.height = "";

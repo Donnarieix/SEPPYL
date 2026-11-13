@@ -3672,3 +3672,8 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
   .site-root .ticket-message-menu{width:176px;min-width:176px}
   .site-root .ticket-chat-line .ticket-chat-bubble{max-width:calc(100% - 40px)}
 }
+
+/* Keep the three-dot hit target clickable even when the hover state has not
+   yet been painted. The parent message line remains the continuous hover zone. */
+.site-root .ticket-chat-line .ticket-message-actions{pointer-events:auto}
+.site-root .ticket-message-menu-trigger{pointer-events:auto}

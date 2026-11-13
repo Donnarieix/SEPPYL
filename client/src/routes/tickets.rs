@@ -682,7 +682,6 @@ pub fn TicketDetail(id:String)->Element{
                                         p{class:"ticket-composer-hint",
                                             "Markdown et émojis acceptés · Images PNG, JPEG, WebP ou GIF (4 Mo maximum)"}
                                         p{class:"ticket-upload-feedback",role:"status","data-chat-upload-feedback":"true"}
-                                        p{class:"ticket-copy-feedback",role:"status","data-ticket-copy-feedback":"true"}
                                     }
                                 }else{
                                     div{class:"ticket-conversation-closed","Ce ticket est fermé."}

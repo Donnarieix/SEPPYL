@@ -604,6 +604,101 @@ test('header notifications arrive on unrelated pages without reload',async ({pag
   await expect(page.locator('.topbar-utilities .ticket-unread-count')).toContainText('1',{timeout:18000});
 });
 
+
+test('targeted replies are scoped to their ticket, including image attachments',async ({request})=>{
+  const memberLogin=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}
+  });
+  expect(memberLogin.status()).toBe(200);
+  const auth={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const makeTicket=async subject=>{
+    const result=await request.post('/api/tickets',{headers:auth,
+      data:{subject,message:'Message original à citer'}});
+    expect(result.status()).toBe(201);
+    return (await result.json()).id;
+  };
+  const id=await makeTicket('Réponse ciblée vérifiée');
+  const otherId=await makeTicket('Autre ticket à isoler');
+  const original=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages[0].id;
+  const endpoint='/api/tickets/'+id+'/messages';
+  const reply=await request.post(endpoint,{headers:auth,
+    data:{message:'Ceci répond au message original',reply_to_id:original}});
+  expect(reply.status()).toBe(201);
+  expect((await reply.json()).reply_to_id).toBe(original);
+  const conversation=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages;
+  expect(conversation.find(m=>m.reply_to_id===original)?.message).toBe('Ceci répond au message original');
+  const forbidden=await request.post('/api/tickets/'+otherId+'/messages',{headers:auth,
+    data:{message:'Une référence inter-tickets est interdite',reply_to_id:original}});
+  expect(forbidden.status()).toBe(400);
+  const missing=await request.post(endpoint,{headers:auth,
+    data:{message:'Référence absente',reply_to_id:require('node:crypto').randomUUID()}});
+  expect(missing.status()).toBe(400);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const image=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...auth,'Content-Type':'image/png','X-Ticket-Reply-To':original},data:png
+  });
+  expect(image.status()).toBe(201);
+  expect((await image.json()).reply_to_id).toBe(original);
+  const crossedImage=await request.post('/api/tickets/'+otherId+'/images',{
+    headers:{...auth,'Content-Type':'image/png','X-Ticket-Reply-To':original},data:png
+  });
+  expect(crossedImage.status()).toBe(400);
+});
+
+test('hover menu stays clickable and supports reply, copy and cited-message navigation',async ({page,request})=>{
+  const memberLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const auth={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const created=await request.post('/api/tickets',{headers:auth,
+    data:{subject:'Menu contextuel et citations',message:'Message source à citer'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const original=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages[0].id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect(page.locator('[data-message-id="'+original+'"]')).toBeVisible();
+  if(await page.locator('.changelog-backdrop').isVisible()){
+    await page.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
+  const line=page.locator('[data-message-id="'+original+'"] .ticket-chat-line');
+  const trigger=line.getByRole('button',{name:'Options du message'});
+  await line.locator('.ticket-chat-bubble').hover();
+  await expect(trigger).toBeVisible();
+  const geometry=await line.evaluate(node=>{
+    const message=node.querySelector('.ticket-chat-bubble').getBoundingClientRect();
+    const action=node.querySelector('.ticket-message-menu-trigger').getBoundingClientRect();
+    return {messageRight:message.right,actionLeft:action.left,y:(action.top+action.bottom)/2,
+      position:getComputedStyle(node.querySelector('.ticket-message-actions')).position};
+  });
+  expect(geometry.position).toBe('relative');
+  await page.mouse.move((geometry.messageRight+geometry.actionLeft)/2,geometry.y);
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const menu=page.getByRole('menu',{name:'Actions sur le message'});
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem',{name:'Répondre'})).toBeVisible();
+  await expect(menu.getByRole('menuitem',{name:'Copier le texte'})).toBeVisible();
+  await menu.getByRole('menuitem',{name:'Copier le texte'}).click();
+  await expect(page.locator('[data-ticket-copy-feedback]')).toContainText('Texte copié');
+  await line.locator('.ticket-message-menu-trigger').click();
+  await menu.getByRole('menuitem',{name:'Répondre'}).click();
+  const preview=page.locator('[data-ticket-reply-to="'+original+'"]');
+  await expect(preview).toBeVisible();
+  const composer=page.locator('[data-ticket-composer]');
+  await expect(composer).toBeFocused();
+  await composer.fill('Réponse depuis le menu contextuel');
+  await composer.press('Enter');
+  await expect(preview).toHaveCount(0);
+  await expect(page.locator('.ticket-reply-quote')).toBeVisible();
+  const replyMessage=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages;
+  expect(replyMessage.find(message=>message.message==='Réponse depuis le menu contextuel')?.reply_to_id).toBe(original);
+  await page.locator('.ticket-reply-quote').click();
+  await expect(page.locator('[data-message-id="'+original+'"]')).toHaveClass(/ticket-jump-highlight/);
+});
+
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
   const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   expect(response.status()).toBe(200);

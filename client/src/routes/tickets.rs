@@ -236,6 +236,10 @@ pub fn TicketDetail(id:String)->Element{
                     match detail.read().clone(){
                     Some(Ok(current))=>rsx!{
                         div{class:"ticket-chat","data-ticket-id":"{id}","data-ticket-base":"{base}",
+                            textarea{class:"ticket-live-input","data-ticket-menu-dismiss":"true",
+                                "aria-hidden":"true",tabindex:"-1",
+                                oninput:move |_|menu_open.set(None)
+                            }
                             textarea{
                                 class:"ticket-live-input","data-ticket-live-event":"true",
                                 "aria-hidden":"true",tabindex:"-1",
@@ -252,6 +256,7 @@ pub fn TicketDetail(id:String)->Element{
                                                         .filter(|v|!v.is_empty()).unwrap_or("Support").to_string()));
                                                 }
                                                 "typing_end" if actor!=my_id=>peer_typing.set(None),
+                                                "reply_sent"=>reply_target.set(None),
                                                 _=>{}
                                             }
                                         }
@@ -612,7 +617,7 @@ pub fn TicketDetail(id:String)->Element{
                                             }
                                         },
                                         if let Some(target)=reply_target.read().as_ref(){
-                                            div{class:"ticket-reply-composer-preview",
+                                            div{class:"ticket-reply-composer-preview","data-ticket-reply-to":"{target.id}",
                                                 span{class:"ticket-reply-composer-content",
                                                     strong{"En réponse à "}
                                                     span{if target.deleted_at.is_some(){"Message supprimé"}
@@ -678,6 +683,7 @@ pub fn TicketDetail(id:String)->Element{
                                         p{class:"ticket-composer-hint",
                                             "Markdown et émojis acceptés · Images PNG, JPEG, WebP ou GIF (4 Mo maximum)"}
                                         p{class:"ticket-upload-feedback",role:"status","data-chat-upload-feedback":"true"}
+                                        p{class:"ticket-copy-feedback",role:"status","data-ticket-copy-feedback":"true"}
                                     }
                                 }else{
                                     div{class:"ticket-conversation-closed","Ce ticket est fermé."}

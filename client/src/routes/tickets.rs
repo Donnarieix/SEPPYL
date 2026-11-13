@@ -597,15 +597,33 @@ pub fn TicketDetail(id:String)->Element{
                                                 if value.is_empty()||*busy.read(){return;}
                                                 busy.set(true);
                                                 let t=token.clone();let tid=id.clone();
+                                                let target_id=reply_target.read().as_ref().map(|p|p.id.clone());
                                                 spawn(async move{
-                                                    match tickets::reply(&t,&tid,&value).await {
-                                                        Ok(())=>{reply.set(String::new());detail.restart();error.set(None);},
+                                                    match tickets::reply(&t,&tid,&value,target_id.as_deref()).await {
+                                                        Ok(())=>{
+                                                            reply.set(String::new());
+                                                            reply_target.set(None);
+                                                            detail.restart();error.set(None);
+                                                        },
                                                         Err(e)=>error.set(Some(e)),
                                                     }
                                                     busy.set(false);
                                                 });
                                             }
                                         },
+                                        if let Some(target)=reply_target.read().as_ref(){
+                                            div{class:"ticket-reply-composer-preview",
+                                                span{class:"ticket-reply-composer-content",
+                                                    strong{"En réponse à "}
+                                                    span{if target.deleted_at.is_some(){"Message supprimé"}
+                                                        else if target.message.is_empty(){"Image jointe"}
+                                                        else{"{target.message.chars().take(125).collect::<String>()}"}}
+                                                }
+                                                button{r#type:"button",title:"Annuler la réponse",
+                                                    "aria-label":"Annuler la réponse",
+                                                    onclick:move |_|reply_target.set(None),"×"}
+                                            }
+                                        }
                                         div{class:"ticket-composer-surface",
                                             label{class:"ticket-chat-tool ticket-add-attachment",
                                                 title:"Joindre une image","aria-label":"Joindre une image",

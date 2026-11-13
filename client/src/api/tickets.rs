@@ -69,7 +69,7 @@ pub struct MessageRevision {
 }
 pub async fn edit_message(token:&str,ticket_id:&str,message_id:&str,message:&str)->Result<(),String>{
     let r=Client::new().put(url(&format!("/tickets/{ticket_id}/messages/{message_id}")))
-        .bearer_auth(token).json(&Reply{message}).send().await.map_err(|e|e.to_string())?;
+        .bearer_auth(token).json(&Reply{message,reply_to_id:None}).send().await.map_err(|e|e.to_string())?;
     check(r).await.map(|_|())
 }
 pub async fn delete_message(token:&str,ticket_id:&str,message_id:&str)->Result<(),String>{

@@ -502,6 +502,105 @@ test('support workspace integrates sidebar, requester header, and attachment aut
   expect(mobile.sidebarBottom).toBeLessThanOrEqual(mobile.chatTop+2);
 });
 
+
+test('message editing keeps an immutable staff-visible history and staff-only deletion',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const staff=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(owner.status()).toBe(200);
+  expect(staff.status()).toBe(200);
+  const memberHeaders={Authorization:'Bearer '+(await owner.json()).token};
+  const staffHeaders={Authorization:'Bearer '+(await staff.json()).token};
+  const ticket=await request.post('/api/tickets',{headers:memberHeaders,
+    data:{subject:'Test historique immutable',message:'Version A'}});
+  expect(ticket.status()).toBe(201);
+  const id=(await ticket.json()).id;
+  const initial=await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json();
+  const messageId=initial.messages[0].id;
+  const base='/api/tickets/'+id+'/messages/'+messageId;
+  const forbiddenEdit=await request.put(base,{headers:staffHeaders,data:{message:'Interdit'}});
+  expect(forbiddenEdit.status()).toBe(403);
+  expect((await request.get(base+'/history',{headers:memberHeaders})).status()).toBe(403);
+  expect((await request.delete(base,{headers:memberHeaders})).status()).toBe(403);
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Version B'}})).status()).toBe(200);
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Version C'}})).status()).toBe(200);
+  let revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions.map(x=>x.previous_text)).toEqual(['Version A','Version B']);
+  const deleted=await request.delete(base,{headers:staffHeaders});
+  expect(deleted.status()).toBe(204);
+  const afterDelete=(await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json()).messages[0];
+  expect(afterDelete.deleted_at).not.toBeNull();
+  expect(afterDelete.message).toBe('');
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Nope'}})).status()).toBe(409);
+  revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions.map(x=>x.previous_text)).toEqual(['Version A','Version B','Version C']);
+  const restored=await request.post(base+'/restore/'+revisions[0].id,{headers:staffHeaders});
+  expect(restored.status()).toBe(200);
+  const afterRestore=(await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json()).messages[0];
+  expect(afterRestore.deleted_at).toBeNull();
+  expect(afterRestore.message).toBe('Version A');
+  revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions).toHaveLength(4);
+  expect(revisions[3].action).toBe('restore');
+});
+
+test('message groups and ArrowUp edit previous author message',async ({page,request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const user={Authorization:'Bearer '+(await owner.json()).token};
+  const created=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Groupement et édition',message:'Début du groupe'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  expect((await request.post('/api/tickets/'+id+'/messages',{
+    headers:user,data:{message:'Deuxième message'}})).status()).toBe(201);
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-user');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect(page.locator('.ticket-message-group')).toHaveCount(1);
+  await expect(page.locator('.ticket-message-group .ticket-chat-message')).toHaveCount(2);
+  await expect(page.locator('.ticket-group-author')).toHaveText('Vous');
+  const rows=page.locator('.ticket-message-group .ticket-chat-line');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.last().locator('.ticket-message-hover-time')).toBeHidden();
+  await rows.last().hover();
+  await expect(rows.last().locator('.ticket-message-hover-time')).toBeVisible();
+  const editor=page.locator('[data-ticket-composer]');
+  await editor.focus();
+  await editor.press('ArrowUp');
+  const edit=page.locator('[data-ticket-edit-composer]');
+  await expect(edit).toBeVisible();
+  await expect(edit).toHaveValue('Deuxième message');
+  await edit.fill('Deuxième message modifié');
+  await page.getByRole('button',{name:'Enregistrer la modification'}).click();
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('modifié');
+  await expect(page.locator('.ticket-edited-flag')).toBeVisible();
+  await expect(page.locator('.ticket-message-group')).toHaveCount(1);
+});
+
+test('header notifications arrive on unrelated pages without reload',async ({page,request})=>{
+  const username='ticket-header-'+require('node:crypto').randomUUID().slice(0,12);
+  const password='ticket-header-password-2026';
+  expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+  const memberLogin=await request.post('/api/login',{data:{username,password}});
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  const member={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const staff={Authorization:'Bearer '+(await staffLogin.json()).token};
+  const created=await request.post('/api/tickets',{headers:member,
+    data:{subject:'Notification du header',message:'Bonjour'}});
+  const id=(await created.json()).id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill(username);
+  await page.locator('input[type="password"]').fill(password);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await expect(page.locator('.topbar-utilities .ticket-unread-count')).toHaveCount(0);
+  expect((await request.post('/api/tickets/'+id+'/messages',{
+    headers:staff,data:{message:'Nouvelle réponse depuis le support'}})).status()).toBe(201);
+  await expect(page.locator('.topbar-utilities .ticket-unread-count')).toContainText('1',{timeout:18000});
+});
+
 test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
   const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   expect(response.status()).toBe(200);

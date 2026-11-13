@@ -597,3 +597,26 @@ pub fn TicketDetail(id:String)->Element{
         }
     }
 }
+
+#[cfg(test)]
+mod group_tests{
+    use super::*;
+    fn message(author:&str,timestamp:i64)->tickets::Message{
+        tickets::Message{
+            id:format!("{author}-{timestamp}"),author_id:author.into(),
+            message:"test".into(),created_at:timestamp,
+            attachment_name:None,edited_at:None,deleted_at:None
+        }
+    }
+    #[test]
+    fn ten_minute_groups_anchor_to_first_message_not_previous(){
+        let groups=group_messages(vec![
+            message("alice",0),message("alice",300),message("alice",600),
+            message("alice",660),message("bob",670),message("bob",1200),
+        ]);
+        assert_eq!(groups.iter().map(|g|g.messages.len()).collect::<Vec<_>>(),
+            vec![2,2,2]);
+        assert_eq!(groups.iter().map(|g|g.started_at).collect::<Vec<_>>(),
+            vec![0,600,670]);
+    }
+}

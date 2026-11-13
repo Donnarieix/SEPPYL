@@ -363,8 +363,6 @@
     const target = event.target.closest?.("[data-ticket-copy-text]");
     if (target) {
       const text = target.getAttribute("data-ticket-copy-text") || "";
-      const root = target.closest(".ticket-chat");
-      const feedback = root?.querySelector("[data-ticket-copy-feedback]");
       let copied = false;
       try {
         if (navigator.clipboard?.writeText) {
@@ -373,9 +371,7 @@
         }
       } catch {}
       if (!copied) copied = copyLegacy(text);
-      if (feedback) feedback.textContent = copied
-        ? "Texte copié."
-        : "Copie impossible. Vérifiez les autorisations du navigateur.";
+      if (!copied) console.warn("Copie du message impossible : autorisation du navigateur refusée.");
       return;
     }
     const quote = event.target.closest?.("[data-ticket-jump-to]");

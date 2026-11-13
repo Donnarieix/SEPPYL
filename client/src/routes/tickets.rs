@@ -487,7 +487,6 @@ pub fn TicketDetail(id:String)->Element{
                                                                     move |_|{confirm_delete.set(Some(mid.clone()));menu_open.set(None);}
                                                                 },"Supprimer"}
                                                         }
-                                                    }
 
                                                             }
                                                         }

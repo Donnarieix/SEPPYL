@@ -3657,10 +3657,6 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
 .site-root .ticket-message-form:has(.ticket-reply-composer-preview) .ticket-composer-surface{
   border-radius:0 0 12px 12px;
 }
-.site-root .ticket-copy-feedback{
-  color:var(--muted);font-size:11px;line-height:1.4;margin:0 3px;
-}
-.site-root .ticket-copy-feedback:empty{display:none}
 .site-root .ticket-jump-highlight .ticket-chat-bubble{
   outline:2px solid var(--accent);outline-offset:3px;
   transition:outline-color .2s;

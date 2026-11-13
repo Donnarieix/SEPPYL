@@ -232,6 +232,71 @@ test('ticket unread notifications are scoped, persistent, and clear upon reading
   expect((await last.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
 });
 
+test('escalation produces independent unread work for each maintainer without erasing message receipts',async ({request})=>{
+  const password='ticket-escalation-password-2026';
+  const adminName='admin-escalation-'+require('node:crypto').randomUUID().slice(0,12);
+  const secondName='maintainer-escalation-'+require('node:crypto').randomUUID().slice(0,12);
+  const ownerLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const supervisorLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(ownerLogin.status()).toBe(200);
+  expect(supervisorLogin.status()).toBe(200);
+  const owner={Authorization:'Bearer '+(await ownerLogin.json()).token};
+  const supervisor={Authorization:'Bearer '+(await supervisorLogin.json()).token};
+  const createStaff=async (username,role)=>{
+    expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+    const logged=await request.post('/api/login',{data:{username,password}});
+    expect(logged.status()).toBe(200);
+    const headers={Authorization:'Bearer '+(await logged.json()).token};
+    const account=await request.get('/api/account',{headers});
+    expect(account.status()).toBe(200);
+    const userId=(await account.json()).id;
+    expect((await request.put('/api/admin/users/'+userId+'/role',{headers:supervisor,data:{role}})).status()).toBe(204);
+    return headers;
+  };
+  const admin=await createStaff(adminName,'administrator');
+  const otherMaintainer=await createStaff(secondName,'maintainer');
+  const created=await request.post('/api/tickets',{headers:owner,
+    data:{subject:'Escalade après lecture',message:'Première demande'}}); 
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const count=async headers=>{
+    const response=await request.get('/api/tickets/unread',{headers});
+    expect(response.status()).toBe(200);
+    return (await response.json()).tickets.find(item=>item.ticket_id===id)?.count||0;
+  };
+  expect(await count(admin)).toBe(1);
+  expect(await count(supervisor)).toBe(1);
+  // All three staff accounts can have already read the initial message.
+  for(const headers of [admin,supervisor,otherMaintainer]){
+    expect((await request.get('/api/tickets/'+id,{headers})).status()).toBe(200);
+    expect(await count(headers)).toBe(0);
+  }
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:true}})).status()).toBe(204);
+  // An administrator viewing the ticket does not acknowledge the work for a maintainer.
+  expect((await request.get('/api/tickets/'+id,{headers:admin})).status()).toBe(200);
+  expect(await count(admin)).toBe(0);
+  expect(await count(supervisor)).toBe(1);
+  expect(await count(otherMaintainer)).toBe(1);
+  expect((await request.get('/api/tickets/'+id,{headers:supervisor})).status()).toBe(200);
+  expect(await count(supervisor)).toBe(0);
+  expect(await count(otherMaintainer)).toBe(1);
+  // Changing the status but keeping Maintainer enabled must not alert again.
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'resolved',maintainer_required:true}})).status()).toBe(204);
+  expect(await count(supervisor)).toBe(0);
+  expect((await request.get('/api/tickets/'+id,{headers:otherMaintainer})).status()).toBe(200);
+  expect(await count(otherMaintainer)).toBe(0);
+  // A new false -> true transition requires a new acknowledgment.
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:false}})).status()).toBe(204);
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:true}})).status()).toBe(204);
+  expect(await count(supervisor)).toBe(1);
+  expect(await count(otherMaintainer)).toBe(1);
+  expect(await count(admin)).toBe(0);
+});
+
 test('Administrators can manage tickets but not service announcements',async ({request})=>{
   const owner=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
   const ownerHeaders={Authorization:'Bearer '+(await owner.json()).token};
@@ -683,7 +748,8 @@ test('hover menu stays clickable and supports reply, copy and cited-message navi
   await expect(menu.getByRole('menuitem',{name:'Répondre'})).toBeVisible();
   await expect(menu.getByRole('menuitem',{name:'Copier le texte'})).toBeVisible();
   await menu.getByRole('menuitem',{name:'Copier le texte'}).click();
-  await expect(page.locator('[data-ticket-copy-feedback]')).toContainText('Texte copié');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Message source à citer');
+  await expect(page.locator('[data-ticket-copy-feedback]')).toHaveCount(0);
   await line.locator('.ticket-message-menu-trigger').click();
   await menu.getByRole('menuitem',{name:'Répondre'}).click();
   const preview=page.locator('[data-ticket-reply-to="'+original+'"]');

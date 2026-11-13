@@ -342,19 +342,40 @@
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") dismissMenus();
   });
+  function copyLegacy(text) {
+    // Browsers without Clipboard API (and restrictive embeds) can still copy
+    // inside a synchronous user gesture via a temporary selectable textarea.
+    const previous = document.activeElement;
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none";
+    document.body.appendChild(helper);
+    helper.focus();
+    helper.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    helper.remove();
+    try { previous?.focus?.({preventScroll:true}); } catch {}
+    return ok;
+  }
   document.addEventListener("click", async event => {
     const target = event.target.closest?.("[data-ticket-copy-text]");
     if (target) {
       const text = target.getAttribute("data-ticket-copy-text") || "";
       const root = target.closest(".ticket-chat");
       const feedback = root?.querySelector("[data-ticket-copy-feedback]");
+      let copied = false;
       try {
-        if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
-        await navigator.clipboard.writeText(text);
-        if (feedback) feedback.textContent = "Texte copié.";
-      } catch {
-        if (feedback) feedback.textContent = "Copie impossible. Vérifiez les autorisations du navigateur.";
-      }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        }
+      } catch {}
+      if (!copied) copied = copyLegacy(text);
+      if (feedback) feedback.textContent = copied
+        ? "Texte copié."
+        : "Copie impossible. Vérifiez les autorisations du navigateur.";
       return;
     }
     const quote = event.target.closest?.("[data-ticket-jump-to]");

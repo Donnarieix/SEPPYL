@@ -646,6 +646,7 @@ test('targeted replies are scoped to their ticket, including image attachments',
 });
 
 test('hover menu stays clickable and supports reply, copy and cited-message navigation',async ({page,request})=>{
+  await page.context().grantPermissions(['clipboard-read','clipboard-write']);
   const memberLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
   const auth={Authorization:'Bearer '+(await memberLogin.json()).token};
   const created=await request.post('/api/tickets',{headers:auth,

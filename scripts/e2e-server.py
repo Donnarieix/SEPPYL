@@ -36,7 +36,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Live ticket SSE connections may last up to 115 seconds.
             conn = http.client.HTTPConnection("127.0.0.1", 3101, timeout=140)
             headers = {k: v for k, v in self.headers.items()
-                       if k.lower() in ("authorization", "content-type")}
+                       if k.lower() in ("authorization", "content-type", "x-ticket-reply-to")}
             try:
                 conn.request(self.command, target, body=body, headers=headers)
                 response = conn.getresponse()

@@ -5,7 +5,7 @@ use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use std::collections::{HashMap,HashSet};
 use crate::{
-    entities::{ticket,ticket_message,ticket_read,user},
+    entities::{ticket,ticket_message,ticket_message_revision,ticket_read,user},
     routes::miscellaneous::ticket_live,
     middleware::{CurrentRole,Role},
     routes::authentication::login::Claims,state::AppState,
@@ -161,6 +161,90 @@ pub async fn message(
     notify_discord(id,&format!("Nouveau message dans le ticket : {}",entry.ticket_id));
     ticket_live::changed(id,claims.sub);
     Ok((StatusCode::CREATED,Json(entry)))
+}
+#[derive(Deserialize)]
+pub struct EditMessage{pub message:String}
+/// Editing is limited to the original author. A revision is inserted in the
+/// same transaction as the update so pre-edit contents can never be lost.
+pub async fn edit_message(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((ticket_id,message_id)):Path<(Uuid,Uuid)>,
+    Json(payload):Json<EditMessage>,
+)->R<Json<ticket_message::Model>>{
+    let ticket=access(&state,&claims,role.0,ticket_id).await?;
+    if ticket.status=="closed"&&!staff(role.0){return Err(StatusCode::CONFLICT);}
+    if !valid_message(&payload.message){return Err(StatusCode::BAD_REQUEST);}
+    let current=ticket_message::Entity::find_by_id(message_id)
+        .one(&state.db).await.map_err(db)?.ok_or(StatusCode::NOT_FOUND)?;
+    if current.ticket_id!=ticket_id{return Err(StatusCode::NOT_FOUND);}
+    if current.author_id!=claims.sub{return Err(StatusCode::FORBIDDEN);}
+    if current.deleted_at.is_some(){return Err(StatusCode::CONFLICT);}
+    let changed=payload.message.trim();
+    if current.message==changed{return Err(StatusCode::BAD_REQUEST);}
+    let timestamp=now();
+    let txn=state.db.begin().await.map_err(db)?;
+    ticket_message_revision::ActiveModel{
+        id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
+        edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
+        previous_attachment_name:Set(current.attachment_name.clone()),
+        action:Set("edit".into()),changed_at:Set(timestamp),
+        ..Default::default()
+    }.insert(&txn).await.map_err(db)?;
+    let mut active:ticket_message::ActiveModel=current.into();
+    active.message=Set(changed.into());
+    active.edited_at=Set(Some(timestamp));
+    let updated=active.update(&txn).await.map_err(db)?;
+    txn.commit().await.map_err(db)?;
+    ticket_live::changed(ticket_id,claims.sub);
+    Ok(Json(updated))
+}
+/// Staff may remove a message from the conversation, but its full contents
+/// remain in an immutable revision accessible only to staff.
+pub async fn delete_message(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((ticket_id,message_id)):Path<(Uuid,Uuid)>,
+)->R<StatusCode>{
+    if !staff(role.0){return Err(StatusCode::FORBIDDEN);}
+    access(&state,&claims,role.0,ticket_id).await?;
+    let current=ticket_message::Entity::find_by_id(message_id)
+        .one(&state.db).await.map_err(db)?.ok_or(StatusCode::NOT_FOUND)?;
+    if current.ticket_id!=ticket_id{return Err(StatusCode::NOT_FOUND);}
+    if current.deleted_at.is_some(){return Err(StatusCode::CONFLICT);}
+    let timestamp=now();
+    let txn=state.db.begin().await.map_err(db)?;
+    ticket_message_revision::ActiveModel{
+        id:Set(Uuid::new_v4()),ticket_id:Set(ticket_id),message_id:Set(message_id),
+        edited_by:Set(claims.sub),previous_text:Set(current.message.clone()),
+        previous_attachment_name:Set(current.attachment_name.clone()),
+        action:Set("delete".into()),changed_at:Set(timestamp),
+        ..Default::default()
+    }.insert(&txn).await.map_err(db)?;
+    let mut active:ticket_message::ActiveModel=current.into();
+    active.message=Set(String::new());
+    active.attachment_name=Set(None);
+    active.deleted_at=Set(Some(timestamp));
+    active.update(&txn).await.map_err(db)?;
+    txn.commit().await.map_err(db)?;
+    ticket_live::changed(ticket_id,claims.sub);
+    Ok(StatusCode::NO_CONTENT)
+}
+/// The full revision trail, including pre-deletion contents, never leaves
+/// the authenticated staff API.
+pub async fn message_history(
+    Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,
+    State(state):State<AppState>,Path((ticket_id,message_id)):Path<(Uuid,Uuid)>,
+)->R<Json<Vec<ticket_message_revision::Model>>>{
+    if !staff(role.0){return Err(StatusCode::FORBIDDEN);}
+    access(&state,&claims,role.0,ticket_id).await?;
+    let current=ticket_message::Entity::find_by_id(message_id)
+        .one(&state.db).await.map_err(db)?.ok_or(StatusCode::NOT_FOUND)?;
+    if current.ticket_id!=ticket_id{return Err(StatusCode::NOT_FOUND);}
+    let trail=ticket_message_revision::Entity::find()
+        .filter(ticket_message_revision::COLUMN.message_id.eq(message_id))
+        .filter(ticket_message_revision::COLUMN.ticket_id.eq(ticket_id))
+        .order_by_asc(ticket_message_revision::COLUMN.changed_at)
+        .all(&state.db).await.map_err(db)?;
+    Ok(Json(trail))
 }
 pub async fn status(
     Extension(claims):Extension<Claims>,Extension(role):Extension<CurrentRole>,

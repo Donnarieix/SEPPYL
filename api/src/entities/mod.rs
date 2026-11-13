@@ -33,3 +33,5 @@ pub mod ticket_message;
 pub mod announcement;
 
 pub mod ticket_read;
+
+pub mod ticket_message_revision;

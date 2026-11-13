@@ -73,6 +73,8 @@ async fn main() {
         .route("/tickets/{id}/images/{filename}",get(ticket_attachments::download))
         .route("/tickets/{id}",get(tickets::get))
         .route("/tickets/{id}/messages",post(tickets::message))
+        .route("/tickets/{id}/messages/{message_id}",put(tickets::edit_message).delete(tickets::delete_message))
+        .route("/tickets/{id}/messages/{message_id}/history",get(tickets::message_history))
         .route("/tickets/{id}/status",put(tickets::status))
         .route("/admin/announcements",get(announcements::all).post(announcements::create))
         .route("/admin/announcements/{id}",put(announcements::update).delete(announcements::remove))

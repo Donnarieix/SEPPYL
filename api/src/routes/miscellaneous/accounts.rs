@@ -4,7 +4,7 @@ use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFil
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use crate::{
-    entities::{user,training,ticket_read,catalog_activity,tactical_diagram,match_game,ticket,ticket_message,
+    entities::{user,training,ticket_read,catalog_activity,tactical_diagram,match_game,ticket,ticket_message,ticket_message_revision,
         player_user,club_membership,team_membership,user_preference,changelog_read,
         catalog_result,catalog_selection,catalog_material,training_activity,training_attendance,
         training_material,training_score},
@@ -128,9 +128,13 @@ pub async fn remove(
                 let mut m:match_game::ActiveModel=item.into();m.created_by=Set(destination);m.update(&tx).await.map_err(failure)?;
             }
             for ticket in ticket::Entity::find().filter(ticket::COLUMN.author_id.eq(id)).all(&tx).await.map_err(failure)?{
+                ticket_message_revision::Entity::delete_many().filter(ticket_message_revision::COLUMN.ticket_id.eq(ticket.id)).exec(&tx).await.map_err(failure)?;
                 ticket_message::Entity::delete_many().filter(ticket_message::COLUMN.ticket_id.eq(ticket.id)).exec(&tx).await.map_err(failure)?;
                 ticket_read::Entity::delete_many().filter(ticket_read::COLUMN.ticket_id.eq(ticket.id)).exec(&tx).await.map_err(failure)?;
                 ticket::Entity::delete_by_id(ticket.id).exec(&tx).await.map_err(failure)?;
+            }
+            for message in ticket_message::Entity::find().filter(ticket_message::COLUMN.author_id.eq(id)).all(&tx).await.map_err(failure)?{
+                ticket_message_revision::Entity::delete_many().filter(ticket_message_revision::COLUMN.message_id.eq(message.id)).exec(&tx).await.map_err(failure)?;
             }
             ticket_message::Entity::delete_many().filter(ticket_message::COLUMN.author_id.eq(id)).exec(&tx).await.map_err(failure)?;
         }

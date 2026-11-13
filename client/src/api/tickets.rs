@@ -14,6 +14,7 @@ pub struct Ticket{pub id:String,pub author_id:String,pub subject:String,pub stat
     pub maintainer_required:bool,pub created_at:i64,pub updated_at:i64}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Message{pub id:String,pub author_id:String,pub message:String,pub created_at:i64,
+    #[serde(default)]pub edited_at:Option<i64>,#[serde(default)]pub deleted_at:Option<i64>,
     #[serde(default)]pub attachment_name:Option<String>}
 #[derive(Clone,Debug,PartialEq,Deserialize)]
 pub struct Detail{pub ticket:Ticket,pub requester_name:String,pub messages:Vec<Message>}
@@ -56,5 +57,27 @@ pub async fn status(token:&str,id:&str,status:&str,maintainer_required:bool)->Re
 pub async fn unread(token:&str)->Result<UnreadSummary,String>{
     let r=Client::new().get(url("/tickets/unread")).bearer_auth(token)
         .send().await.map_err(|e|e.to_string())?;
+    check(r).await?.json().await.map_err(|e|e.to_string())
+}
+
+#[derive(Clone,Debug,PartialEq,Deserialize)]
+pub struct MessageRevision {
+    pub id:String,pub ticket_id:String,pub message_id:String,pub edited_by:String,
+    pub previous_text:String,pub previous_attachment_name:Option<String>,
+    pub action:String,pub changed_at:i64,
+}
+pub async fn edit_message(token:&str,ticket_id:&str,message_id:&str,message:&str)->Result<(),String>{
+    let r=Client::new().put(url(&format!("/tickets/{ticket_id}/messages/{message_id}")))
+        .bearer_auth(token).json(&Reply{message}).send().await.map_err(|e|e.to_string())?;
+    check(r).await.map(|_|())
+}
+pub async fn delete_message(token:&str,ticket_id:&str,message_id:&str)->Result<(),String>{
+    let r=Client::new().delete(url(&format!("/tickets/{ticket_id}/messages/{message_id}")))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
+    check(r).await.map(|_|())
+}
+pub async fn message_history(token:&str,ticket_id:&str,message_id:&str)->Result<Vec<MessageRevision>,String>{
+    let r=Client::new().get(url(&format!("/tickets/{ticket_id}/messages/{message_id}/history")))
+        .bearer_auth(token).send().await.map_err(|e|e.to_string())?;
     check(r).await?.json().await.map_err(|e|e.to_string())
 }

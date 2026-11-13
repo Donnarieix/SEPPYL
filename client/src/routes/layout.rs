@@ -16,16 +16,17 @@ pub fn Header() -> Element {
         async move{match token{Some(token)=>account::get(&token).await,None=>Err("Connexion requise.".into())}}
     });
     let is_admin=matches!(info.read().as_ref(),Some(Ok(a)) if matches!(a.role.as_str(),"administrator"|"maintainer"));
-    let unread_token=session.read().clone();
+    // The header is present on every authenticated route. Read session inside
+    // the resource so token changes are observed, and poll without a reload.
     let mut unread=use_resource(move ||{
-        let token=unread_token.clone();
+        let token=session.read().clone();
         async move{match token{Some(token)=>tickets::unread(&token).await,
             None=>Ok(tickets::UnreadSummary::default())}}
     });
     let mut unread_poll=unread;
     use_future(move ||async move{
         loop{
-            gloo_timers::future::TimeoutFuture::new(20_000).await;
+            gloo_timers::future::TimeoutFuture::new(10_000).await;
             unread_poll.restart();
         }
     });

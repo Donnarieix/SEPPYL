@@ -559,6 +559,9 @@ test('message groups and ArrowUp edit previous author message',async ({page,requ
   await expect(page).toHaveURL(/\/trainings$/);
   await page.goto('/tickets/'+id);
   await expect(page.locator('.ticket-message-group')).toHaveCount(1);
+  if (await page.locator('.changelog-backdrop').isVisible()) {
+    await page.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
   await expect(page.locator('.ticket-message-group .ticket-chat-message')).toHaveCount(2);
   await expect(page.locator('.ticket-group-author')).toHaveText('Vous');
   const rows=page.locator('.ticket-message-group .ticket-chat-line');

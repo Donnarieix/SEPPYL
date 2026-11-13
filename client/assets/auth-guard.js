@@ -199,10 +199,11 @@
       let tracked = feeds.get(feed);
       const messages = feed.querySelectorAll("[data-message-id]");
       const latest = messages[messages.length - 1];
+      const ids = Array.from(messages, node => node.getAttribute("data-message-id")).filter(Boolean);
       const lastId = latest?.getAttribute("data-message-id") || "";
       const typing = !!feed.querySelector(".ticket-typing-indicator");
       if (!tracked) {
-        tracked = { lastId, typing, pinned: true };
+        tracked = { lastId, known:new Set(ids), typing, pinned: true };
         feeds.set(feed, tracked);
         feed.addEventListener("scroll", () => {
           const distance = feed.scrollHeight - feed.scrollTop - feed.clientHeight;
@@ -210,18 +211,24 @@
         }, { passive: true });
         feed.scrollTop = feed.scrollHeight;
       } else {
-        const newMessage = lastId && lastId !== tracked.lastId;
+        const newNodes = Array.from(messages).filter(node =>
+          !tracked.known.has(node.getAttribute("data-message-id")));
+        const newMessage = newNodes.length > 0;
         const typingAppeared = typing && !tracked.typing;
-        const outgoing = newMessage && latest.classList.contains("own");
+        const outgoing = newNodes.some(node => node.classList.contains("own"));
         const attachmentSent = outgoing && !!root.__pendingAttachmentScroll;
+        const requestedScroll = !!root.__pendingOutgoingScroll &&
+          Date.now() - (root.__pendingOutgoingAt || 0) < 15000;
         const shouldScroll = (newMessage || typingAppeared) &&
-          (tracked.pinned || outgoing || !!root.__pendingAttachmentScroll);
+          (tracked.pinned || outgoing || requestedScroll || !!root.__pendingAttachmentScroll);
         tracked.lastId = lastId;
+        tracked.known = new Set(ids);
         tracked.typing = typing;
         if (shouldScroll) {
           feed.scrollTop = feed.scrollHeight;
           tracked.pinned = true;
         }
+        if (newMessage && requestedScroll) root.__pendingOutgoingScroll = false;
         if (attachmentSent) {
           root.__pendingAttachmentScroll = false;
           root.__awaitingAttachmentImage = true;
@@ -318,6 +325,16 @@
     }
   }
   // Enter sends; Shift+Enter inserts a newline. IME composition is never sent.
+  // Sending a message should always reveal the new post, including when
+  // the sender previously scrolled up to inspect an older discussion.
+  document.addEventListener("submit", event => {
+    if (!event.target.matches?.(".ticket-message-form")) return;
+    const root = event.target.closest(".ticket-chat");
+    if (root) {
+      root.__pendingOutgoingScroll = true;
+      root.__pendingOutgoingAt = Date.now();
+    }
+  }, true);
   document.addEventListener("keydown", event => {
     if (!event.target.matches?.("[data-ticket-composer]")) return;
     if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;

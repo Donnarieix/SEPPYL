@@ -45,7 +45,7 @@ test("refresh of a protected route with no stored session redirects before rende
     location:{pathname:"/trainings",replace:url=>calls.redirects.push(url)},
   };
   vm.runInNewContext(source,{window,Headers,Request,localStorage:storage});
-  assert.deepEqual(calls.redirects,["/login"]);
+  assert.deepEqual(calls.redirects,["/login?next=%2Ftrainings"]);
 });
 test("legal and public pages stay available without a session",()=>{
   for(const pathname of ["/login","/public","/mentions-legales","/confidentialite","/cgu"]){
@@ -72,7 +72,7 @@ test("expired JWT is redirected on load without waiting for an API response",()=
     window,Headers,Request,localStorage:storage,
     atob:value=>Buffer.from(value,"base64").toString("utf8")
   });
-  assert.deepEqual(calls,["/login"]);
+  assert.deepEqual(calls,["/login?next=%2Fclub"]);
 });
 test("a late 401 from an older session must not revoke a newer session",async()=>{
   const redirects=[],removed=[];
@@ -85,4 +85,32 @@ test("a late 401 from an older session must not revoke a newer session",async()=
   await window.fetch("/players",{headers:{Authorization:"Bearer old-session"}});
   assert.deepEqual(redirects,[]);
   assert.deepEqual(removed,[]);
+});
+
+test("ticket path, query and fragment survive initial auth redirect",()=>{
+  const redirects=[];
+  const window={
+    fetch:async()=>({status:200}),
+    location:{
+      pathname:"/tickets/123e4567-e89b-12d3-a456-426614174000",
+      search:"?view=chat",hash:"#message-1",
+      replace:url=>redirects.push(url),
+    },
+  };
+  const storage={getItem:()=>null,removeItem(){}};
+  vm.runInNewContext(source,{window,Headers,Request,localStorage:storage});
+  const login=new URL(redirects[0],"http://127.0.0.1:4173");
+  assert.equal(login.pathname,"/login");
+  assert.equal(login.searchParams.get("next"),"/tickets/123e4567-e89b-12d3-a456-426614174000?view=chat#message-1");
+});
+
+test("unknown URLs remain on SEPPYL 404 instead of forcing login",()=>{
+  for(const pathname of ["/unknown","/tickets/example/unknown","/not-a-page"]){
+    const redirects=[];
+    const window={fetch:async()=>({status:200}),
+      location:{pathname,search:"",hash:"",replace:url=>redirects.push(url)}};
+    vm.runInNewContext(source,{window,Headers,Request,
+      localStorage:{getItem:()=>null,removeItem(){}}});
+    assert.deepEqual(redirects,[],pathname);
+  }
 });

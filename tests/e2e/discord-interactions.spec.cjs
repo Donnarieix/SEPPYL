@@ -35,6 +35,14 @@ test('staff can open Discord account settings without exposing secrets',async ({
     await page.locator('button[type="submit"]').click();
     await expect.poll(()=>new URL(page.url()).pathname).toBe('/trainings');
     await page.goto('/settings');
+    // First login can display the changelog modal, which correctly blocks clicks
+    // behind it. Close it as a user would before selecting the Discord tab.
+    await expect(page.getByRole('tab',{name:'Discord'})).toBeVisible();
+    const changelog=page.locator('.changelog-backdrop');
+    await changelog.waitFor({state:'visible',timeout:1200}).catch(()=>{});
+    if(await changelog.isVisible()){
+        await page.getByRole('button',{name:"Fermer l'historique"}).click();
+    }
     await page.getByRole('tab',{name:'Discord'}).click();
     await expect(page.getByRole('heading',{name:'Discord'})).toBeVisible();
     await expect(page.locator('.discord-link-code')).toHaveCount(0);

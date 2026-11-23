@@ -338,50 +338,68 @@ pub async fn status(
     ticket_live::changed(id,claims.sub);
     Ok(StatusCode::NO_CONTENT)
 }
-pub(super) fn notify_discord_attachment(id:Uuid, subject:&str){
+pub(super) fn notify_discord_attachment(id:Uuid,subject:&str){
     notify_discord(id,subject,DiscordNotice::Message);
 }
-/// Discord is an optional server-only transport. Never disclose private ticket
-/// messages, attachments, requester names or webhook tokens in notifications.
 #[derive(Clone, Copy)]
 enum DiscordNotice { Created, Message, Escalated }
-fn notify_discord(id:Uuid, subject:&str, notice:DiscordNotice) {
-    let Ok(webhook)=std::env::var("SEPPYL_DISCORD_TICKET_WEBHOOK") else { return; };
-    let Ok(url)=reqwest::Url::parse(&webhook) else { return; };
-    if url.scheme()!="https" || !matches!(url.host_str(),Some("discord.com"|"discordapp.com"))
-        || !url.path().starts_with("/api/webhooks/") { return; }
+/// Prefer bot messages with native Discord controls when a bot is configured.
+/// Existing webhook-only installations continue working without interruption.
+fn notify_discord(id:Uuid,subject:&str,notice:DiscordNotice){
     let role_id=std::env::var("SEPPYL_DISCORD_TICKET_ROLE_ID").ok()
         .filter(|v|(15..=22).contains(&v.len()) && v.bytes().all(|b|b.is_ascii_digit()));
-    let (title,color,mention)=match notice {
-        DiscordNotice::Created => ("Nouveau ticket",0x478b8d,true),
-        DiscordNotice::Message => ("Nouvelle réponse",0x4368a8,false),
-        DiscordNotice::Escalated => ("Intervention Maintainer demandée",0xe49c3c,true),
+    let (title,color,mention)=match notice{
+        DiscordNotice::Created=>("Nouveau ticket",0x478b8d,true),
+        DiscordNotice::Message=>("Nouvelle réponse",0x4368a8,false),
+        DiscordNotice::Escalated=>("Intervention Maintainer demandée",0xe49c3c,true),
     };
-    // Ping staff only on actionable events, not on every message.
-    let allowed_roles=if mention {role_id.iter().cloned().collect::<Vec<_>>()} else {vec![]};
-    let content=if mention {
-        role_id.as_ref().map(|role|format!("<@&{role}>")).unwrap_or_default()
-    } else {String::new()};
-    let target=format!("https://seppyl.donnarieix.fr/tickets/{id}");
-    let body=serde_json::json!({
-        "content":content,
-        "embeds":[{
-            "title":title,
-            "description":subject.chars().take(160).collect::<String>(),
-            "url":target,
-            "color":color,
-            "footer":{"text":format!("Ticket {id} · SEPPYL")}
-        }],
-        "allowed_mentions":{"parse":[],"roles":allowed_roles}
-    });
-    tokio::spawn(async move {
-        let result=reqwest::Client::new().post(url)
-            .timeout(std::time::Duration::from_secs(6))
-            .json(&body).send().await;
-        match result {
-            Ok(reply) if reply.status().is_success()=>{},
-            Ok(reply)=>tracing::warn!(ticket=%id,status=%reply.status(),"Discord webhook returned an error"),
-            Err(_)=>tracing::warn!(ticket=%id,"Discord support notification unavailable"),
+    let role=if mention{role_id.as_ref().map(|id|format!("<@&{id}>")).unwrap_or_default()}
+        else{String::new()};
+    let allowed=if mention{role_id.into_iter().collect::<Vec<_>>()}else{vec![]};
+    let embed=serde_json::json!([{
+        "title":title,
+        "description":subject.chars().take(160).collect::<String>(),
+        "url":format!("https://seppyl.donnarieix.fr/tickets/{id}"),
+        "color":color,
+        "footer":{"text":format!("Ticket {id} · SEPPYL")}
+    }]);
+    let bot=std::env::var("SEPPYL_DISCORD_BOT_TOKEN").ok().filter(|v|!v.is_empty());
+    let channel=std::env::var("SEPPYL_DISCORD_CHANNEL_ID").ok()
+        .filter(|id|(15..=22).contains(&id.len())&&id.bytes().all(|b|b.is_ascii_digit()));
+    let webhook=std::env::var("SEPPYL_DISCORD_TICKET_WEBHOOK").ok()
+        .and_then(|value|{
+            let url=reqwest::Url::parse(&value).ok()?;
+            (url.scheme()=="https"
+                && matches!(url.host_str(),Some("discord.com"|"discordapp.com"))
+                && url.path().starts_with("/api/webhooks/")).then_some(url)
+        });
+    if (bot.is_none()||channel.is_none())&&webhook.is_none(){return;}
+    tokio::spawn(async move{
+        let client=reqwest::Client::new();
+        let mentions=serde_json::json!({"parse":[],"roles":allowed});
+        if let (Some(bot),Some(channel))=(bot,channel){
+            let body=serde_json::json!({
+                "content":role,"embeds":embed,"allowed_mentions":mentions,
+                "components":super::discord_interactions::buttons(id)
+            });
+            let result=client.post(format!("https://discord.com/api/v10/channels/{channel}/messages"))
+                .header(reqwest::header::AUTHORIZATION,format!("Bot {bot}"))
+                .timeout(std::time::Duration::from_secs(6))
+                .json(&body).send().await;
+            if result.as_ref().is_ok_and(|r|r.status().is_success()){return;}
+            tracing::warn!(ticket=%id,"Discord bot notification unavailable; trying configured webhook");
+        }
+        if let Some(url)=webhook{
+            let body=serde_json::json!({
+                "content":role,"embeds":embed,"allowed_mentions":mentions
+            });
+            let result=client.post(url).timeout(std::time::Duration::from_secs(6))
+                .json(&body).send().await;
+            match result {
+                Ok(reply) if reply.status().is_success()=>{},
+                Ok(reply)=>tracing::warn!(ticket=%id,status=%reply.status(),"Discord webhook returned an error"),
+                Err(_)=>tracing::warn!(ticket=%id,"Discord webhook notification unavailable"),
+            }
         }
     });
 }

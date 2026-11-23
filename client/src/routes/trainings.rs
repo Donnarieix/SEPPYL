@@ -24,7 +24,7 @@ pub fn Trainings() -> Element {
             div { class: "centered",
                 h1 { "Entraînements" }
                 p { "Connectez-vous pour accéder à vos séances." }
-                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login {}); }, "Connexion" }
+                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login{next:String::new()}); }, "Connexion" }
             }
         };
     }

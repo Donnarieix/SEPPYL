@@ -98,6 +98,8 @@ dependencies = [
  "argon2",
  "axum",
  "dotenvy",
+ "ed25519-dalek",
+ "hex",
  "jsonwebtoken",
  "sea-orm",
  "serde",

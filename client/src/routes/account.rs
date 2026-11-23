@@ -39,7 +39,7 @@ pub fn AccountPage() -> Element {
             div { class: "centered",
                 h1 { "Mon compte" }
                 p { "Connectez-vous pour accéder aux paramètres." }
-                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login {}); }, "Se connecter" }
+                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login {next:String::new()}); }, "Se connecter" }
             }
         };
     }

@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::api::{
-    account,
+    account, discord,
     preferences::{self, AttendanceView, Density, Theme, UserPreferences},
 };
 use super::{Route, layout::Header};
@@ -33,6 +33,10 @@ pub fn AccountPage() -> Element {
     let mut password_feedback = use_signal(|| None::<(bool, String)>);
     let mut appearance_feedback = use_signal(|| None::<(bool, String)>);
     let mut active_tab = use_signal(|| "appearance".to_string());
+    let mut discord_status = use_signal(|| None::<Result<discord::LinkStatus,String>>);
+    let mut discord_code = use_signal(|| None::<discord::LinkCode>);
+    let mut discord_busy = use_signal(|| false);
+    let mut discord_feedback = use_signal(|| None::<String>);
 
     if token.is_none() {
         return rsx! {
@@ -53,6 +57,9 @@ pub fn AccountPage() -> Element {
     let density_token_compact = token.clone();
     let attendance_grid_token = token.clone();
     let attendance_list_token = token.clone();
+    let discord_token = token.clone();
+    let discord_staff = matches!(account_data.read().as_ref(), Some(Ok(a))
+        if a.role=="administrator" || a.role=="maintainer");
 
     rsx! {
         div { class: "app",
@@ -76,6 +83,24 @@ pub fn AccountPage() -> Element {
                         role: "tab", "aria-selected": if active_tab.read().as_str() == "profile" { "true" } else { "false" },
                         onclick: move |_| active_tab.set("profile".into()),
                         "Informations"
+                    }
+                    if discord_staff {
+                        button {
+                            class: if active_tab.read().as_str() == "discord" { "settings-tab active" } else { "settings-tab" },
+                            role: "tab",
+                            "aria-selected": if active_tab.read().as_str() == "discord" { "true" } else { "false" },
+                            onclick: {
+                                let token = discord_token.clone();
+                                move |_| {
+                                    active_tab.set("discord".into());
+                                    let token = token.clone();
+                                    spawn(async move {
+                                        discord_status.set(Some(discord::status(&token).await));
+                                    });
+                                }
+                            },
+                            "Discord"
+                        }
                     }
                     button {
                         class: if active_tab.read().as_str() == "security" { "settings-tab active" } else { "settings-tab" },
@@ -417,6 +442,91 @@ pub fn AccountPage() -> Element {
                             None => rsx! { div { class: "settings-panel-content", "Chargement du compte…" } },
                         }
                     }
+                    }
+                    if active_tab.read().as_str() == "discord" && discord_staff {
+                        section { class: "settings-panel",
+                            div { class: "settings-panel-heading",
+                                h2 { "Discord" }
+                                p { "Liez votre compte pour répondre aux tickets depuis Discord." }
+                            }
+                            div { class: "settings-panel-content",
+                                match discord_status.read().as_ref() {
+                                    Some(Ok(link)) => rsx! {
+                                        if link.enabled {
+                                            if let Some(discord_id) = link.discord_user_id.as_ref() {
+                                                div { class: "settings-account-meta",
+                                                    span { "Compte Discord lié" }
+                                                    strong { "ID {discord_id}" }
+                                                }
+                                                button { class: "button outline", r#type:"button", disabled:*discord_busy.read(),
+                                                    onclick: {
+                                                        let token = discord_token.clone();
+                                                        move |_| {
+                                                            if *discord_busy.read() { return; }
+                                                            let token=token.clone();
+                                                            discord_busy.set(true);
+                                                            discord_feedback.set(None);
+                                                            spawn(async move {
+                                                                match discord::unlink(&token).await {
+                                                                    Ok(())=>{
+                                                                        discord_code.set(None);
+                                                                        discord_status.set(Some(discord::status(&token).await));
+                                                                    }
+                                                                    Err(err)=>discord_feedback.set(Some(err)),
+                                                                }
+                                                                discord_busy.set(false);
+                                                            });
+                                                        }
+                                                    },
+                                                    "Délier Discord"
+                                                }
+                                            } else {
+                                                p { "Aucun compte Discord lié." }
+                                            }
+                                            button { class:"button solid", r#type:"button", disabled:*discord_busy.read(),
+                                                onclick: {
+                                                    let token = discord_token.clone();
+                                                    move |_| {
+                                                        if *discord_busy.read() {return;}
+                                                        let token=token.clone();
+                                                        discord_busy.set(true);
+                                                        discord_code.set(None);
+                                                        discord_feedback.set(None);
+                                                        spawn(async move {
+                                                            match discord::link_code(&token).await {
+                                                                Ok(result)=>discord_code.set(Some(result)),
+                                                                Err(err)=>discord_feedback.set(Some(err)),
+                                                            }
+                                                            discord_busy.set(false);
+                                                        });
+                                                    }
+                                                },
+                                                if *discord_busy.read() { "Chargement…" } else { "Générer un code de liaison" }
+                                            }
+                                            if let Some(code) = discord_code.read().as_ref() {
+                                                div { class: "settings-group",
+                                                    strong { "Code temporaire (10 minutes)" }
+                                                    code { class:"discord-link-code", "{code.code}" }
+                                                    p { class:"settings-note",
+                                                        "Dans votre serveur Discord, exécutez /seppyl lier avec ce code. "
+                                                        "Ne le partagez pas : il permet de lier votre compte."
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            p { class: "settings-note",
+                                                "La connexion Discord doit d'abord être configurée sur le serveur SEPPYL."
+                                            }
+                                        }
+                                    },
+                                    Some(Err(err)) => rsx! { p { class:"settings-feedback error", "{err}" } },
+                                    None => rsx! { p { "Chargement du statut Discord…" } },
+                                }
+                                if let Some(err) = discord_feedback.read().as_ref() {
+                                    p { class: "settings-feedback error", role: "alert", "{err}" }
+                                }
+                            }
+                        }
                     }
                     if active_tab.read().as_str() == "security" {
                     section { class: "settings-panel",

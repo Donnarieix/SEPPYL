@@ -3673,8 +3673,3 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
    yet been painted. The parent message line remains the continuous hover zone. */
 .site-root .ticket-chat-line .ticket-message-actions{pointer-events:auto}
 .site-root .ticket-message-menu-trigger{pointer-events:auto}
-
-/* Temporary Discord account-link codes stay readable on narrow screens. */
-.discord-link-code{display:block;max-width:100%;overflow-wrap:anywhere;user-select:all;
-  padding:10px 12px;border:1px solid var(--border);border-radius:8px;
-  font-size:13px;letter-spacing:.06em}

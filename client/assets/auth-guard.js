@@ -40,7 +40,7 @@
     try { localStorage.removeItem(key); } catch (_) {}
     // Keep pathname, search and anchor without ever accepting an external URL.
     const path=window.location.pathname;
-    const requested=path+window.location.search+window.location.hash;
+    const requested=path+(window.location.search||"")+(window.location.hash||"");
     const next=protectedPath(path) && requested.length<=2048
       ? "?next="+encodeURIComponent(requested)
       : "";

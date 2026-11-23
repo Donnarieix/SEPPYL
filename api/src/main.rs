@@ -31,7 +31,7 @@ use crate::{
             tactics,
             player::{create_player, delete_player, get_player, get_players, update_player},
         },
-        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, ticket_live, ticket_attachments, announcements},
+        miscellaneous::{health::health, me::me, preferences, account, accounts, audit as audit_routes, changelog, tickets, ticket_live, ticket_attachments, announcements, discord_link, discord_interactions},
     },
     state::AppState,
 };
@@ -64,6 +64,8 @@ async fn main() {
 
     // All routes extracting Claims must pass through the auth middleware.
     let protected = Router::new()
+        .route("/account/discord",get(discord_link::status).delete(discord_link::unlink))
+        .route("/account/discord/code",post(discord_link::generate_code))
         .route("/tickets",get(tickets::list).post(tickets::create))
         .route("/tickets/unread",get(tickets::unread))
         .route("/tickets/{id}/events",get(ticket_live::stream))
@@ -164,6 +166,9 @@ async fn main() {
         // it reuses the same validated handler without requiring SSH/Nginx edits.
         .route("/register", post(register))
         .route("/signup", post(register))
+        // Public only in the sense that Discord uses Ed25519, not JWT.
+        .route("/discord/interactions",post(discord_interactions::interaction)
+            .layer(axum::extract::DefaultBodyLimit::max(32*1024)))
         .route("/catalog/images/{filename}", get(catalog::image))
         .merge(protected)
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))

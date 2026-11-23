@@ -3673,3 +3673,18 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
    yet been painted. The parent message line remains the continuous hover zone. */
 .site-root .ticket-chat-line .ticket-message-actions{pointer-events:auto}
 .site-root .ticket-message-menu-trigger{pointer-events:auto}
+
+/* SEPPYL-owned 404 surface for unknown browser routes (public and private). */
+.site-root .not-found-page{
+  min-height:calc(100vh - 130px);display:flex;align-items:center;
+  justify-content:center;padding:48px 24px;text-align:center;
+}
+.site-root .not-found-content{max-width:560px;display:grid;justify-items:center;gap:14px}
+.site-root .not-found-code{
+  color:var(--accent);font-size:clamp(60px,12vw,100px);
+  line-height:1;font-weight:800;letter-spacing:-.06em;
+}
+.site-root .not-found-content h1{color:var(--text);font-size:clamp(24px,4vw,34px);margin:0}
+.site-root .not-found-content p{color:var(--muted);line-height:1.6;margin:0}
+.site-root .not-found-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:12px}
+.site-root .not-found-actions a{text-decoration:none}

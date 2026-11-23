@@ -3688,3 +3688,8 @@ button.ticket-row:hover{border-color:var(--accent,#478b8d)}
 .site-root .not-found-content p{color:var(--muted);line-height:1.6;margin:0}
 .site-root .not-found-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:12px}
 .site-root .not-found-actions a{text-decoration:none}
+
+/* Private one-use Discord linking code in account preferences. */
+.site-root .discord-link-code{display:block;max-width:100%;overflow-wrap:anywhere;user-select:all;
+ background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;
+ padding:12px 14px;font-size:13px;letter-spacing:.06em;margin:10px 0}

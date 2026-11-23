@@ -71,7 +71,7 @@ pub fn Administration()->Element{
     let mut notice=use_signal(||None::<String>);
     if token.is_none(){
         return rsx!{div{class:"centered",p{"Connectez-vous pour accéder à l'administration."}
-            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{});},"Connexion"}}
+            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{next:String::new()});},"Connexion"}}
         };
     }
     match identity.read().clone(){

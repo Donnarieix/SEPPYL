@@ -31,11 +31,14 @@ La messagerie fonctionne avec **polling toutes les 15 secondes** sur une fiche d
 
 ### Discord
 
-- Webhook sortant facultatif pour la création de tickets, les nouvelles réponses et les escalades Maintainer. Il inclut le sujet, un lien authentifié et un identifiant, **pas le corps privé des messages**.
-- Intégration entrante via commandes Discord signées (Ed25519) sans processus bot Gateway. Les administrateurs/maintainers lient leur compte depuis « Mon compte > Discord » (code temporaire à usage unique, 10 minutes) et peuvent répondre avec `/seppyl repondre`.
-- Le contrôle de rôle est effectué à chaque réponse côté API, et les interactions sont dédupliquées. Les demandes ne peuvent provenir que du serveur Discord configuré.
-- Activation uniquement via configuration serveur ; voir `docs/DISCORD-TICKETS.md` pour le guide complet. Aucun secret dans le dépôt ni dans le front.
-- Création de threads Discord par ticket et synchronisation des conversations entières encore hors périmètre de cette première itération.
+La V1 repose sur un webhook Discord **sortant uniquement**. Les notifications concernent :
+- la création d'un ticket ;
+- les nouveaux messages (y compris image seule) ;
+- le passage du ticket à « Maintainer ».
+
+Les notifications comportent le sujet et un lien vers le ticket authentifié, sans recopier les messages privés ni les pièces jointes. Une mention de rôle facultative est limitée aux créations et escalades. La configuration se fait avec `SEPPYL_DISCORD_TICKET_WEBHOOK` et éventuellement `SEPPYL_DISCORD_TICKET_ROLE_ID` **côté API uniquement**. Le webhook n'est jamais exposé dans le navigateur ni stocké dans Git. Aucun bot, aucune application Discord ni liaison de comptes ne sont requis.
+
+Les webhooks ne permettent pas de recevoir des réponses depuis Discord. Une synchronisation bidirectionnelle pourra faire l'objet d'une prochaine version ; voir `docs/DISCORD-TICKETS.md`.
 
 ## Annonces
 

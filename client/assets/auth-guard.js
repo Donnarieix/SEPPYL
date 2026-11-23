@@ -4,10 +4,24 @@
   if (window.__seppylAuthGuardInstalled) return;
   window.__seppylAuthGuardInstalled = true;
   const key = "seppyl.session.v1";
-  const publicPath = (path) => ["/login", "/public", "/mentions-legales",
-    "/confidentialite", "/cgu"].includes(path);
+  // Restrict login redirects to actual protected pages. Unknown URLs should
+  // render SEPPYL's own 404, not accidentally prompt for credentials.
+  const protectedPath = (path) => {
+    if (["/trainings", "/matches", "/tickets", "/spreadsheet", "/players",
+      "/activities", "/tactics", "/club", "/admin", "/audit", "/settings"].includes(path)) return true;
+    return /^\/(?:tickets|matches)\/[^/]+$/.test(path) ||
+      /^\/trainings\/[^/]+(?:\/print)?$/.test(path);
+  };
   const readToken = () => {
-    try { return localStorage.getItem?.(key) || ""; } catch (_) { return ""; }
+    try {
+      const stored = localStorage.getItem?.(key) || "";
+      // gloo-storage wraps token strings in JSON in localStorage.
+      try {
+        const token=JSON.parse(stored);
+        if (typeof token==="string") return token;
+      } catch (_) {}
+      return stored;
+    } catch (_) { return ""; }
   };
   const expired = (token) => {
     // A non-JWT token (e.g. during a future SSO migration) is checked by
@@ -24,11 +38,17 @@
     if (redirecting) return;
     redirecting = true;
     try { localStorage.removeItem(key); } catch (_) {}
-    window.location.replace("/login");
+    // Keep pathname, search and anchor without ever accepting an external URL.
+    const path=window.location.pathname;
+    const requested=path+window.location.search+window.location.hash;
+    const next=protectedPath(path) && requested.length<=2048
+      ? "?next="+encodeURIComponent(requested)
+      : "";
+    window.location.replace("/login"+next);
   };
   const guardRoute = () => {
     const path=window.location?.pathname;
-    if (typeof path !== "string" || publicPath(path)) return;
+    if (typeof path !== "string" || !protectedPath(path)) return;
     const token=readToken();
     if (!token || expired(token)) invalidate();
   };

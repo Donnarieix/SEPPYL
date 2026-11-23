@@ -3,7 +3,7 @@ use crate::api::{
     account,
     preferences::{self, AttendanceView, Density, Theme, UserPreferences},
 };
-use super::{Route, layout::Header};
+use super::{Route, layout::Header, discord_settings::DiscordSettings};
 
 #[component]
 pub fn AccountPage() -> Element {
@@ -53,6 +53,8 @@ pub fn AccountPage() -> Element {
     let density_token_compact = token.clone();
     let attendance_grid_token = token.clone();
     let attendance_list_token = token.clone();
+    let discord_staff=matches!(account_data.read().as_ref(),Some(Ok(a))
+        if a.role=="administrator" || a.role=="maintainer");
 
     rsx! {
         div { class: "app",
@@ -76,6 +78,14 @@ pub fn AccountPage() -> Element {
                         role: "tab", "aria-selected": if active_tab.read().as_str() == "profile" { "true" } else { "false" },
                         onclick: move |_| active_tab.set("profile".into()),
                         "Informations"
+                    }
+                    if discord_staff {
+                        button {
+                            class: if active_tab.read().as_str()=="discord"{"settings-tab active"}else{"settings-tab"},
+                            role:"tab", "aria-selected":if active_tab.read().as_str()=="discord"{"true"}else{"false"},
+                            onclick:move |_|active_tab.set("discord".into()),
+                            "Discord"
+                        }
                     }
                     button {
                         class: if active_tab.read().as_str() == "security" { "settings-tab active" } else { "settings-tab" },
@@ -417,6 +427,9 @@ pub fn AccountPage() -> Element {
                             None => rsx! { div { class: "settings-panel-content", "Chargement du compte…" } },
                         }
                     }
+                    }
+                    if active_tab.read().as_str()=="discord" && discord_staff {
+                        DiscordSettings{token:token.clone()}
                     }
                     if active_tab.read().as_str() == "security" {
                     section { class: "settings-panel",

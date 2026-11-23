@@ -15,7 +15,7 @@ pub fn Activities()->Element{
     let mut creating=use_signal(||false);
     let mut error=use_signal(||None::<String>);
     if token.is_none(){return rsx!{div{class:"centered",p{"Connectez-vous."}
-        button{class:"button solid",onclick:move |_|{nav.push(Route::Login{});},"Connexion"}}};}
+        button{class:"button solid",onclick:move |_|{nav.push(Route::Login{next:String::new()});},"Connexion"}}};}
     let token=token.unwrap_or_default();
     rsx!{
         div{class:"app",

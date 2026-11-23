@@ -95,7 +95,7 @@ pub fn Header() -> Element {
                     button { class: "logout-link", onclick: move |_| {
                         crate::session::clear();
                         session.set(None);
-                        navigator.push(Route::Login {});
+                        navigator.push(Route::Login {next:String::new()});
                     }, "Déconnexion" }
                 }
             }

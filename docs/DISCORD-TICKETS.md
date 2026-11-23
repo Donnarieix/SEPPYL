@@ -1,75 +1,65 @@
-# Tickets SEPPYL — intégration Discord
+# Intégration Discord — V1 : webhook sortant uniquement
 
-## Périmètre
+## Objectif
 
-SEPPYL reste la source de vérité : messages, autorisations et historiques sont enregistrés dans SQLite. Discord sert à notifier le personnel et à envoyer des réponses depuis un serveur Discord **privé**. Les utilisateurs finaux continuent d'accéder à leurs tickets depuis SEPPYL.
+La V1 de Discord dans SEPPYL utilise **un simple webhook de salon Discord**. Il n'y a **aucune application Discord**, aucun bot, aucune commande slash ni aucune liaison de comptes Discord/SEPPYL.
 
-Cette première implémentation comprend :
+Le serveur API de SEPPYL publie une notification dans un salon privé réservé au personnel :
+- lors de la **création d'un ticket** ;
+- à chaque **nouveau message**, y compris les messages composés uniquement d'une image ;
+- lorsqu'un ticket est **escaladé vers Maintainer** (passage de non requis à requis).
 
-- **SEPPYL → Discord** : notifications par webhook pour création de ticket, nouvelle réponse et escalade vers Maintainer. Les messages ne sont **pas** recopiés en entier sur Discord. Le webhook envoie le titre du ticket et un lien vers sa conversation authentifiée. Mention facultative du rôle Discord uniquement à la création et à l'escalade.
-- **Discord → SEPPYL** : commande slash `/seppyl lier` pour associer une identité Discord à un compte Administrateur/Maintainer ; commande `/seppyl repondre` pour écrire un message Markdown dans la conversation SEPPYL.
-- **Mon compte > Discord** : génération d'un code de liaison à usage unique valable 10 minutes, statut de liaison, déliaison.
-- Les commandes renvoient des réponses **éphémères**, visibles seulement par leur auteur. Les messages envoyés depuis Discord ne rebouclent pas vers le webhook.
-- Signatures Discord Ed25519 obligatoires, contrôle de l'identifiant du serveur Discord, vérification du rôle **actuel** dans SEPPYL, comptes désactivés refusés, déduplication par identifiant d'interaction.
+Le message Discord contient un titre, le sujet du ticket, son identifiant UUID et un lien `https://seppyl.donnarieix.fr/tickets/<UUID>`. **Le contenu des messages et les pièces jointes ne sont pas envoyés sur Discord.** L'ouverture du lien reste soumise à l'authentification et aux permissions de SEPPYL.
 
-Cette étape ne crée pas encore un canal/thread par ticket et ne synchronise pas automatiquement les conversations entières avec Discord. Les réponses depuis Discord se font par commande slash en donnant l'UUID du ticket. Pas besoin de bot Gateway ni de Message Content Intent pour ces commandes.
+**Limite importante :** les webhooks de salon sont unidirectionnels. On ne peut **pas** répondre à un ticket SEPPYL en écrivant sur Discord. Cette fonctionnalité nécessitera une intégration supplémentaire dans une version ultérieure.
 
-## Configuration côté Discord
+## Création du webhook dans Discord
 
-1. Créer une application depuis le [Discord Developer Portal](https://discord.com/developers/applications). Copier sa **Public Key** depuis l'onglet General Information.
-2. Activer le bot de l'application et l'installer sur le serveur voulu, avec le scope `applications.commands` (et si besoin `bot`). Conserver le jeton du bot dans les secrets de l'opérateur, jamais dans le dépôt ni dans le navigateur.
-3. Configurer l'URL des **Interactions Endpoint** sur `https://seppyl.donnarieix.fr/api/discord/interactions` **après avoir déployé l'API**. Discord enverra une requête PING signée pour vérifier la réponse. Cette route n'utilise pas le JWT SEPPYL, mais refuse toute requête non signée.
-4. Dans un canal Discord privé réservé au staff, créer un webhook (Paramètres du salon → Intégrations → Webhooks). Garder son URL secrète.
-5. Relever l'ID du serveur Discord et, éventuellement, celui du rôle à mentionner (mode développeur Discord).
+1. Créer ou choisir un salon textuel privé pour l'équipe support, par exemple `#seppyl-support`.
+2. Dans Discord, ouvrir les paramètres du salon, puis **Intégrations → Webhooks → Nouveau webhook**. Selon l'interface, la gestion des webhooks est aussi accessible depuis **Paramètres du serveur → Intégrations → Webhooks**.
+3. Le nommer `SEPPYL`, choisir le salon de destination et cliquer sur **Copier l'URL du webhook**.
+4. Conserver cette URL **secrète** : quiconque la possède peut publier des messages dans le salon. Ne pas la publier dans un chat, ticket, capture d'écran ou commit.
 
-## Configuration côté serveur SEPPYL
+L'URL doit commencer par `https://discord.com/api/webhooks/` (ancien domaine `discordapp.com` également accepté).
 
-Configurer les variables d'environnement du **service API Rust** :
+## Test du webhook depuis PowerShell (sans toucher à SEPPYL)
 
-| Variable | Description |
-| --- | --- |
-| `SEPPYL_DISCORD_PUBLIC_KEY` | Clé publique de l'application Discord, hexadécimale (obligatoire pour les commandes entrantes) |
-| `SEPPYL_DISCORD_GUILD_ID` | ID du seul serveur Discord autorisé à utiliser les commandes (obligatoire pour les commandes entrantes) |
-| `SEPPYL_DISCORD_TICKET_WEBHOOK` | URL complète du webhook Discord HTTPS, canal staff privé (facultatif pour les notifications) |
-| `SEPPYL_DISCORD_TICKET_ROLE_ID` | ID du rôle Discord à mentionner à la création/escalade (facultatif) |
+Exécuter dans une console PowerShell locale :
 
-La **clé publique** n'est pas un secret. En revanche, le webhook et le jeton du bot sont secrets. Le jeton de bot n'est **pas** nécessaire à l'exécution de l'API SEPPYL : il sert uniquement à enregistrer la commande auprès de Discord.
-
-Après mise en place de la configuration et déploiement, enregistrer une fois la commande depuis l'environnement d'administration avec :
-
-```bash
-export DISCORD_BOT_TOKEN='...'
-export DISCORD_APPLICATION_ID='...'
-export SEPPYL_DISCORD_GUILD_ID='...'
-python3 scripts/register-discord-commands.py
+```powershell
+$webhook = Read-Host "URL du webhook Discord"
+$payload = @{
+    content = "SEPPYL - test de notification"
+    allowed_mentions = @{ parse = @() }
+} | ConvertTo-Json -Depth 4
+Invoke-RestMethod -Uri $webhook -Method Post -ContentType "application/json" -Body ([Text.Encoding]::UTF8.GetBytes($payload))
+Remove-Variable webhook
 ```
 
-Le script crée/met à jour la seule commande slash `seppyl` dans le serveur ciblé, sans écraser les autres commandes. Ne jamais publier le jeton ni le mettre dans un fichier versionné.
+Un message « SEPPYL - test de notification » doit apparaître dans le salon Discord. Le succès HTTP renvoie généralement une réponse vide ; **une console sans erreur est normale**.
 
-## Utilisation
+## Configuration du backend Rust
 
-1. Se connecter au site SEPPYL avec un compte **Administrateur** ou **Maintainer**.
-2. Dans `Mon compte > Discord`, cliquer sur **Générer un code de liaison**.
-3. Sur le serveur Discord configuré, saisir `/seppyl lier` et y coller le code. Le code expire après dix minutes et n'est utilisable qu'une fois. Une nouvelle liaison remplace l'ancienne.
-4. Lorsqu'un ticket est signalé dans le canal staff, ouvrir son lien ou copier son UUID indiqué dans l'embed. Pour répondre depuis Discord, saisir `/seppyl repondre` puis les paramètres `ticket` (UUID) et `message` (texte Markdown).
-5. La réponse apparaît dans SEPPYL avec **l'identité du compte SEPPYL lié**. Un lien désactivé, un compte désactivé, ou un utilisateur n'ayant plus les droits Admin/Maintainer ne peut pas poster.
-6. Le bouton **Délier Discord** retire immédiatement la liaison. Il révoque l'accès aux futures réponses depuis Discord.
+Deux variables d'environnement **côté serveur**, dans le processus de l'API SEPPYL :
 
-## Protection des données et limites
+| Variable | Obligatoire | Description |
+| --- | --- | --- |
+| `SEPPYL_DISCORD_TICKET_WEBHOOK` | Oui pour activer Discord | URL du webhook copiée depuis Discord |
+| `SEPPYL_DISCORD_TICKET_ROLE_ID` | Non | Identifiant du rôle à mentionner uniquement à la création d'un ticket et lors d'une escalade Maintainer |
 
-- Utiliser uniquement un serveur et un salon Discord **privés au personnel autorisé**. Le titre du ticket et son identifiant sont visibles dans le salon où pointe le webhook. Les pièces jointes et le contenu des messages ne sont pas inclus dans le webhook.
-- Ne jamais afficher ni enregistrer l'URL du webhook dans des logs, payloads front ou historiques Git. L'accès au ticket via le lien Discord requiert toujours une session SEPPYL autorisée.
-- Les messages entrants sont associés à la personne ayant lié son compte, et non à un compte bot partagé. L'auteur ne peut pas être choisi par une option de commande.
-- Discord limite la longueur des options slash ; la commande `repondre` est configurée à 2 000 caractères. Les réponses plus longues doivent être saisies depuis SEPPYL.
-- Les erreurs du webhook ne bloquent pas les opérations SEPPYL ; l'envoi reste best-effort. Un mécanisme de file persistante et des threads Discord par ticket pourront venir dans une passe suivante.
-- Pour éviter toute publication accidentelle, l'intégration **n'est pas déployée automatiquement** : branche de développement et PR à valider avant fusion sur `main`.
+Si `SEPPYL_DISCORD_TICKET_WEBHOOK` n'est pas renseigné, l'intégration est désactivée silencieusement, et les tickets continuent de fonctionner normalement. Les échecs d'envoi Discord n'interrompent pas les opérations SEPPYL.
 
-## Vérifications
+Le secret doit être injecté de façon privée dans l'environnement de l'API (pas dans le code client, pas dans Git). Si le déploiement actuel ne permet pas encore d'ajouter cette variable sans accès terminal, cette étape d'intégration au déploiement devra être préparée avant la mise en production. **Ne pas forcer la fusion de cette PR pour tester.**
 
-- Faire répondre Discord au PING de validation de l'Interactions Endpoint.
-- Confirmer qu'un compte non Admin/Maintainer reçoit HTTP 403 sur les endpoints de liaison.
-- Vérifier qu'une requête Discord sans signature valide reçoit HTTP 401 (si l'intégration est configurée).
-- Tester la liaison d'un maintainer, une réponse depuis Discord, puis sa visibilité dans SEPPYL et dans les non-lus du demandeur.
-- Vérifier qu'une répétition de la même interaction ne duplique pas le message.
-- Vérifier qu'un compte désactivé ou rétrogradé ne peut plus répondre.
-- Vérifier que le webhook de nouvelle réponse ne boucle pas pour une réponse venue de Discord.
+## Vérification de bout en bout après configuration de l'API
+
+1. Créer un ticket de test depuis un compte SEPPYL autorisé. Vérifier la notification Discord « Nouveau ticket ».
+2. Répondre à ce ticket. Vérifier la notification Discord « Nouvelle réponse ».
+3. Ajouter une image seule. Vérifier également une notification « Nouvelle réponse ».
+4. Cocher « Maintainer », puis appliquer. Vérifier la notification « Intervention Maintainer demandée » et la mention du rôle, si configuré.
+5. Changer simplement le statut, sans réactiver Maintainer. Vérifier qu'aucune notification d'escalade supplémentaire ne part.
+6. Cliquer sur le lien Discord avec une session SEPPYL non autorisée. L'accès doit être refusé.
+
+**Confidentialité :** le salon doit être réservé aux personnes qui peuvent consulter les tickets. Les identifiants et sujets de tickets sont visibles par les membres du salon ; les contenus privés ne sont pas copiés dans Discord.
+
+La V1 ne permet pas de répondre depuis Discord ni de créer un thread Discord par ticket.

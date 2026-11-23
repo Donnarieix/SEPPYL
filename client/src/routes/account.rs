@@ -450,7 +450,7 @@ pub fn AccountPage() -> Element {
                                 p { "Liez votre compte pour répondre aux tickets depuis Discord." }
                             }
                             div { class: "settings-panel-content",
-                                match discord_status.read().as_ref() {
+                                match discord_status.read().clone() {
                                     Some(Ok(link)) => rsx! {
                                         if link.enabled {
                                             if let Some(discord_id) = link.discord_user_id.as_ref() {

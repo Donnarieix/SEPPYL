@@ -292,6 +292,61 @@ mod tests {
         assert!(!verify_signature(&pubkey, &hexsig, &moment.to_string(), body, moment+301));
         assert!(!verify_signature(&pubkey, "invalid", &moment.to_string(), body, moment));
     }
+    #[tokio::test]
+    async fn linked_maintainer_can_reply_exactly_once_and_loses_access_when_demoted() {
+        use sea_orm::{ActiveModelTrait, ActiveValue::Set, Database, QueryFilter, ColumnTrait};
+        use crate::entities::ticket_message;
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        crate::migrations::add_discord_support(&db).await.unwrap();
+        let staff_id=Uuid::new_v4();
+        let requester_id=Uuid::new_v4();
+        for (id, username, role) in [
+            (staff_id, "test-maintainer-discord", "maintainer"),
+            (requester_id, "test-requester-discord", "user")
+        ] {
+            user::ActiveModel {
+                id:Set(id), username:Set(username.to_owned()), password:Set("irrelevant".into()),
+                role:Set(Some(role.to_owned())), disabled:Set(None), ..Default::default()
+            }.insert(&db).await.unwrap();
+        }
+        let ticket_id=Uuid::new_v4();
+        ticket::ActiveModel {
+            id:Set(ticket_id),author_id:Set(requester_id),subject:Set("Question".into()),
+            status:Set("open".into()),maintainer_required:Set(false),
+            maintainer_generation:Set(0),created_at:Set(1),updated_at:Set(1),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+        let code=Uuid::new_v4().simple().to_string();
+        db.execute_raw(sql(
+            "INSERT INTO support_discord_link_codes (code, seppyl_user_id, expires_at) VALUES (?, ?, ?)",
+            vec![code.clone().into(),staff_id.into(),(now()+60).into()],
+        )).await.unwrap();
+        let state=AppState{db:db.clone()};
+        assert!(link(&state, "987654321012345678", &code).await.unwrap().contains("lié"));
+        assert!(link(&state, "987654321012345678", &code).await.unwrap().contains("déjà utilisé"));
+        let id=ticket_id.to_string();
+        assert!(reply(&state,"987654321012345678","interaction-1",&id,"**Bonjour**")
+            .await.unwrap().contains("ajoutée"));
+        assert!(reply(&state,"987654321012345678","interaction-1",&id,"**Bonjour**")
+            .await.unwrap().contains("déjà"));
+        let messages=ticket_message::Entity::find()
+            .filter(ticket_message::COLUMN.ticket_id.eq(ticket_id))
+            .all(&db).await.unwrap();
+        assert_eq!(messages.len(),1);
+        assert_eq!(messages[0].author_id,staff_id);
+        assert_eq!(messages[0].message,"**Bonjour**");
+        let staff=user::Entity::find_by_id(staff_id).one(&db).await.unwrap().unwrap();
+        let mut active:user::ActiveModel=staff.into();
+        active.role=Set(Some("user".into()));
+        active.update(&db).await.unwrap();
+        assert!(reply(&state,"987654321012345678","interaction-2",&id,"Tentative")
+            .await.unwrap().contains("Liez d'abord"));
+        assert_eq!(ticket_message::Entity::find()
+            .filter(ticket_message::COLUMN.ticket_id.eq(ticket_id))
+            .all(&db).await.unwrap().len(),1);
+    }
+
     #[test]
     fn only_explicit_subcommands_can_be_parsed() {
         let command = json!({"name":"seppyl","options":[{"name":"repondre","type":1,

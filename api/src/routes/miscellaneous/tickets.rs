@@ -338,6 +338,9 @@ pub async fn status(
     ticket_live::changed(id,claims.sub);
     Ok(StatusCode::NO_CONTENT)
 }
+pub(super) fn notify_discord_attachment(id:Uuid, subject:&str){
+    notify_discord(id,subject,DiscordNotice::Message);
+}
 /// Discord is an optional server-only transport. Never disclose private ticket
 /// messages, attachments, requester names or webhook tokens in notifications.
 #[derive(Clone, Copy)]

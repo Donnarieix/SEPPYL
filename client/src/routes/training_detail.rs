@@ -48,7 +48,7 @@ pub fn TrainingDetail(id: String) -> Element {
         return rsx! {
             div { class: "centered",
                 p { "Veuillez vous connecter." }
-                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login {}); }, "Connexion" }
+                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login{next:String::new()}); }, "Connexion" }
             }
         };
     }

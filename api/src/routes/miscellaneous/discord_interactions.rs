@@ -134,9 +134,17 @@ async fn detail(state:&AppState,actor:Uuid,id:Uuid)->R<Option<String>>{
     let joined=parts.join("\n");
     Ok(Some(excerpt(&joined,1850)))
 }
+async fn staff_in_transaction(tx:&sea_orm::DatabaseTransaction,actor:Uuid)->R<bool>{
+    let account=user::Entity::find_by_id(actor).one(tx).await.map_err(link::db)?;
+    Ok(account.is_some_and(|user|!user.disabled.unwrap_or(false)
+        && user.role.as_deref().and_then(Role::parse).is_some_and(Role::is_admin)))
+}
 async fn answer(state:&AppState,actor:Uuid,interaction:&str,id:Uuid,body:&str)->R<String>{
     if body.trim().is_empty() || body.len()>10_000{return Ok("Message vide ou trop long.".into());}
     let tx=state.db.begin().await.map_err(link::db)?;
+    if !staff_in_transaction(&tx,actor).await?{
+        return Ok("Compte SEPPYL non autorisé : liaison ou rôle à vérifier.".into());
+    }
     if !link::reserve_interaction(&tx,interaction).await?{
         return Ok("Cette interaction a déjà été prise en compte.".into());
     }
@@ -168,6 +176,9 @@ async fn answer(state:&AppState,actor:Uuid,interaction:&str,id:Uuid,body:&str)->
 async fn update_status(state:&AppState,actor:Uuid,interaction:&str,id:Uuid,
     desired:Option<&str>,escalate:Option<bool>)->R<String>{
     let tx=state.db.begin().await.map_err(link::db)?;
+    if !staff_in_transaction(&tx,actor).await?{
+        return Ok("Compte SEPPYL non autorisé : liaison ou rôle à vérifier.".into());
+    }
     if !link::reserve_interaction(&tx,interaction).await?{
         return Ok("Cette interaction a déjà été prise en compte.".into());
     }

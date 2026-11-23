@@ -11,6 +11,7 @@ mod trainings;
 mod players;
 mod activities;
 mod account;
+mod discord_settings;
 mod rich_editor;
 mod tactics;
 mod organization;

@@ -32,4 +32,3 @@ pub mod changelog;
 pub mod matches;
 pub mod tickets;
 pub mod announcements;
-pub mod discord;

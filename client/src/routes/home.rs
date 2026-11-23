@@ -33,7 +33,7 @@ pub fn Home() -> Element {
             div { class: "signed-out",
                 h1 { "SEPPYL" }
                 p { "Connectez-vous pour accéder aux résultats." }
-                button { class: "button solid", onclick: move |_| { navigator.push(crate::routes::Route::Login {}); },
+                button { class: "button solid", onclick: move |_| { navigator.push(crate::routes::Route::Login{next:String::new()}); },
                     "Se connecter"
                 }
             }

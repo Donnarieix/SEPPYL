@@ -14,6 +14,8 @@ pub struct Model {
     // Nullable for older messages and new image-only messages.
     pub attachment_name:Option<String>,
     pub created_at:i64,
+    // Discord-origin messages are deduplicated by signed interaction ID.
+    pub discord_interaction_id:Option<String>,
     pub edited_at:Option<i64>,
     pub deleted_at:Option<i64>,
 }

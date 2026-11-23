@@ -57,11 +57,13 @@ pub async fn upload(
         let _=std::fs::remove_file(&path);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    let subject=row.subject.clone();
     let mut active:ticket::ActiveModel=row.into();
     active.updated_at=Set(stamp);
     active.update(&state.db).await.map_err(|e|{
         tracing::error!(%e,"Ticket attachment update failed");StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    tickets::notify_discord_attachment(ticket_id,&subject);
     ticket_live::changed(ticket_id,claims.sub);
     Ok((StatusCode::CREATED,Json(record)))
 }

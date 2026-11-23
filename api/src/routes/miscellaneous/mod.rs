@@ -11,3 +11,6 @@ pub mod announcements;
 
 pub mod ticket_live;
 pub mod ticket_attachments;
+
+pub mod discord_link;
+pub mod discord_interactions;

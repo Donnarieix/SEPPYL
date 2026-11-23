@@ -231,6 +231,20 @@ pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     }
     Ok(())
 }
+/// Additive Discord support. Never rewrite existing ticket, message or account data.
+pub async fn add_discord_integration(db:&DatabaseConnection)->Result<(),DbErr>{
+    db.execute_unprepared("CREATE TABLE IF NOT EXISTS support_discord_links (\
+        discord_user_id TEXT PRIMARY KEY NOT NULL, user_id TEXT UNIQUE NOT NULL, linked_at INTEGER NOT NULL)")
+        .await?;
+    db.execute_unprepared("CREATE TABLE IF NOT EXISTS support_discord_codes (\
+        code TEXT PRIMARY KEY NOT NULL, user_id TEXT UNIQUE NOT NULL, expires_at INTEGER NOT NULL)")
+        .await?;
+    db.execute_unprepared("CREATE TABLE IF NOT EXISTS support_discord_processed (\
+        interaction_id TEXT PRIMARY KEY NOT NULL, created_at INTEGER NOT NULL)")
+        .await?;
+    Ok(())
+}
+
 pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
     // A migration must never arbitrarily merge existing player IDs.
     let duplicates=query_rows(db,

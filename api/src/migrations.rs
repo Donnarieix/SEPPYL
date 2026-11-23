@@ -210,7 +210,7 @@ pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     for (table, additions) in [
         ("users", vec![("disabled","INTEGER")]),
         ("support_tickets",vec![("maintainer_generation","INTEGER NOT NULL DEFAULT 0")]),
-        ("support_ticket_messages",vec![("attachment_name","TEXT"),("edited_at","INTEGER"),("deleted_at","INTEGER"),("reply_to_id","TEXT"),("discord_interaction_id","TEXT")]),
+        ("support_ticket_messages",vec![("attachment_name","TEXT"),("edited_at","INTEGER"),("deleted_at","INTEGER"),("reply_to_id","TEXT")]),
         ("trainings", vec![("duration_minutes","INTEGER")]),
         ("training_attendance", vec![("score_comment","TEXT")]),
         ("training_scores", vec![("comment","TEXT")]),
@@ -231,26 +231,6 @@ pub async fn add_sixth_pass_fields(db:&DatabaseConnection)->Result<(),DbErr>{
     }
     Ok(())
 }
-/// Additive, idempotent Discord linkage. No existing ticket data is altered.
-pub async fn add_discord_support(db:&DatabaseConnection)->Result<(),DbErr>{
-    db.execute_unprepared(
-        "CREATE TABLE IF NOT EXISTS support_discord_links (\
-         discord_user_id TEXT PRIMARY KEY NOT NULL, \
-         seppyl_user_id BLOB NOT NULL UNIQUE, linked_at INTEGER NOT NULL)"
-    ).await?;
-    db.execute_unprepared(
-        "CREATE TABLE IF NOT EXISTS support_discord_link_codes (\
-         code TEXT PRIMARY KEY NOT NULL, seppyl_user_id BLOB NOT NULL UNIQUE, \
-         expires_at INTEGER NOT NULL)"
-    ).await?;
-    db.execute_unprepared(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_ticket_interaction \
-         ON support_ticket_messages(discord_interaction_id) \
-         WHERE discord_interaction_id IS NOT NULL"
-    ).await?;
-    Ok(())
-}
-
 pub async fn enforce_player_identity(db:&DatabaseConnection)->Result<(),DbErr>{
     // A migration must never arbitrarily merge existing player IDs.
     let duplicates=query_rows(db,

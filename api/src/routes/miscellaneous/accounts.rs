@@ -1,6 +1,6 @@
 //! Maintainer-only lifecycle management. All destructive changes are atomic.
 use axum::{Extension,Json,extract::{Path,State},http::StatusCode};
-use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,TransactionTrait,PaginatorTrait};
+use sea_orm::{ActiveModelTrait,ActiveValue::Set,ColumnTrait,EntityTrait,QueryFilter,TransactionTrait,PaginatorTrait,ConnectionTrait,DbBackend,Statement};
 use serde::{Deserialize,Serialize};
 use uuid::Uuid;
 use crate::{
@@ -154,6 +154,12 @@ pub async fn remove(
     team_membership::Entity::delete_many().filter(team_membership::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     user_preference::Entity::delete_many().filter(user_preference::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     ticket_read::Entity::delete_many().filter(ticket_read::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
+    // Revoke Discord access and unused codes in the same account-deletion transaction.
+    for table in ["support_discord_links","support_discord_codes"]{
+        tx.execute_raw(Statement::from_sql_and_values(DbBackend::Sqlite,
+            format!("DELETE FROM {table} WHERE user_id=?"),vec![id.to_string().into()]
+        )).await.map_err(failure)?;
+    }
     changelog_read::Entity::delete_many().filter(changelog_read::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     catalog_result::Entity::delete_many().filter(catalog_result::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;
     catalog_selection::Entity::delete_many().filter(catalog_selection::COLUMN.user_id.eq(id)).exec(&tx).await.map_err(failure)?;

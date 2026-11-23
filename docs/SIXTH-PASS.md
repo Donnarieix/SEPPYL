@@ -31,14 +31,30 @@ La messagerie fonctionne avec **polling toutes les 15 secondes** sur une fiche d
 
 ### Discord
 
-La V1 repose sur un webhook Discord **sortant uniquement**. Les notifications concernent :
-- la création d'un ticket ;
-- les nouveaux messages (y compris image seule) ;
-- le passage du ticket à « Maintainer ».
+La V1 webhook sortant reste disponible sans configuration supplémentaire. La nouvelle
+intégration interactive ajoute une **application Discord** (commande `/seppyl`,
+boutons « Voir / Répondre / Statut / Maintainer » sur les messages du bot) avec
+un endpoint d'interactions signé Ed25519. La consultation et les réponses
+interactives sont privées au membre connecté dans Discord.
 
-Les notifications comportent le sujet et un lien vers le ticket authentifié, sans recopier les messages privés ni les pièces jointes. Une mention de rôle facultative est limitée aux créations et escalades. La configuration se fait avec `SEPPYL_DISCORD_TICKET_WEBHOOK` et éventuellement `SEPPYL_DISCORD_TICKET_ROLE_ID` **côté API uniquement**. Le webhook n'est jamais exposé dans le navigateur ni stocké dans Git. Aucun bot, aucune application Discord ni liaison de comptes ne sont requis.
+L'identité est liée volontairement à un compte staff SEPPYL au moyen d'un code
+temporaire à usage unique et contrôlée à chaque interaction : comptes désactivés,
+rétrogradés ou déliés n'ont plus accès à la gestion. Les accusés de lecture et
+l'escalade Maintainer restent individuels. Les réponses créées depuis Discord
+ne bouclent pas vers le canal Discord, et les opérations sont dédupliquées
+et consignées dans l'audit.
 
-Les webhooks ne permettent pas de recevoir des réponses depuis Discord. Une synchronisation bidirectionnelle pourra faire l'objet d'une prochaine version ; voir `docs/DISCORD-TICKETS.md`.
+Les variables d'application/bot sont uniquement présentes sur le serveur.
+Les notifications webhook sont conservées en secours et ne contiennent jamais
+les messages privés. Voir `docs/DISCORD-TICKETS.md`.
+
+### HTTP 404
+
+La page 404 Dioxus est opérationnelle. Un HTML statique `404.html` et une
+proposition Nginx sont disponibles pour obtenir **un vrai HTTP 404**, mais le
+proxy de production ne doit pas être modifié automatiquement sans ses règles
+réelles (API, certificats, SPA). Sans cette modification contrôlée, SEPPYL
+conserve volontairement HTTP 200 et sa page 404 personnalisée.
 
 ## Annonces
 

@@ -77,8 +77,6 @@ impl AppState {
             .sync(&db)
             .await
             .unwrap();
-        crate::migrations::add_discord_support(&db).await
-            .expect("Unable to create Discord integration tables");
         // Enforce the complete player identity, never firstname alone.
         // A pre-existing conflict aborts startup rather than silently merging
         // distinct player IDs, team memberships, scores or attendance.

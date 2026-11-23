@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use crate::api::matrix;
 
 #[component]
-pub fn Login() -> Element {
+pub fn Login(next:String) -> Element {
     let mut session = use_context::<Signal<Option<String>>>();
     let navigator = use_navigator();
     let mut username = use_signal(String::new);
@@ -43,7 +43,8 @@ pub fn Login() -> Element {
                                 Ok(token) => {
                                     crate::session::save(&token);
                                     session.set(Some(token));
-                                    navigator.push(crate::routes::Route::Trainings {});
+                                    // Replace /login in browser history to avoid back-navigation loops.
+                                    navigator.replace(super::login_destination(&next));
                                 }
                                 Err(message) => error.set(Some(message)),
                             }

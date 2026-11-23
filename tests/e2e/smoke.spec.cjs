@@ -200,6 +200,33 @@ test('ticket owner isolation, staff escalation and published urgent banner',asyn
 });
 
 
+test('Discord linkage requires SEPPYL staff and unsigned Discord callbacks are rejected', async ({request})=>{
+  const userLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const maintainerLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(userLogin.status()).toBe(200);
+  expect(maintainerLogin.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await userLogin.json()).token};
+  const staff={Authorization:'Bearer '+(await maintainerLogin.json()).token};
+  expect((await request.get('/api/account/discord',{headers:user})).status()).toBe(403);
+  expect((await request.post('/api/account/discord/link-code',{headers:user})).status()).toBe(403);
+  expect((await request.delete('/api/account/discord',{headers:user})).status()).toBe(403);
+  const connected=await request.get('/api/account/discord',{headers:staff});
+  expect(connected.status()).toBe(200);
+  const status=await connected.json();
+  expect(status.discord_user_id).toBeNull();
+  expect(typeof status.enabled).toBe('boolean');
+  if(!status.enabled) {
+    expect((await request.post('/api/account/discord/link-code',{headers:staff})).status()).toBe(503);
+  } else {
+    const code=await request.post('/api/account/discord/link-code',{headers:staff});
+    expect(code.status()).toBe(200);
+    expect((await code.json()).code).toMatch(/^[0-9a-f]{32}$/);
+  }
+  const forgery=await request.post('/api/discord/interactions',{
+    data:{type:2,guild_id:'untrusted',member:{user:{id:'untrusted'}}}});
+  expect([401,503]).toContain(forgery.status());
+});
+
 test('ticket unread notifications are scoped, persistent, and clear upon reading',async ({request})=>{
   const userLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
   const maintainerLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});

@@ -317,6 +317,70 @@ mod tests{
         assert!(!signing_valid(&public,&signature,ts,body,1800000301));
         assert!(!signing_valid(&public,"garbage",ts,body,1800000000));
     }
+    #[tokio::test]
+    async fn staff_link_can_reply_and_escalate_once_and_is_revoked_by_role_change(){
+        use sea_orm::{ActiveModelTrait,ActiveValue::Set,Database,QueryFilter,ColumnTrait};
+        let db=Database::connect("sqlite::memory:").await.unwrap();
+        db.get_schema_registry("api::entities::*").sync(&db).await.unwrap();
+        crate::migrations::add_discord_integration(&db).await.unwrap();
+        let staff_id=Uuid::new_v4();
+        let requester_id=Uuid::new_v4();
+        for (id,name,role) in [
+            (staff_id,"discord-staff-test","maintainer"),
+            (requester_id,"discord-requester-test","user")
+        ]{
+            user::ActiveModel{
+                id:Set(id),username:Set(name.into()),password:Set("no-login".into()),
+                role:Set(Some(role.into())),disabled:Set(None),..Default::default()
+            }.insert(&db).await.unwrap();
+        }
+        let ticket_id=Uuid::new_v4();
+        ticket::ActiveModel{
+            id:Set(ticket_id),author_id:Set(requester_id),subject:Set("Test".into()),
+            status:Set("open".into()),maintainer_required:Set(false),
+            maintainer_generation:Set(0),created_at:Set(1),updated_at:Set(1),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+        let code=Uuid::new_v4().simple().to_string();
+        db.execute_raw(link::sql(
+            "INSERT INTO support_discord_codes(code,user_id,expires_at) VALUES(?,?,?)",
+            vec![code.clone().into(),staff_id.to_string().into(),(link::now()+600).into()]
+        )).await.unwrap();
+        let state=AppState{db:db.clone()};
+        assert!(link::redeem_code(&state,"123456789012345678",&code)
+            .await.unwrap().contains("lié"));
+        assert!(link::redeem_code(&state,"123456789012345678",&code)
+            .await.unwrap().contains("déjà utilisé"));
+        assert_eq!(link::staff_for_discord(&state,"123456789012345678")
+            .await.unwrap(),Some(staff_id));
+        assert!(answer(&state,staff_id,"123456789000001",ticket_id,"Bonjour")
+            .await.unwrap().contains("enregistrée"));
+        assert!(answer(&state,staff_id,"123456789000001",ticket_id,"Bonjour")
+            .await.unwrap().contains("déjà"));
+        let messages=ticket_message::Entity::find()
+            .filter(ticket_message::COLUMN.ticket_id.eq(ticket_id))
+            .all(&db).await.unwrap();
+        assert_eq!(messages.len(),1);
+        assert_eq!(messages[0].author_id,staff_id);
+        let outcome=update_status(&state,staff_id,"123456789000002",
+            ticket_id,Some("in_progress"),Some(true)).await.unwrap();
+        assert!(outcome.contains("in_progress"));
+        let row=ticket::Entity::find_by_id(ticket_id).one(&db).await.unwrap().unwrap();
+        assert_eq!(row.maintainer_generation,1);
+        assert!(row.maintainer_required);
+        assert_eq!(row.status,"in_progress");
+        update_status(&state,staff_id,"123456789000002",ticket_id,
+            Some("closed"),Some(false)).await.unwrap();
+        assert!(ticket::Entity::find_by_id(ticket_id).one(&db).await.unwrap()
+            .unwrap().maintainer_required);
+        let staff=user::Entity::find_by_id(staff_id).one(&db).await.unwrap().unwrap();
+        let mut active:user::ActiveModel=staff.into();
+        active.role=Set(Some("user".into()));
+        active.update(&db).await.unwrap();
+        assert_eq!(link::staff_for_discord(&state,"123456789012345678")
+            .await.unwrap(),None);
+    }
+
     #[test]
     fn buttons_are_scoped_to_ticket_ids(){
         let id=Uuid::new_v4();

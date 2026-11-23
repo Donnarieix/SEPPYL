@@ -31,12 +31,11 @@ La messagerie fonctionne avec **polling toutes les 15 secondes** sur une fiche d
 
 ### Discord
 
-Le webhook est optionnel, **configuré sur le serveur** et jamais dans une table de tickets ou dans le navigateur :
-
-- `SEPPYL_DISCORD_TICKET_WEBHOOK` : URL Discord HTTPS sous `discord.com/api/webhooks/...` ;
-- `SEPPYL_DISCORD_TICKET_ROLE_ID` : Snowflake de rôle Discord optionnel pour notifier un groupe via mention autorisée.
-
-La notification est « best effort », avec délai réseau limité, sur création du ticket et lors du passage à « Maintainer ». L'échec de Discord ne bloque ni la création ni la modification du ticket. Les mentions `@everyone`, `@here` et rôles non autorisés par la configuration ne sont pas activées. **Ne jamais enregistrer l'URL du webhook dans Git ou l'exposer aux utilisateurs.**
+- Webhook sortant facultatif pour la création de tickets, les nouvelles réponses et les escalades Maintainer. Il inclut le sujet, un lien authentifié et un identifiant, **pas le corps privé des messages**.
+- Intégration entrante via commandes Discord signées (Ed25519) sans processus bot Gateway. Les administrateurs/maintainers lient leur compte depuis « Mon compte > Discord » (code temporaire à usage unique, 10 minutes) et peuvent répondre avec `/seppyl repondre`.
+- Le contrôle de rôle est effectué à chaque réponse côté API, et les interactions sont dédupliquées. Les demandes ne peuvent provenir que du serveur Discord configuré.
+- Activation uniquement via configuration serveur ; voir `docs/DISCORD-TICKETS.md` pour le guide complet. Aucun secret dans le dépôt ni dans le front.
+- Création de threads Discord par ticket et synchronisation des conversations entières encore hors périmètre de cette première itération.
 
 ## Annonces
 

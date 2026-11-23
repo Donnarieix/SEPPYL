@@ -167,7 +167,8 @@ async fn main() {
         .route("/register", post(register))
         .route("/signup", post(register))
         // Discord authenticates requests with Ed25519, not SEPPYL bearer tokens.
-        .route("/discord/interactions",post(discord::interaction))
+        .route("/discord/interactions",post(discord::interaction)
+            .layer(axum::extract::DefaultBodyLimit::max(32*1024)))
         .route("/catalog/images/{filename}", get(catalog::image))
         .merge(protected)
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))

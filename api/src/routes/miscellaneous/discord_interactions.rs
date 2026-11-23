@@ -9,7 +9,7 @@ use sea_orm::{
 use serde_json::{Value,json};
 use uuid::Uuid;
 use crate::{
-    entities::{ticket,ticket_message,user},
+    entities::{ticket,ticket_message,user,audit_event},
     middleware::{CurrentRole,Role},
     routes::{authentication::login::Claims,miscellaneous::{ticket_live,tickets,discord_link as link}},
     state::AppState,
@@ -153,6 +153,13 @@ async fn answer(state:&AppState,actor:Uuid,interaction:&str,id:Uuid,body:&str)->
     let mut update:ticket::ActiveModel=row.into();
     update.updated_at=Set(link::now());
     update.update(&tx).await.map_err(link::db)?;
+    audit_event::ActiveModel{
+        id:Set(Uuid::new_v4()),actor_id:Set(actor),action:Set("create".into()),
+        path:Set(format!("/discord/tickets/{id}/messages")),status:Set(201),
+        timestamp:Set(link::now()),scope:Set(Some("admin".into())),
+        description:Set(Some(format!("Réponse à un ticket depuis Discord ({id})"))),
+        ..Default::default()
+    }.insert(&tx).await.map_err(link::db)?;
     tx.commit().await.map_err(link::db)?;
     // Discord-origin replies must not loop back into bot notifications.
     ticket_live::changed(id,actor);
@@ -181,6 +188,13 @@ async fn update_status(state:&AppState,actor:Uuid,interaction:&str,id:Uuid,
     if newly_escalated{active.maintainer_generation=Set(row.maintainer_generation+1);}
     active.updated_at=Set(link::now());
     active.update(&tx).await.map_err(link::db)?;
+    audit_event::ActiveModel{
+        id:Set(Uuid::new_v4()),actor_id:Set(actor),action:Set("update".into()),
+        path:Set(format!("/discord/tickets/{id}/status")),status:Set(204),
+        timestamp:Set(link::now()),scope:Set(Some("admin".into())),
+        description:Set(Some(format!("Statut depuis Discord : {status}; Maintainer : {mention}"))),
+        ..Default::default()
+    }.insert(&tx).await.map_err(link::db)?;
     tx.commit().await.map_err(link::db)?;
     ticket_live::changed(id,actor);
     Ok(format!("Ticket {id} : statut **{status}**, Maintainer **{}**.",if mention{"oui"}else{"non"}))

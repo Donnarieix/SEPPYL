@@ -27,7 +27,7 @@ pub(super) fn sql(query:&str,params:Vec<Value>)->Statement{
 /// A local Gateway bridge is allowed only when the API itself binds to
 /// loopback, outside the production working directory. Merely setting the
 /// shared secret must never enable a public impersonation endpoint.
-pub(super) fn local_gateway_enabled()->bool {
+pub(crate) fn local_gateway_enabled()->bool {
     let bind=std::env::var("SEPPYL_BIND").unwrap_or_default();
     let Ok(address)=bind.parse::<std::net::SocketAddr>() else{return false};
     if !address.ip().is_loopback() || address.port()==3101{return false;}

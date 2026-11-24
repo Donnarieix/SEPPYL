@@ -1,6 +1,7 @@
 //! Signed Discord interaction endpoint. No Gateway process or Message Content Intent.
 //! Every mutation is attributed to a live SEPPYL administrator/maintainer.
-use axum::{Json, body::Bytes, extract::{Path,State}, http::{HeaderMap,StatusCode,header}};
+use axum::{Json, body::Bytes, extract::{Path,State,ConnectInfo}, http::{HeaderMap,StatusCode}};
+use std::net::SocketAddr;
 use ed25519_dalek::{Signature,Verifier,VerifyingKey};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
@@ -215,10 +216,6 @@ pub async fn interaction(
 )->R<Json<Value>>{
     let key=std::env::var("SEPPYL_DISCORD_PUBLIC_KEY")
         .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
-    let guild=std::env::var("SEPPYL_DISCORD_GUILD_ID")
-        .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
-    let application=std::env::var("SEPPYL_DISCORD_APPLICATION_ID")
-        .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
     let signature=headers.get("x-signature-ed25519")
         .and_then(|v|v.to_str().ok()).ok_or(StatusCode::UNAUTHORIZED)?;
     let timestamp=headers.get("x-signature-timestamp")
@@ -227,6 +224,38 @@ pub async fn interaction(
         return Err(StatusCode::UNAUTHORIZED);
     }
     let payload:Value=serde_json::from_slice(&body).map_err(|_|StatusCode::BAD_REQUEST)?;
+    dispatch_verified(&state,payload).await
+}
+fn same_secret(expected:&str,received:&str)->bool{
+    let left=expected.as_bytes();let right=received.as_bytes();
+    left.len()==right.len() && left.iter().zip(right.iter())
+        .fold(0u8,|acc,(a,b)|acc | (a ^ b))==0
+}
+/// Local-only adapter for a Python Discord Gateway bot. An untrusted client
+/// cannot supply arbitrary user IDs: this route is never enabled outside an
+/// explicitly loopback-bound development API, and requires a private secret.
+/// The production /discord/interactions route always requires Ed25519.
+pub async fn local_gateway(
+    State(state):State<AppState>,
+    ConnectInfo(peer):ConnectInfo<SocketAddr>,
+    headers:HeaderMap,
+    Json(payload):Json<Value>,
+)->R<Json<Value>>{
+    if !link::local_gateway_enabled() || !peer.ip().is_loopback(){
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let expected=std::env::var("SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN")
+        .map_err(|_|StatusCode::NOT_FOUND)?;
+    let provided=headers.get("x-seppyl-bridge-token")
+        .and_then(|v|v.to_str().ok()).unwrap_or_default();
+    if !same_secret(&expected,provided){return Err(StatusCode::UNAUTHORIZED);}
+    dispatch_verified(&state,payload).await
+}
+async fn dispatch_verified(state:&AppState,payload:Value)->R<Json<Value>>{
+    let guild=std::env::var("SEPPYL_DISCORD_GUILD_ID")
+        .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+    let application=std::env::var("SEPPYL_DISCORD_APPLICATION_ID")
+        .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
     if payload["application_id"].as_str()!=Some(&application){
         return Err(StatusCode::UNAUTHORIZED);
     }

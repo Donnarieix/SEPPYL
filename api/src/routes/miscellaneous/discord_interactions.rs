@@ -436,6 +436,14 @@ mod tests{
     }
 
     #[test]
+    fn local_bridge_secret_comparison_requires_exact_match(){
+        assert!(same_secret("a-private-secret-with-more-than-32-characters",
+            "a-private-secret-with-more-than-32-characters"));
+        assert!(!same_secret("a-private-secret-with-more-than-32-characters",
+            "a-private-secret-with-more-than-32-characterX"));
+        assert!(!same_secret("a-private-secret-with-more-than-32-characters", ""));
+    }
+    #[test]
     fn buttons_are_scoped_to_ticket_ids(){
         let id=Uuid::new_v4();
         assert!(buttons(id).to_string().contains(&id.to_string()));

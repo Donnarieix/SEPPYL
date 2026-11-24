@@ -24,9 +24,23 @@ pub(super) fn now()->i64{
 pub(super) fn sql(query:&str,params:Vec<Value>)->Statement{
     Statement::from_sql_and_values(DbBackend::Sqlite,query,params)
 }
+/// A local Gateway bridge is allowed only when the API itself binds to
+/// loopback, outside the production working directory. Merely setting the
+/// shared secret must never enable a public impersonation endpoint.
+pub(super) fn local_gateway_enabled()->bool {
+    let bind=std::env::var("SEPPYL_BIND").unwrap_or_default();
+    let Ok(address)=bind.parse::<std::net::SocketAddr>() else{return false};
+    if !address.ip().is_loopback() || address.port()==3101{return false;}
+    if std::env::var("SEPPYL_ENV").is_ok_and(|v|v.eq_ignore_ascii_case("production")){return false;}
+    if std::env::current_dir().is_ok_and(|p|p==std::path::Path::new("/var/lib/seppyl")){return false;}
+    std::env::var("SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN")
+        .is_ok_and(|token|token.len()>=32 && token.len()<=256 && token.is_ascii())
+}
 pub(super) fn configured()->bool{
-    ["SEPPYL_DISCORD_PUBLIC_KEY","SEPPYL_DISCORD_GUILD_ID","SEPPYL_DISCORD_APPLICATION_ID"]
-        .iter().all(|key|std::env::var(key).is_ok_and(|v|!v.is_empty()))
+    let ids=["SEPPYL_DISCORD_GUILD_ID","SEPPYL_DISCORD_APPLICATION_ID"]
+        .iter().all(|key|std::env::var(key).is_ok_and(|v|!v.is_empty()));
+    ids && (std::env::var("SEPPYL_DISCORD_PUBLIC_KEY").is_ok_and(|key|!key.is_empty())
+        || local_gateway_enabled())
 }
 fn require_staff(role:Role)->R<()>{
     if role.is_admin(){Ok(())}else{Err(StatusCode::FORBIDDEN)}

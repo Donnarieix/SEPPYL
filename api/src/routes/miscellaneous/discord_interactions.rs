@@ -229,7 +229,7 @@ pub async fn interaction(
 fn same_secret(expected:&str,received:&str)->bool{
     let left=expected.as_bytes();let right=received.as_bytes();
     left.len()==right.len() && left.iter().zip(right.iter())
-        .fold(0u8,|acc,(a,b)|acc | (a ^ b))==0
+        .fold(0u8,|acc,(a,b)|acc | (*a ^ *b))==0
 }
 /// Local-only adapter for a Python Discord Gateway bot. An untrusted client
 /// cannot supply arbitrary user IDs: this route is never enabled outside an

@@ -24,3 +24,16 @@ pub mod club_player;
 
 pub mod changelog_entry;
 pub mod changelog_read;
+pub mod match_game;
+pub mod match_participant;
+pub mod match_event_type;
+pub mod match_event;
+pub mod ticket;
+pub mod ticket_message;
+pub mod announcement;
+
+pub mod ticket_read;
+
+pub mod ticket_message_revision;
+
+pub mod ticket_maintainer_read;

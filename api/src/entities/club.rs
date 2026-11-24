@@ -10,6 +10,9 @@ pub struct Model {
     pub name: String,
     /// Public visibility is explicit, never enabled by default.
     pub is_public: Option<bool>,
+    // Never expose member identities by default.
+    pub show_public_teams: Option<bool>,
+    pub show_public_roster: Option<bool>,
     pub description: Option<String>,
     pub logo_url: Option<String>,
     pub logo_x: Option<i32>,

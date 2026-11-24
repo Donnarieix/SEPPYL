@@ -61,6 +61,7 @@ fn App() -> Element {
             class: "site-root",
             "data-theme": initial_theme.as_str(),
             "data-density": current.density.as_str(),
+            routes::announcements::UrgentBanner {}
             Router::<routes::Route> {}
             routes::changelog::ChangelogHost {}
             routes::legal::SiteFooter {}

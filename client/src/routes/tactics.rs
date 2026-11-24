@@ -30,7 +30,7 @@ pub fn Tactics() -> Element {
             div { class: "centered",
                 h1 { "Tableau tactique" }
                 p { "Connectez-vous pour concevoir vos schémas." }
-                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login {}); }, "Connexion" }
+                button { class: "button solid", onclick: move |_| { navigator.push(Route::Login{next:String::new()}); }, "Connexion" }
             }
         };
     }

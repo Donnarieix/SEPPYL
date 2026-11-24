@@ -50,6 +50,7 @@ pub async fn login(
         })?
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
+    if user.disabled.unwrap_or(false){return Err(StatusCode::UNAUTHORIZED);}
     let password_hash = PasswordHash::new(&user.password)
         .map_err(|error| {
             tracing::error!(%error, "Invalid stored password hash");
@@ -97,6 +98,7 @@ mod regression_tests {
             username: Set("corrupted-test-user".into()),
             password: Set("not-a-phc-hash".into()),
             role: Set(Some("user".into())),
+            disabled: Set(None),
             ..Default::default()
         }.insert(&db).await.unwrap();
         let response = login(

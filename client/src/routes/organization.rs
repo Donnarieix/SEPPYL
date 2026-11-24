@@ -79,7 +79,7 @@ pub fn Organization()->Element{
     if token.is_none(){
         return rsx!{div{class:"centered",
             p{"Connectez-vous pour consulter vos équipes."}
-            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{});},"Connexion"}
+            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{next:String::new()});},"Connexion"}
         }};
     }
     let token=token.unwrap_or_default();

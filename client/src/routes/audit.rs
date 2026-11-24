@@ -26,7 +26,7 @@ pub fn AuditLog()->Element{
     if token.is_none(){return rsx!{
         div{class:"centered",
             p{"Connectez-vous pour consulter le journal."}
-            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{});},"Connexion"}
+            button{class:"button solid",onclick:move |_|{navigator.push(Route::Login{next:String::new()});},"Connexion"}
         }
     };}
     rsx!{

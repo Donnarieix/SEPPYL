@@ -121,3 +121,781 @@ test('registration form signs up and logs in through production-style proxy', as
   await expect(page).toHaveURL(/\/trainings$/);
   await expect(page.getByRole('heading', { name: 'Entraînements' })).toBeVisible();
 });
+
+test('tickets and Maintainer announcement tab render in Chromium without browser errors',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  await expect(page.getByRole('heading',{name:'Tous les tickets'})).toBeVisible();
+  // The release history is legitimately shown to first-time accounts and
+  // intercepts clicks until acknowledged. Close it as a real user would.
+  const releaseHistory=page.getByRole('dialog',{name:'Historique des versions'});
+  if (await releaseHistory.isVisible()) {
+    await releaseHistory.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
+  await page.getByRole('button',{name:/Nouveau ticket/}).click();
+  await page.getByRole('dialog').locator('input[maxlength="160"]').fill('Incident de test E2E');
+  await page.getByRole('dialog').locator('textarea').fill('Rapport synthétique E2E');
+  await page.getByRole('dialog').getByRole('button',{name:'Créer le ticket'}).click();
+  await expect(page).toHaveURL(/\/tickets\/[\w-]+$/);
+  await expect(page.getByText('Rapport synthétique E2E')).toBeVisible();
+  await page.goto('/matches');
+  await expect(page.getByRole('heading',{name:'Matchs'})).toBeVisible();
+  await page.goto('/admin');
+  await page.getByRole('button',{name:'Annonces',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Annonces de service'})).toBeVisible();
+  expect(await page.locator('a[href="/news"], a[href="/announcements/manage"]').count()).toBe(0);
+  const utilities=await page.locator('.topbar-utilities > button, .topbar-utilities > a').allTextContents();
+  const nouveautés=utilities.findIndex(t=>t.includes('Nouveautés'));
+  expect(nouveautés).toBeGreaterThanOrEqual(0);
+  expect(utilities[nouveautés+1]).toContain('Tickets');
+});
+
+test('ticket permission checks and non-public roster are enforced server-side',async ({request})=>{
+  const privateTickets=await request.get('/api/tickets');
+  expect(privateTickets.status()).toBe(401);
+  const privateStats=await request.get('/api/players/00000000-0000-0000-0000-000000000000/time-totals');
+  expect(privateStats.status()).toBe(401);
+  const hiddenRoster=await request.get('/api/public/teams/00000000-0000-0000-0000-000000000000/players');
+  expect(hiddenRoster.status()).toBe(404);
+  const banners=await request.get('/api/announcements');
+  expect(banners.status()).toBe(200);
+  expect(Array.isArray(await banners.json())).toBeTruthy();
+});
+
+test('ticket owner isolation, staff escalation and published urgent banner',async ({request,page})=>{
+  const userAuth=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}});
+  expect(userAuth.status()).toBe(200);
+  const userToken=(await userAuth.json()).token;
+  const created=await request.post('/api/tickets',{
+    headers:{Authorization:'Bearer '+userToken},
+    data:{subject:'Ticket privé E2E',message:'Message confidentiel'}});
+  expect(created.status()).toBe(201);
+  const ticket=await created.json();
+  const maintainerAuth=await request.post('/api/login',{
+    data:{username:'fixture-coach',password:ciPassword}});
+  expect(maintainerAuth.status()).toBe(200);
+  const staffToken=(await maintainerAuth.json()).token;
+  const outsider=await request.get('/api/tickets/'+ticket.id);
+  expect(outsider.status()).toBe(401);
+  const cannotEscalate=await request.put('/api/tickets/'+ticket.id+'/status',{
+    headers:{Authorization:'Bearer '+userToken},
+    data:{status:'in_progress',maintainer_required:true}});
+  expect(cannotEscalate.status()).toBe(403);
+  const escalated=await request.put('/api/tickets/'+ticket.id+'/status',{
+    headers:{Authorization:'Bearer '+staffToken},
+    data:{status:'in_progress',maintainer_required:true}});
+  expect(escalated.status()).toBe(204);
+  const announcement=await request.post('/api/admin/announcements',{
+    headers:{Authorization:'Bearer '+staffToken},
+    data:{title:'Maintenance de test',body:'Annonce urgente E2E',
+      urgent:true,published:true,starts_at:0,ends_at:null}});
+  expect(announcement.status()).toBe(201);
+  await page.goto('/public');
+  await expect(page.locator('.global-urgent-banner')).toContainText('Maintenance de test');
+});
+
+
+test('ticket unread notifications are scoped, persistent, and clear upon reading',async ({request})=>{
+  const userLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const maintainerLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(userLogin.status()).toBe(200);
+  expect(maintainerLogin.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await userLogin.json()).token};
+  const staff={Authorization:'Bearer '+(await maintainerLogin.json()).token};
+  const created=await request.post('/api/tickets',{
+    headers:user,data:{subject:'Lecture et notifications E2E',message:'Demande initiale'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const memberUnread=await request.get('/api/tickets/unread',{headers:user});
+  expect(memberUnread.status()).toBe(200);
+  expect((await memberUnread.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+  const staffUnread=await request.get('/api/tickets/unread',{headers:staff});
+  expect(staffUnread.status()).toBe(200);
+  expect((await staffUnread.json()).tickets.find(t=>t.ticket_id===id)?.count).toBe(1);
+  const seen=await request.get('/api/tickets/'+id,{headers:staff});
+  expect(seen.status()).toBe(200);
+  const cleared=await request.get('/api/tickets/unread',{headers:staff});
+  expect((await cleared.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+  const answered=await request.post('/api/tickets/'+id+'/messages',{
+    headers:staff,data:{message:'Réponse de l’équipe support'}});
+  expect(answered.status()).toBe(201);
+  const userUnread=await request.get('/api/tickets/unread',{headers:user});
+  expect((await userUnread.json()).tickets.find(t=>t.ticket_id===id)?.count).toBe(1);
+  const viewed=await request.get('/api/tickets/'+id,{headers:user});
+  expect(viewed.status()).toBe(200);
+  const last=await request.get('/api/tickets/unread',{headers:user});
+  expect((await last.json()).tickets.some(t=>t.ticket_id===id)).toBe(false);
+});
+
+test('escalation produces independent unread work for each maintainer without erasing message receipts',async ({request})=>{
+  const password='ticket-escalation-password-2026';
+  const adminName='admin-escalation-'+require('node:crypto').randomUUID().slice(0,12);
+  const secondName='maintainer-escalation-'+require('node:crypto').randomUUID().slice(0,12);
+  const ownerLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const supervisorLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(ownerLogin.status()).toBe(200);
+  expect(supervisorLogin.status()).toBe(200);
+  const owner={Authorization:'Bearer '+(await ownerLogin.json()).token};
+  const supervisor={Authorization:'Bearer '+(await supervisorLogin.json()).token};
+  const createStaff=async (username,role)=>{
+    expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+    const logged=await request.post('/api/login',{data:{username,password}});
+    expect(logged.status()).toBe(200);
+    const headers={Authorization:'Bearer '+(await logged.json()).token};
+    const account=await request.get('/api/account',{headers});
+    expect(account.status()).toBe(200);
+    const userId=(await account.json()).id;
+    expect((await request.put('/api/admin/users/'+userId+'/role',{headers:supervisor,data:{role}})).status()).toBe(204);
+    return headers;
+  };
+  const admin=await createStaff(adminName,'administrator');
+  const otherMaintainer=await createStaff(secondName,'maintainer');
+  const created=await request.post('/api/tickets',{headers:owner,
+    data:{subject:'Escalade après lecture',message:'Première demande'}}); 
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const count=async headers=>{
+    const response=await request.get('/api/tickets/unread',{headers});
+    expect(response.status()).toBe(200);
+    return (await response.json()).tickets.find(item=>item.ticket_id===id)?.count||0;
+  };
+  expect(await count(admin)).toBe(1);
+  expect(await count(supervisor)).toBe(1);
+  // All three staff accounts can have already read the initial message.
+  for(const headers of [admin,supervisor,otherMaintainer]){
+    expect((await request.get('/api/tickets/'+id,{headers})).status()).toBe(200);
+    expect(await count(headers)).toBe(0);
+  }
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:true}})).status()).toBe(204);
+  // An administrator viewing the ticket does not acknowledge the work for a maintainer.
+  expect((await request.get('/api/tickets/'+id,{headers:admin})).status()).toBe(200);
+  expect(await count(admin)).toBe(0);
+  expect(await count(supervisor)).toBe(1);
+  expect(await count(otherMaintainer)).toBe(1);
+  expect((await request.get('/api/tickets/'+id,{headers:supervisor})).status()).toBe(200);
+  expect(await count(supervisor)).toBe(0);
+  expect(await count(otherMaintainer)).toBe(1);
+  // Changing the status but keeping Maintainer enabled must not alert again.
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'resolved',maintainer_required:true}})).status()).toBe(204);
+  expect(await count(supervisor)).toBe(0);
+  expect((await request.get('/api/tickets/'+id,{headers:otherMaintainer})).status()).toBe(200);
+  expect(await count(otherMaintainer)).toBe(0);
+  // A new false -> true transition requires a new acknowledgment.
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:false}})).status()).toBe(204);
+  expect((await request.put('/api/tickets/'+id+'/status',{headers:admin,
+    data:{status:'in_progress',maintainer_required:true}})).status()).toBe(204);
+  expect(await count(supervisor)).toBe(1);
+  expect(await count(otherMaintainer)).toBe(1);
+  expect(await count(admin)).toBe(0);
+});
+
+test('Administrators can manage tickets but not service announcements',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  const ownerHeaders={Authorization:'Bearer '+(await owner.json()).token};
+  const username='admin-announcement-'+require('node:crypto').randomUUID().slice(0,12);
+  const password='admin-announcement-password-2026';
+  expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+  const userLogin=await request.post('/api/login',{data:{username,password}});
+  const userHeaders={Authorization:'Bearer '+(await userLogin.json()).token};
+  const userId=(await (await request.get('/api/account',{headers:userHeaders})).json()).id;
+  expect((await request.put('/api/admin/users/'+userId+'/role',{
+    headers:ownerHeaders,data:{role:'administrator'}})).status()).toBe(204);
+  expect((await request.get('/api/tickets',{headers:userHeaders})).status()).toBe(200);
+  expect((await request.get('/api/admin/announcements',{headers:userHeaders})).status()).toBe(403);
+  expect((await request.post('/api/admin/announcements',{
+    headers:userHeaders,data:{title:'Interdit',body:'Non publié',published:true,urgent:true,starts_at:0}
+  })).status()).toBe(403);
+});
+
+test('ticket contrast stays readable in dark theme',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  const row=page.locator('button.ticket-row').first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.locator('.ticket-chat-bubble').first()).toBeVisible();
+  const colors=await page.evaluate(()=>{
+    const root=document.querySelector('.site-root');
+    root.setAttribute('data-theme','dark');
+    return {
+      text:getComputedStyle(document.querySelector('.ticket-chat-bubble')).color,
+      background:getComputedStyle(document.querySelector('.ticket-chat-bubble')).backgroundColor,
+      border:getComputedStyle(document.querySelector('.ticket-chat-bubble')).borderColor,
+    };
+  });
+  expect(colors.text).toBe('rgb(237, 242, 248)');
+  expect(['rgb(26, 38, 51)','rgb(32, 45, 59)','rgb(43, 57, 73)']).toContain(colors.background);
+  expect(colors.border).toBe('rgb(54, 71, 88)');
+});
+
+
+test('private ticket image upload, file isolation and typing permissions',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const support=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(owner.status()).toBe(200); expect(support.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await owner.json()).token};
+  const staff={Authorization:'Bearer '+(await support.json()).token};
+  const created=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Fichier privé E2E',message:'Voici une capture **importante** 🙂'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const image=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/png'},data:png});
+  expect(image.status()).toBe(201);
+  const record=await image.json();
+  expect(record.attachment_name).toMatch(/^[0-9a-f-]+\.png$/);
+  const uri='/api/tickets/'+id+'/images/'+record.attachment_name;
+  const denied=await request.get(uri);
+  expect(denied.status()).toBe(401);
+  const found=await request.get(uri,{headers:user});
+  expect(found.status()).toBe(200);
+  expect(found.headers()['content-type']).toContain('image/png');
+  // Some test reverse proxies omit security headers; the handler sets nosniff,
+  // while this integration test verifies MIME type, private access and signature checks.
+  const script=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/svg+xml'},data:Buffer.from('<svg onload=alert(1)>')});
+  expect(script.status()).toBe(415);
+  // Axum/proxy may reject the body before Playwright finishes writing it.
+  const uploadTooBig=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...user,'Content-Type':'image/png'},data:Buffer.alloc(4*1024*1024+10)})
+    .then(response=>({status:response.status()}))
+    .catch(error=>({transportError:String(error)}));
+  expect(uploadTooBig.status===413 || /EPIPE|ECONNRESET|socket hang up/.test(uploadTooBig.transportError||'')).toBe(true);
+  const userTyping=await request.post('/api/tickets/'+id+'/typing',{
+    headers:user,data:{typing:true}});
+  expect(userTyping.status()).toBe(204);
+  const supportTyping=await request.post('/api/tickets/'+id+'/typing',{
+    headers:staff,data:{typing:false}});
+  expect(supportTyping.status()).toBe(204);
+  expect((await request.post('/api/tickets/'+id+'/typing',{data:{typing:true}})).status()).toBe(401);
+  const detail=await request.get('/api/tickets/'+id,{headers:user});
+  expect(detail.status()).toBe(200);
+  const messages=(await detail.json()).messages;
+  expect(messages.find(m=>m.id===record.id)?.attachment_name).toBe(record.attachment_name);
+});
+test('ticket composer and custom checkbox controls respect dark theme',async ({page})=>{
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets');
+  await page.locator('button.ticket-row').first().click();
+  await expect(page.locator('[data-ticket-composer]')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Envoyer',exact:true})).toBeVisible();
+  await expect(page.locator('.ticket-chat-feed')).toBeVisible();
+  await page.locator('[data-ticket-composer]').fill('Bonjour **Markdown** 😀');
+  await page.getByRole('button',{name:'Envoyer',exact:true}).click();
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('Markdown');
+  await page.goto('/admin');
+  await page.getByRole('button',{name:'Annonces',exact:true}).click();
+  const checkbox=page.locator('.announcement-manager input[type="checkbox"]').first();
+  await expect(checkbox).toBeVisible();
+  const custom=await checkbox.evaluate(node=>getComputedStyle(node).appearance);
+  expect(custom).toBe('none');
+});
+
+
+test('live support conversation streams messages and typing without navigation',async ({page,request})=>{
+  const account=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  expect(account.status()).toBe(200);
+  const user={Authorization:'Bearer '+(await account.json()).token};
+  const opened=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Conversation SSE E2E',message:'Bonjour, besoin d’aide'}});
+  expect(opened.status()).toBe(201);
+  const id=(await opened.json()).id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect.poll(async()=>page.evaluate(()=>
+    !!window.__seppylTicketChatInstalled && !!document.querySelector('.ticket-chat')
+      && !!localStorage.getItem('seppyl.session.v1')
+  ),{timeout:15000}).toBe(true);
+  await expect(page.locator('[data-ticket-live-status]')).toHaveText(/En direct|Synchronisé/,{timeout:20000});
+  const typing=await request.post('/api/tickets/'+id+'/typing',{headers:user,data:{typing:true}});
+  expect(typing.status()).toBe(204);
+  await expect(page.locator('.ticket-typing-indicator')).toContainText('fixture-user',{timeout:10000});
+  const reply=await request.post('/api/tickets/'+id+'/messages',{
+    headers:user,data:{message:'**Le message arrive immédiatement** 😃'}});
+  expect(reply.status()).toBe(201);
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('Le message arrive immédiatement',{timeout:12000});
+  await expect(page.locator('.ticket-chat-markdown strong').last()).toHaveText('Le message arrive immédiatement');
+});
+
+
+test('ticket chat uses compact composer, inline controls and follows new messages',async ({page,request})=>{
+  const supportAuth=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(supportAuth.status()).toBe(200);
+  const support={Authorization:'Bearer '+(await supportAuth.json()).token};
+  const memberAuth=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  expect(memberAuth.status()).toBe(200);
+  const member={Authorization:'Bearer '+(await memberAuth.json()).token};
+  const created=await request.post('/api/tickets',{headers:member,
+    data:{subject:'Chat compact et défilement',message:'Première conversation'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  for(let i=0;i<11;i++){
+    expect((await request.post('/api/tickets/'+id+'/messages',{
+      headers:member,data:{message:'Historique '+i+' : '+('Contenu de la conversation. '.repeat(11))}
+    })).status()).toBe(201);
+  }
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  const feed=page.locator('.ticket-chat-feed');
+  await expect(feed).toBeVisible();
+  expect(await page.locator('.ticket-chat-avatar').count()).toBe(0);
+  await expect(page.locator('.ticket-chat-admin')).toBeVisible();
+  expect(await page.locator('.ticket-moderation').count()).toBe(0);
+  expect(await page.locator('[data-ticket-live-status]').isVisible()).toBe(false);
+  const surface=page.locator('.ticket-composer-surface');
+  await expect(surface).toBeVisible();
+  const children=await surface.locator(':scope > *').evaluateAll(nodes=>nodes.map(node=>node.tagName.toLowerCase()));
+  expect(children).toEqual(['label','textarea','button','button']);
+  expect(await page.getByRole('button',{name:'Gras Markdown'}).count()).toBe(0);
+  expect(await page.getByRole('button',{name:'Italique Markdown'}).count()).toBe(0);
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(0);
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  const incoming=await request.post('/api/tickets/'+id+'/messages',{
+    headers:member,data:{message:'Message reçu après ouverture du chat'}});
+  expect(incoming.status()).toBe(201);
+  await expect(feed.getByText('Message reçu après ouverture du chat')).toBeVisible({timeout:12000});
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  const editor=page.locator('[data-ticket-composer]');
+  await editor.fill('Bonjour depuis le clavier');
+  await editor.press('Enter');
+  await expect(feed.getByText('Bonjour depuis le clavier')).toBeVisible();
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  await editor.fill('Ligne 1');
+  await editor.press('Shift+Enter');
+  await editor.type('Ligne 2');
+  await expect(editor).toHaveValue('Ligne 1\nLigne 2');
+  await page.locator('.ticket-emoji-toggle').click();
+  await expect(page.getByRole('group',{name:'Choisir un émoji'})).toBeVisible();
+  const typing=await request.post('/api/tickets/'+id+'/typing',{headers:member,data:{typing:true}});
+  expect(typing.status()).toBe(204);
+  await expect(feed.locator('.ticket-typing-indicator')).toContainText('fixture-user',{timeout:12000});
+  expect(await page.locator('.ticket-chat-composer .ticket-typing-indicator').count()).toBe(0);
+});
+
+
+test('support workspace integrates sidebar, requester header, and attachment autoscroll',async ({page,request})=>{
+  const ownerLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(ownerLogin.status()).toBe(200);
+  expect(staffLogin.status()).toBe(200);
+  const owner={Authorization:'Bearer '+(await ownerLogin.json()).token};
+  const created=await request.post('/api/tickets',{
+    headers:owner,data:{subject:'Ticket avec image jointe et navigation',message:'Demande initiale'}
+  });
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  for(let i=0;i<13;i++){
+    expect((await request.post('/api/tickets/'+id+'/messages',{
+      headers:owner,data:{message:'Message historique '+i+' '+('Texte suffisamment long. '.repeat(8))}
+    })).status()).toBe(201);
+  }
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  const workspace=page.locator('.ticket-workspace');
+  const sidebar=page.locator('.ticket-sidebar');
+  const chat=page.locator('.ticket-conversation-area');
+  const feed=page.locator('.ticket-chat-feed');
+  await expect(workspace).toBeVisible();
+  await expect(sidebar).toBeVisible();
+  await expect(feed).toBeVisible();
+  await expect(page.locator('.ticket-chat-interlocutor')).toContainText('fixture-user');
+  await expect(sidebar.locator('.ticket-sidebar-item.selected')).toContainText('Ticket avec image jointe');
+  expect(await workspace.locator('.panel').count()).toBe(0);
+  const positions=await page.evaluate(()=>{
+    const left=document.querySelector('.ticket-sidebar').getBoundingClientRect();
+    const right=document.querySelector('.ticket-conversation-area').getBoundingClientRect();
+    const outer=document.querySelector('.ticket-chat');
+    return {leftEdge:left.right,rightEdge:right.left,
+      border:getComputedStyle(outer).borderTopWidth,
+      radius:getComputedStyle(outer).borderTopLeftRadius,
+      shadow:getComputedStyle(outer).boxShadow};
+  });
+  expect(Math.abs(positions.leftEdge-positions.rightEdge)).toBeLessThan(2);
+  expect(positions.border).toBe('0px');
+  expect(positions.radius).toBe('0px');
+  expect(positions.shadow).toBe('none');
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(0);
+  await feed.evaluate(el=>{el.scrollTop=0;});
+  await expect.poll(()=>feed.evaluate(el=>el.scrollTop)).toBe(0);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const count=await feed.locator('[data-message-id]').count();
+  await page.locator('[data-ticket-attach-input]').setInputFiles({
+    name:'capture.png',mimeType:'image/png',buffer:png
+  });
+  await expect(page.locator('[data-chat-upload-feedback]')).toContainText('Image envoyée',{timeout:12000});
+  await expect(feed.locator('[data-message-id]')).toHaveCount(count+1,{timeout:12000});
+  const image=feed.locator('.ticket-chat-attachment img').last();
+  await expect(image).toBeVisible();
+  await expect.poll(()=>feed.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(90);
+  await page.setViewportSize({width:390,height:844});
+  await expect(sidebar).toBeVisible();
+  await expect(chat).toBeVisible();
+  const mobile=await page.evaluate(()=>{
+    const left=document.querySelector('.ticket-sidebar').getBoundingClientRect();
+    const right=document.querySelector('.ticket-conversation-area').getBoundingClientRect();
+    return {sidebarBottom:left.bottom,chatTop:right.top};
+  });
+  expect(mobile.sidebarBottom).toBeLessThanOrEqual(mobile.chatTop+2);
+});
+
+
+test('message editing keeps an immutable staff-visible history and staff-only deletion',async ({request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const staff=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(owner.status()).toBe(200);
+  expect(staff.status()).toBe(200);
+  const memberHeaders={Authorization:'Bearer '+(await owner.json()).token};
+  const staffHeaders={Authorization:'Bearer '+(await staff.json()).token};
+  const ticket=await request.post('/api/tickets',{headers:memberHeaders,
+    data:{subject:'Test historique immutable',message:'Version A'}});
+  expect(ticket.status()).toBe(201);
+  const id=(await ticket.json()).id;
+  const initial=await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json();
+  const messageId=initial.messages[0].id;
+  const base='/api/tickets/'+id+'/messages/'+messageId;
+  const forbiddenEdit=await request.put(base,{headers:staffHeaders,data:{message:'Interdit'}});
+  expect(forbiddenEdit.status()).toBe(403);
+  expect((await request.get(base+'/history',{headers:memberHeaders})).status()).toBe(403);
+  expect((await request.delete(base,{headers:memberHeaders})).status()).toBe(403);
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Version B'}})).status()).toBe(200);
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Version C'}})).status()).toBe(200);
+  let revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions.map(x=>x.previous_text)).toEqual(['Version A','Version B']);
+  const deleted=await request.delete(base,{headers:staffHeaders});
+  expect(deleted.status()).toBe(204);
+  const afterDelete=(await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json()).messages[0];
+  expect(afterDelete.deleted_at).not.toBeNull();
+  expect(afterDelete.message).toBe('');
+  expect((await request.put(base,{headers:memberHeaders,data:{message:'Nope'}})).status()).toBe(409);
+  revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions.map(x=>x.previous_text)).toEqual(['Version A','Version B','Version C']);
+  const restored=await request.post(base+'/restore/'+revisions[0].id,{headers:staffHeaders});
+  expect(restored.status()).toBe(200);
+  const afterRestore=(await (await request.get('/api/tickets/'+id,{headers:memberHeaders})).json()).messages[0];
+  expect(afterRestore.deleted_at).toBeNull();
+  expect(afterRestore.message).toBe('Version A');
+  revisions=(await (await request.get(base+'/history',{headers:staffHeaders})).json());
+  expect(revisions).toHaveLength(4);
+  expect(revisions[3].action).toBe('restore');
+});
+
+test('message groups and ArrowUp edit previous author message',async ({page,request})=>{
+  const owner=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const user={Authorization:'Bearer '+(await owner.json()).token};
+  const created=await request.post('/api/tickets',{headers:user,
+    data:{subject:'Groupement et édition',message:'Début du groupe'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  expect((await request.post('/api/tickets/'+id+'/messages',{
+    headers:user,data:{message:'Deuxième message'}})).status()).toBe(201);
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-user');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect(page.locator('.ticket-message-group')).toHaveCount(1);
+  if (await page.locator('.changelog-backdrop').isVisible()) {
+    await page.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
+  await expect(page.locator('.ticket-message-group .ticket-chat-message')).toHaveCount(2);
+  await expect(page.locator('.ticket-group-author')).toHaveText('Vous');
+  const rows=page.locator('.ticket-message-group .ticket-chat-line');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.last().locator('.ticket-message-hover-time')).toBeHidden();
+  await rows.last().hover();
+  await expect(rows.last().locator('.ticket-message-hover-time')).toBeVisible();
+  const editor=page.locator('[data-ticket-composer]');
+  await editor.focus();
+  await editor.press('ArrowUp');
+  const edit=page.locator('[data-ticket-edit-composer]');
+  await expect(edit).toBeVisible();
+  await expect(edit).toHaveValue('Deuxième message');
+  await edit.fill('Deuxième message modifié');
+  await page.getByRole('button',{name:'Enregistrer la modification'}).click();
+  await expect(page.locator('.ticket-chat-markdown').last()).toContainText('modifié');
+  await expect(page.locator('.ticket-edited-flag')).toBeVisible();
+  await expect(page.locator('.ticket-message-group')).toHaveCount(1);
+});
+
+test('header notifications arrive on unrelated pages without reload',async ({page,request})=>{
+  const username='ticket-header-'+require('node:crypto').randomUUID().slice(0,12);
+  const password='ticket-header-password-2026';
+  expect((await request.post('/api/signup',{data:{username,password}})).status()).toBe(200);
+  const memberLogin=await request.post('/api/login',{data:{username,password}});
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  const member={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const staff={Authorization:'Bearer '+(await staffLogin.json()).token};
+  const created=await request.post('/api/tickets',{headers:member,
+    data:{subject:'Notification du header',message:'Bonjour'}});
+  const id=(await created.json()).id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill(username);
+  await page.locator('input[type="password"]').fill(password);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await expect(page.locator('.topbar-utilities .ticket-unread-count')).toHaveCount(0);
+  expect((await request.post('/api/tickets/'+id+'/messages',{
+    headers:staff,data:{message:'Nouvelle réponse depuis le support'}})).status()).toBe(201);
+  await expect(page.locator('.topbar-utilities .ticket-unread-count')).toContainText('1',{timeout:18000});
+});
+
+
+test('targeted replies are scoped to their ticket, including image attachments',async ({request})=>{
+  const memberLogin=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}
+  });
+  expect(memberLogin.status()).toBe(200);
+  const auth={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const makeTicket=async subject=>{
+    const result=await request.post('/api/tickets',{headers:auth,
+      data:{subject,message:'Message original à citer'}});
+    expect(result.status()).toBe(201);
+    return (await result.json()).id;
+  };
+  const id=await makeTicket('Réponse ciblée vérifiée');
+  const otherId=await makeTicket('Autre ticket à isoler');
+  const original=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages[0].id;
+  const endpoint='/api/tickets/'+id+'/messages';
+  const reply=await request.post(endpoint,{headers:auth,
+    data:{message:'Ceci répond au message original',reply_to_id:original}});
+  expect(reply.status()).toBe(201);
+  expect((await reply.json()).reply_to_id).toBe(original);
+  const conversation=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages;
+  expect(conversation.find(m=>m.reply_to_id===original)?.message).toBe('Ceci répond au message original');
+  const forbidden=await request.post('/api/tickets/'+otherId+'/messages',{headers:auth,
+    data:{message:'Une référence inter-tickets est interdite',reply_to_id:original}});
+  expect(forbidden.status()).toBe(400);
+  const missing=await request.post(endpoint,{headers:auth,
+    data:{message:'Référence absente',reply_to_id:require('node:crypto').randomUUID()}});
+  expect(missing.status()).toBe(400);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ+jKtQAAAAASUVORK5CYII=','base64');
+  const image=await request.post('/api/tickets/'+id+'/images',{
+    headers:{...auth,'Content-Type':'image/png','X-Ticket-Reply-To':original},data:png
+  });
+  expect(image.status()).toBe(201);
+  expect((await image.json()).reply_to_id).toBe(original);
+  const crossedImage=await request.post('/api/tickets/'+otherId+'/images',{
+    headers:{...auth,'Content-Type':'image/png','X-Ticket-Reply-To':original},data:png
+  });
+  expect(crossedImage.status()).toBe(400);
+});
+
+test('hover menu stays clickable and supports reply, copy and cited-message navigation',async ({page,request})=>{
+  await page.context().grantPermissions(['clipboard-read','clipboard-write']);
+  const memberLogin=await request.post('/api/login',{data:{username:'fixture-user',password:ciPassword}});
+  const auth={Authorization:'Bearer '+(await memberLogin.json()).token};
+  const created=await request.post('/api/tickets',{headers:auth,
+    data:{subject:'Menu contextuel et citations',message:'Message source à citer'}});
+  expect(created.status()).toBe(201);
+  const id=(await created.json()).id;
+  const original=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages[0].id;
+  await page.goto('/login');
+  await page.locator('input[autocomplete="username"]').fill('fixture-coach');
+  await page.locator('input[type="password"]').fill(ciPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/trainings$/);
+  await page.goto('/tickets/'+id);
+  await expect(page.locator('[data-message-id="'+original+'"]')).toBeVisible();
+  if(await page.locator('.changelog-backdrop').isVisible()){
+    await page.getByRole('button',{name:"Fermer l'historique"}).click();
+  }
+  const line=page.locator('[data-message-id="'+original+'"] .ticket-chat-line');
+  const trigger=line.getByRole('button',{name:'Options du message'});
+  await line.locator('.ticket-chat-bubble').hover();
+  await expect(trigger).toBeVisible();
+  const geometry=await line.evaluate(node=>{
+    const message=node.querySelector('.ticket-chat-bubble').getBoundingClientRect();
+    const action=node.querySelector('.ticket-message-menu-trigger').getBoundingClientRect();
+    return {messageRight:message.right,actionLeft:action.left,y:(action.top+action.bottom)/2,
+      position:getComputedStyle(node.querySelector('.ticket-message-actions')).position};
+  });
+  expect(geometry.position).toBe('relative');
+  await page.mouse.move((geometry.messageRight+geometry.actionLeft)/2,geometry.y);
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const menu=page.getByRole('menu',{name:'Actions sur le message'});
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem',{name:'Répondre'})).toBeVisible();
+  await expect(menu.getByRole('menuitem',{name:'Copier le texte'})).toBeVisible();
+  await menu.getByRole('menuitem',{name:'Copier le texte'}).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Message source à citer');
+  await expect(page.locator('[data-ticket-copy-feedback]')).toHaveCount(0);
+  await line.locator('.ticket-message-menu-trigger').click();
+  await menu.getByRole('menuitem',{name:'Répondre'}).click();
+  const preview=page.locator('[data-ticket-reply-to="'+original+'"]');
+  await expect(preview).toBeVisible();
+  const composer=page.locator('[data-ticket-composer]');
+  await expect(composer).toBeFocused();
+  await composer.fill('Réponse depuis le menu contextuel');
+  await composer.press('Enter');
+  await expect(preview).toHaveCount(0);
+  await expect(page.locator('.ticket-reply-quote')).toBeVisible();
+  const replyMessage=(await (await request.get('/api/tickets/'+id,{headers:auth})).json()).messages;
+  expect(replyMessage.find(message=>message.message==='Réponse depuis le menu contextuel')?.reply_to_id).toBe(original);
+  await page.locator('.ticket-reply-quote').click();
+  await expect(page.locator('[data-message-id="'+original+'"]')).toHaveClass(/ticket-jump-highlight/);
+});
+
+test('match event timeline and public-roster opt-in are enforced end to end',async ({request})=>{
+  const response=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(response.status()).toBe(200);
+  const token=(await response.json()).token;
+  const headers={Authorization:'Bearer '+token};
+  const newClub=await request.post('/api/clubs',{headers,data:{name:'Club sixième passe'}});
+  expect(newClub.status()).toBe(201);
+  const club=await newClub.json();
+  const newTeam=await request.post('/api/clubs/'+club.id+'/teams',{
+    headers,data:{name:'Équipe 1'}});
+  expect(newTeam.status()).toBe(201);
+  const team=await newTeam.json();
+  const newPlayer=async (firstname,number)=>{
+    const r=await request.post('/api/teams/'+team.id+'/players',{
+      headers,data:{firstname,lastname:'Test E2E',number}});
+    expect(r.status()).toBe(201);
+    return r.json();
+  };
+  const alice=await newPlayer('Alice',101);
+  const bob=await newPlayer('Bob',102);
+  let hidden=await request.get('/api/public/clubs/'+club.id+'/teams');
+  expect(hidden.status()).toBe(404);
+  const published=await request.put('/api/clubs/'+club.id+'/visibility',{
+    headers,data:{is_public:true,show_public_teams:true,show_public_roster:false}});
+  expect(published.status()).toBe(204);
+  const publicTeams=await request.get('/api/public/clubs/'+club.id+'/teams');
+  expect(publicTeams.status()).toBe(200);
+  expect((await publicTeams.json()).length).toBe(1);
+  hidden=await request.get('/api/public/teams/'+team.id+'/players');
+  expect(hidden.status()).toBe(404);
+  const exposeRoster=await request.put('/api/clubs/'+club.id+'/visibility',{
+    headers,data:{is_public:true,show_public_teams:true,show_public_roster:true}});
+  expect(exposeRoster.status()).toBe(204);
+  const roster=await request.get('/api/public/teams/'+team.id+'/players');
+  expect(roster.status()).toBe(200);
+  expect((await roster.json()).length).toBe(2);
+  const match=await request.post('/api/matches',{
+    headers,data:{team_id:team.id,opponent:'Adversaire E2E',
+      date:'2026-10-31T00:00:00',half_minutes:45}});
+  expect(match.status()).toBe(201);
+  const game=await match.json();
+  const lineup=await request.put('/api/matches/'+game.id+'/lineup',{
+    headers,data:{players:[
+      {player_id:alice.id,position:'Attaquante',starter:true},
+      {player_id:bob.id,position:'Milieu',starter:false},
+    ]}});
+  expect(lineup.status()).toBe(204);
+  const substitution=await request.post('/api/matches/'+game.id+'/events',{
+    headers,data:{kind:'substitution',minute:30,player_id:alice.id,
+      player_in_id:bob.id,event_type_id:null,notes:'Changement E2E'}});
+  expect(substitution.status()).toBe(201);
+  const detail=await request.get('/api/matches/'+game.id,{headers});
+  expect(detail.status()).toBe(200);
+  const gameInfo=await detail.json();
+  expect(gameInfo.playing_times.find(p=>p.player_id===alice.id).minutes).toBe(30);
+  expect(gameInfo.playing_times.find(p=>p.player_id===bob.id).minutes).toBe(60);
+  const outsiderAuth=await request.post('/api/login',{
+    data:{username:'fixture-user',password:ciPassword}});
+  const outsiderToken=(await outsiderAuth.json()).token;
+  const outsider=await request.get('/api/matches/'+game.id,{
+    headers:{Authorization:'Bearer '+outsiderToken}});
+  expect(outsider.status()).toBe(404);
+  const total=await request.get('/api/players/'+alice.id+'/time-totals',{headers});
+  expect(total.status()).toBe(200);
+  expect((await total.json()).match_minutes).toBe(30);
+  const session=await request.post('/api/trainings',{headers,data:{
+    name:'Séance 6e passe',date:'2026-10-31T00:00:00',team_id:team.id,duration_minutes:95}});
+  expect(session.status()).toBe(201);
+  const trainingId=(await session.text()).trim();
+  const presence=await request.put('/api/trainings/'+trainingId+'/attendance',{
+    headers,data:{player_ids:[alice.id]}});
+  expect(presence.status()).toBe(204);
+  const note=await request.put('/api/trainings/'+trainingId+'/scores',{
+    headers,data:{player_id:alice.id,activity_id:null,score:4,
+      comment:'Informations complémentaires E2E'}});
+  expect(note.status()).toBe(204);
+  const savedTraining=await request.get('/api/trainings/'+trainingId,{headers});
+  expect(savedTraining.status()).toBe(200);
+  const trainingDetails=await savedTraining.json();
+  expect(trainingDetails.training.duration_minutes).toBe(95);
+  expect(trainingDetails.attendance.find(a=>a.player_id===alice.id).score_comment)
+    .toBe('Informations complémentaires E2E');
+  const fullStats=await request.get('/api/players/'+alice.id+'/time-totals',{headers});
+  expect(fullStats.status()).toBe(200);
+  expect((await fullStats.json()).training_minutes).toBe(95);
+});
+
+test('maintainer can disable, reactivate and delete accounts without allowing admin escalation', async ({request}) => {
+  const staffLogin=await request.post('/api/login',{data:{username:'fixture-coach',password:ciPassword}});
+  expect(staffLogin.status()).toBe(200);
+  const staffToken=(await staffLogin.json()).token;
+  const headers={Authorization:'Bearer '+staffToken};
+  const username='account-lifecycle-e2e';
+  const password='strong-password-lifecycle-2026';
+  const created=await request.post('/api/signup',{data:{username,password}});
+  expect(created.status()).toBe(200);
+  const memberLogin=await request.post('/api/login',{data:{username,password}});
+  expect(memberLogin.status()).toBe(200);
+  const userToken=(await memberLogin.json()).token;
+  const userHeaders={Authorization:'Bearer '+userToken};
+  const member=await request.get('/api/account',{headers:userHeaders});
+  expect(member.status()).toBe(200);
+  const id=(await member.json()).id;
+  const denied=await request.put('/api/admin/users/'+id+'/status',{headers:userHeaders,data:{disabled:true}});
+  expect(denied.status()).toBe(403);
+  const selfDelete=await request.delete('/api/admin/users/'+id,{
+    headers:userHeaders,data:{mode:'delete',confirmation:username}});
+  expect(selfDelete.status()).toBe(403);
+  const dependencies=await request.get('/api/admin/users/'+id+'/dependencies',{headers});
+  expect(dependencies.status()).toBe(200);
+  const summary=await dependencies.json();
+  expect(summary.trainings).toBe(0);
+  const disabled=await request.put('/api/admin/users/'+id+'/status',{headers,data:{disabled:true}});
+  expect(disabled.status()).toBe(204);
+  const blocked=await request.get('/api/account',{headers:userHeaders});
+  expect(blocked.status()).toBe(401);
+  const loginBlocked=await request.post('/api/login',{data:{username,password}});
+  expect(loginBlocked.status()).toBe(401);
+  const reenabled=await request.put('/api/admin/users/'+id+'/status',{headers,data:{disabled:false}});
+  expect(reenabled.status()).toBe(204);
+  const loginAgain=await request.post('/api/login',{data:{username,password}});
+  expect(loginAgain.status()).toBe(200);
+  const badConfirmation=await request.delete('/api/admin/users/'+id,{
+    headers,data:{mode:'transfer',confirmation:'wrong'}});
+  expect(badConfirmation.status()).toBe(400);
+  const removed=await request.delete('/api/admin/users/'+id,{
+    headers,data:{mode:'transfer',confirmation:username}});
+  expect(removed.status()).toBe(204);
+  const gone=await request.post('/api/login',{data:{username,password}});
+  expect(gone.status()).toBe(401);
+  const stillExists=await request.get('/api/account',{headers});
+  expect(stillExists.status()).toBe(200);
+});

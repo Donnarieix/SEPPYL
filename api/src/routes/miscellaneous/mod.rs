@@ -2,6 +2,15 @@ pub mod health;
 pub mod me;
 pub mod preferences;
 pub mod account;
+pub mod accounts;
 pub mod audit;
 
 pub mod changelog;
+pub mod tickets;
+pub mod announcements;
+
+pub mod ticket_live;
+pub mod ticket_attachments;
+
+pub mod discord_link;
+pub mod discord_interactions;

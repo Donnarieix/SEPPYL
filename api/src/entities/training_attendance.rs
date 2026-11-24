@@ -12,5 +12,6 @@ pub struct Model {
     pub player_id: Uuid,
     pub present: bool,
     pub score: Option<i32>,
+    pub score_comment: Option<String>,
 }
 impl ActiveModelBehavior for ActiveModel {}

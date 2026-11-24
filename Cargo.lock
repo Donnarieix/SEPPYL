@@ -92,10 +92,14 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "api"
 version = "0.1.1"
 dependencies = [
+ "tokio-stream",
+ "reqwest 0.13.5",
  "ammonia",
  "argon2",
  "axum",
  "dotenvy",
+ "ed25519-dalek",
+ "hex",
  "jsonwebtoken",
  "sea-orm",
  "serde",
@@ -848,6 +852,7 @@ dependencies = [
 name = "client"
 version = "0.1.1"
 dependencies = [
+ "gloo-timers",
  "chrono",
  "dioxus",
  "gloo-storage",

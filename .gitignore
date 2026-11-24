@@ -13,3 +13,9 @@
 .env
 .env.*
 !.env.example
+
+# Local Python Discord bot environment and bytecode.
+.venv/
+.venv-discord/
+__pycache__/
+*.pyc

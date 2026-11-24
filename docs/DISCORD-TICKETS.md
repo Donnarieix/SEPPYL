@@ -4,7 +4,7 @@
 
 Pendant la validation sur ton PC, Discord peut transmettre les commandes et les
 boutons au **bot Python connecté au Gateway** (WebSocket sortant). L'API Rust
-reste sur \`127.0.0.1:3000\` et n'est pas publiée sur Internet.
+reste sur `127.0.0.1:3000` et n'est pas publiée sur Internet.
 
 **Important : dans Discord Developer Portal → General Information, laisser
 « Interactions Endpoint URL » VIDE.** Une application reçoit ses interactions
@@ -14,16 +14,16 @@ configuré, Discord ne transmettra pas les interactions au bot local.
 ### 1. Préparer l'application et les variables locales
 
 - Créer une application Discord, activer son bot et l'installer sur un **serveur
-  privé de test** avec les scopes \`bot\` et \`applications.commands\`. Le bot doit
+  privé de test** avec les scopes `bot` et `applications.commands`. Le bot doit
   pouvoir voir le canal de test et envoyer des messages, mais aucun intent
   privilégié (« Message Content », « Server Members ») n'est nécessaire.
 - Copier l'Application ID, le Guild ID, le Channel ID et le Bot Token. **Ne
   partager ni le token ni l'URL complète du webhook.**
 - Depuis PowerShell, générer une clé locale à usage interne :
-  \`python -c "import secrets; print(secrets.token_urlsafe(48))"\`
-- Insérer ces valeurs dans le \`.env\` **privé à la racine du dépôt** :
+  `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+- Insérer ces valeurs dans le `.env` **privé à la racine du dépôt** :
 
-\`\`\`dotenv
+```dotenv
 SEPPYL_BIND=127.0.0.1:3000
 SEPPYL_DISCORD_APPLICATION_ID=APPLICATION_ID
 SEPPYL_DISCORD_GUILD_ID=GUILD_ID
@@ -32,9 +32,9 @@ SEPPYL_DISCORD_CHANNEL_ID=CHANNEL_ID
 SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN=CLE_ALEATOIRE_D_AU_MOINS_32_CARACTERES
 # Facultatif (port local par défaut : 3000)
 SEPPYL_DISCORD_LOCAL_API=http://127.0.0.1:3000
-\`\`\`
+```
 
-Pour le mode Gateway, la clé publique Discord (\`SEPPYL_DISCORD_PUBLIC_KEY\`)
+Pour le mode Gateway, la clé publique Discord (`SEPPYL_DISCORD_PUBLIC_KEY`)
 **n'est pas nécessaire** : elle sert à vérifier les callbacks HTTP en
 production. Le secret local est différent du JWT_SECRET et ne doit jamais
 être committé.
@@ -43,33 +43,33 @@ production. Le secret local est différent du JWT_SECRET et ne doit jamais
 
 Depuis la racine du projet, dans des terminaux séparés :
 
-1. **API Rust :** \`cargo run -p api\`
-2. **Client Dioxus :** commande habituelle de développement \`dx serve\` dans
+1. **API Rust :** `cargo run -p api`
+2. **Client Dioxus :** commande habituelle de développement `dx serve` dans
    le répertoire client (l'API doit être joignable sur le port indiqué dans
    la configuration du client).
 3. **Bot local Python :**
 
-\`\`\`powershell
+```powershell
 python -m pip install -r scripts/discord-requirements.txt
 python scripts/discord_local_bot.py
-\`\`\`
+```
 
-Le bot lit automatiquement le \`.env\` racine. Il vérifie l'API au démarrage,
+Le bot lit automatiquement le `.env` racine. Il vérifie l'API au démarrage,
 ouvre une connexion sortante vers Discord et **synchronise lui-même**
-\`/seppyl\` dans le serveur configuré : ne pas lancer
-\`scripts/register-discord-commands.py\` pour ce mode.
+`/seppyl` dans le serveur configuré : ne pas lancer
+`scripts/register-discord-commands.py` pour ce mode.
 
 Si le bot indique que la passerelle est inaccessible, vérifier que l'API
-est démarrée avec exactement \`SEPPYL_BIND=127.0.0.1:3000\` et le même secret.
-Une API liée à \`0.0.0.0\` désactive volontairement la passerelle locale.
+est démarrée avec exactement `SEPPYL_BIND=127.0.0.1:3000` et le même secret.
+Une API liée à `0.0.0.0` désactive volontairement la passerelle locale.
 
 ### 3. Tester
 
 - Connecter un administrateur/maintainer au client Dioxus local.
 - Depuis **Mon compte → Discord**, générer un code de liaison à usage unique.
-- Dans Discord : \`/seppyl lier\` (code), \`/seppyl liste\`,
-  \`/seppyl voir\`, \`/seppyl repondre\`, \`/seppyl statut\` et
-  \`/seppyl maintainer\`.
+- Dans Discord : `/seppyl lier` (code), `/seppyl liste`,
+  `/seppyl voir`, `/seppyl repondre`, `/seppyl statut` et
+  `/seppyl maintainer`.
 - Créer un ticket depuis le client. Le bot envoie une notification dans le
   canal configuré avec **Voir, Répondre, Statut, Maintainer**. Essayer aussi
   les boutons et le formulaire de réponse.
@@ -84,9 +84,9 @@ local sans la clé secrète et une connexion en boucle locale.
 ### 4. Passer en production
 
 Arrêter le bot Python local. **Ne pas** déployer
-\`SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN\` ou ce mode Gateway sur le serveur.
+`SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN` ou ce mode Gateway sur le serveur.
 Utiliser à la place le callback HTTPS signé
-\`/api/discord/interactions\` avec la Public Key Discord et une URL publique.
+`/api/discord/interactions` avec la Public Key Discord et une URL publique.
 Il faut alors configurer « Interactions Endpoint URL » sur Discord. Ne pas
 utiliser simultanément les deux modes pour **la même application**.
 

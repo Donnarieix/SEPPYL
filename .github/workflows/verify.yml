@@ -32,6 +32,8 @@ jobs:
           node --check client/assets/toast.js
           node --check client/assets/auth-guard.js
           node --check client/assets/audit-dates.js
+      - name: Syntax-check local Discord Gateway bot
+        run: python3 -m py_compile scripts/discord_local_bot.py scripts/register-discord-commands.py
       - name: Verify release version, changelog and notes
         run: python3 scripts/release-version.py --check
       - name: Verify committed production lockfile
@@ -49,6 +51,10 @@ jobs:
       - name: Verify startup with existing SQLite data
         env:
           JWT_SECRET: development-ci-only-secret
+          SEPPYL_BIND: 127.0.0.1:3000
+          SEPPYL_DISCORD_APPLICATION_ID: '123456789012345678'
+          SEPPYL_DISCORD_GUILD_ID: '234567890123456789'
+          SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN: local-ci-only-development-secret-not-production-123456
         shell: bash
         run: |
           cargo build -p api
@@ -69,6 +75,25 @@ jobs:
             exit 1
           fi
           echo "Existing SQLite copy migration and API startup succeeded"
+          # Loopback-only bridge must require the shared secret; a signed
+          # public Discord endpoint is not needed for Gateway mode.
+          code="$(curl --silent -o /dev/null -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{"type":1,"application_id":"123456789012345678"}' \
+            http://127.0.0.1:3000/discord/local-gateway)"
+          test "$code" = "401"
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -H "X-Seppyl-Bridge-Token: $SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN" \
+            -d '{"type":1,"application_id":"123456789012345678"}' \
+            http://127.0.0.1:3000/discord/local-gateway \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["type"]==1'
+          code="$(curl --silent -o /dev/null -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -H "X-Seppyl-Bridge-Token: $SEPPYL_DISCORD_LOCAL_BRIDGE_TOKEN" \
+            -d '{"type":1,"application_id":"999999999999999999"}' \
+            http://127.0.0.1:3000/discord/local-gateway)"
+          test "$code" = "401"
           python3 - <<'PY'
           import sqlite3
           from pathlib import Path

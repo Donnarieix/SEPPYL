@@ -154,7 +154,7 @@ async fn main() {
         .route("/trainings/{id}/scores", put(training::set_score))
         .route_layer(axum_middleware::from_fn_with_state(state.clone(), auth));
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/health", get(health))
         .route("/announcements",get(announcements::public))
         .route("/public/clubs", get(organization::public_clubs))
@@ -174,8 +174,15 @@ async fn main() {
         .merge(SwaggerUi::new("/doc").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Apply CORS after merging, so it covers protected routes too.
         .layer(cors)
-        .layer(axum_middleware::from_fn(nosniff))
-        .with_state(state);
+        .layer(axum_middleware::from_fn(nosniff));
+    // This adapter is never registered for a LAN/public-bound API or on the
+    // production service. All ticket rules live in the shared dispatcher.
+    if discord_link::local_gateway_enabled(){
+        tracing::info!("Local Discord Gateway adapter enabled on loopback");
+        app=app.route("/discord/local-gateway",post(discord_interactions::local_gateway)
+            .layer(axum::extract::DefaultBodyLimit::max(32*1024)));
+    }
+    let app=app.with_state(state);
 
     // The deployed systemd service provides SEPPYL_BIND=127.0.0.1:3101;
     // dev instances keep their original port without additional setup.
@@ -183,7 +190,8 @@ async fn main() {
     let listener = TcpListener::bind(&bind).await
         .expect("Unable to bind SEPPYL API to configured address");
     tracing::info!(%bind,"SEPPYL API ready");
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .await.unwrap();
 }
 
 

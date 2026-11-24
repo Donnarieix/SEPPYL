@@ -94,7 +94,7 @@ utiliser simultanément les deux modes pour **la même application**.
 
 ## Architecture
 
-L'API Rust SEPPYL sert elle-même les interactions Discord, sans processus Gateway séparé. La connexion exige une application Discord (contrairement au webhook V1).
+En production, l'API Rust SEPPYL reçoit directement les interactions Discord par HTTP signé (sans processus Gateway). En développement local, le script Python utilise Discord Gateway et transmet ces mêmes interactions à l'API sur la boucle locale. Les deux modes exigent une application Discord (contrairement au webhook V1).
 
 **Actions disponibles dans Discord :**
 - `/seppyl lier` et `/seppyl delier` : liaison volontaire et révocable d'un compte staff SEPPYL.
